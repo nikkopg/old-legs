@@ -5,7 +5,7 @@ Common Pydantic schemas used across the API.
 - PaginatedResponse: wrapper for list endpoints
 """
 
-from typing import Generic, TypeVar, list
+from typing import Generic, TypeVar, List
 from pydantic import BaseModel
 
 T = TypeVar("T")
@@ -19,7 +19,7 @@ class ErrorResponse(BaseModel):
 
 class PaginatedResponse(BaseModel, Generic[T]):
     """Wrapper for paginated list responses."""
-    items: list[T]
+    items: List[T]
     total: int
     page: int
     page_size: int
