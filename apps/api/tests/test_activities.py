@@ -8,7 +8,7 @@ Endpoints covered:
 Strava HTTP calls are mocked via respx. Database is real SQLite in-memory.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 import respx
@@ -34,9 +34,9 @@ def _patch_strava_settings():
     strava_service._settings.redirect_uri = "http://localhost:8000/auth/strava/callback"
 
 
-def _mock_strava_activities(activities_payload: list) -> None:
+def _mock_strava_activities(mock_router, activities_payload: list) -> None:
     """Register a respx mock for the Strava athlete activities endpoint."""
-    respx.get(url__regex=r"https://www\.strava\.com/api/v3/athlete/activities.*").mock(
+    mock_router.get("https://www.strava.com/api/v3/athlete/activities").mock(
         return_value=Response(200, json=activities_payload)
     )
 
@@ -51,28 +51,26 @@ def test_list_activities_unauthenticated(test_app: TestClient):
     assert response.status_code == 401
 
 
-@respx.mock
 def test_list_activities_empty(authenticated_client: TestClient):
     """Authenticated, no activities seeded, Strava returns [] → response is []."""
     _patch_strava_settings()
-    _mock_strava_activities([])
-
-    response = authenticated_client.get("/activities")
+    with respx.mock as mock:
+        _mock_strava_activities(mock, [])
+        response = authenticated_client.get("/activities")
 
     assert response.status_code == 200
     assert response.json() == []
 
 
-@respx.mock
 def test_list_activities_returns_existing(
     authenticated_client: TestClient,
     test_activity: Activity,
 ):
     """Existing activity is returned even when Strava sync returns nothing new."""
     _patch_strava_settings()
-    _mock_strava_activities([])
-
-    response = authenticated_client.get("/activities")
+    with respx.mock as mock:
+        _mock_strava_activities(mock, [])
+        response = authenticated_client.get("/activities")
 
     assert response.status_code == 200
     data = response.json()
@@ -80,15 +78,13 @@ def test_list_activities_returns_existing(
     assert data[0]["strava_activity_id"] == "strava_act_001"
 
 
-@respx.mock
 def test_list_activities_syncs_new_from_strava(
     authenticated_client: TestClient,
     db_session: Session,
     test_user: User,
+    monkeypatch,
 ):
     """Strava returns a new run → it is synced and returned in the list."""
-    _patch_strava_settings()
-
     raw_strava_activity = {
         "id": 555001,
         "name": "Evening 5K",
@@ -101,7 +97,11 @@ def test_list_activities_syncs_new_from_strava(
         "total_elevation_gain": 20,
         "start_date": "2026-04-15T18:00:00Z",
     }
-    _mock_strava_activities([raw_strava_activity])
+
+    async def mock_fetch_activities(_access_token: str, _days: int = 90):
+        return [raw_strava_activity]
+
+    monkeypatch.setattr("services.strava.fetch_activities", mock_fetch_activities)
 
     response = authenticated_client.get("/activities")
 
@@ -153,7 +153,7 @@ def test_get_activity_other_users_activity(
         strava_athlete_id="other_athlete_456",
         strava_access_token=encrypt_token("other_access_token"),
         strava_refresh_token=encrypt_token("other_refresh_token"),
-        strava_token_expires_at=datetime.utcnow() + timedelta(hours=6),
+        strava_token_expires_at=datetime.now(timezone.utc) + timedelta(hours=6),
         name="Other Runner",
         avatar_url=None,
     )
@@ -172,7 +172,7 @@ def test_get_activity_other_users_activity(
         average_hr=None,
         max_hr=None,
         elevation_gain_m=12,
-        activity_date=datetime.utcnow() - timedelta(days=2),
+        activity_date=datetime.now(timezone.utc) - timedelta(days=2),
         sync_status="synced",
     )
     db_session.add(other_activity)

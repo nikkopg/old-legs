@@ -70,50 +70,38 @@ def test_oauth_callback_missing_code(test_app: TestClient):
     assert response.status_code in (400, 422)
 
 
-@respx.mock
-def test_oauth_callback_success(test_app: TestClient, db_session: Session):
+def test_oauth_callback_success(test_app: TestClient, db_session: Session, monkeypatch):
     """
     Full happy-path callback:
-    - Strava token endpoint returns valid tokens
-    - Strava athlete endpoint returns valid profile
+    - exchange_code_for_tokens returns valid token data
+    - fetch_athlete_profile returns valid athlete profile
     - User is created in DB
     - session_user_id cookie is set in response
     """
+    from datetime import datetime, timedelta, timezone
     import routers.auth as auth_router
-    import services.strava as strava_service
 
-    # Patch settings to provide required env values
     auth_router._oauth_settings.client_id = "test_client_id"
     auth_router._oauth_settings.redirect_uri = "http://localhost:8000/auth/strava/callback"
-    strava_service._settings.client_id = "test_client_id"
-    strava_service._settings.client_secret = "test_client_secret"
-    strava_service._settings.redirect_uri = "http://localhost:8000/auth/strava/callback"
 
-    # Mock: POST https://www.strava.com/oauth/token
-    respx.post("https://www.strava.com/oauth/token").mock(
-        return_value=Response(
-            200,
-            json={
-                "access_token": "strava_access_abc",
-                "refresh_token": "strava_refresh_abc",
-                "expires_in": 21600,
-                "athlete": {"id": 99001},
-            },
-        )
-    )
+    async def mock_exchange_code(_code: str) -> dict:
+        return {
+            "access_token": "strava_access_abc",
+            "refresh_token": "strava_refresh_abc",
+            "expires_at": datetime.now(timezone.utc) + timedelta(hours=6),
+            "athlete": {"id": 99001},
+        }
 
-    # Mock: GET https://www.strava.com/api/v3/athlete
-    respx.get("https://www.strava.com/api/v3/athlete").mock(
-        return_value=Response(
-            200,
-            json={
-                "id": 99001,
-                "firstname": "Test",
-                "lastname": "Runner",
-                "profile": None,
-            },
-        )
-    )
+    async def mock_fetch_athlete(_token: str) -> dict:
+        return {
+            "id": 99001,
+            "firstname": "Test",
+            "lastname": "Runner",
+            "profile": None,
+        }
+
+    monkeypatch.setattr("services.strava.exchange_code_for_tokens", mock_exchange_code)
+    monkeypatch.setattr("services.strava.fetch_athlete_profile", mock_fetch_athlete)
 
     response = test_app.get("/auth/strava/callback", params={"code": "valid_code"})
 
@@ -130,7 +118,6 @@ def test_oauth_callback_success(test_app: TestClient, db_session: Session):
     assert user.name == "Test Runner"
 
 
-@respx.mock
 def test_oauth_callback_strava_api_error(test_app: TestClient):
     """Strava returns 400 for bad code → endpoint returns 400 or 500."""
     import routers.auth as auth_router
@@ -142,11 +129,12 @@ def test_oauth_callback_strava_api_error(test_app: TestClient):
     strava_service._settings.client_secret = "test_client_secret"
     strava_service._settings.redirect_uri = "http://localhost:8000/auth/strava/callback"
 
-    respx.post("https://www.strava.com/oauth/token").mock(
-        return_value=Response(400, json={"message": "Bad Request", "errors": []})
-    )
+    with respx.mock as mock:
+        mock.post("https://www.strava.com/oauth/token").mock(
+            return_value=Response(400, json={"message": "Bad Request", "errors": []})
+        )
+        response = test_app.get("/auth/strava/callback", params={"code": "bad_code"})
 
-    response = test_app.get("/auth/strava/callback", params={"code": "bad_code"})
     assert response.status_code in (400, 500)
 
 

@@ -12,15 +12,36 @@
 #   - Activity without HR monitor — average_hr and max_hr null in response
 #   - strava_activity_id deduplication — sync never creates duplicate rows
 
+# READY FOR QA
+# Feature: Post-run analysis endpoint (TASK-007)
+# What was built:
+#   - POST /activities/{activity_id}/analyze — triggers Pak Har's analysis for a specific run
+#   - Activity ownership guard: 404 if activity belongs to another user (no ID enumeration)
+#   - Rate limited (shared in-memory sliding window: 20 req/60s per user)
+#   - Full streamed response from Ollama collected first, then persisted and returned as JSON
+#   - Analysis stored in activity.analysis + activity.analysis_generated_at (UTC)
+#   - Analysis prompt is specific to the run: distance, pace, time, elevation, HR, date, name
+# Edge cases to test:
+#   - Unauthenticated → 401
+#   - Activity not found → 404
+#   - Activity belongs to different user → 404 (not 403)
+#   - Rate limit hit → 429
+#   - Ollama offline → 503
+#   - Ollama timeout (>60s) → 504
+#   - Activity without HR data — HR lines omitted from context, prompt still valid
+#   - Re-analyzing an already-analyzed activity — overwrites previous analysis (idempotent by design)
+
 """
 Activities router.
 
 Endpoints:
-- GET /activities          — list all user's synced activities (triggers sync on load)
-- GET /activities/{id}     — single activity detail
+- GET  /activities                      — list all user's synced activities (triggers sync on load)
+- GET  /activities/{id}                 — single activity detail
+- POST /activities/{id}/analyze         — generate Pak Har's post-run analysis (Ollama)
 """
 
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -30,6 +51,8 @@ from models.activity import Activity
 from models.user import User
 from schemas.activity import ActivityRead
 from services.database import get_db
+from services.ollama import format_pace, stream_chat
+from services.rate_limiter import check_rate_limit
 from services.strava import get_valid_access_token, sync_activities
 
 logger = logging.getLogger(__name__)
@@ -107,3 +130,134 @@ async def get_activity(
         raise HTTPException(status_code=404, detail="Activity not found")
 
     return activity
+
+
+@router.post("/{activity_id}/analyze")
+async def analyze_activity(
+    activity_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    POST /activities/{activity_id}/analyze — generate Pak Har's post-run analysis.
+
+    Fetches the activity (ownership-guarded), builds a specific context string for
+    this single run, calls Ollama via stream_chat, collects the full response, then
+    persists it to activity.analysis and returns it as JSON.
+
+    The response is NOT streamed — the full analysis is assembled first, stored, then
+    returned so the frontend can treat it like any other JSON endpoint.
+
+    Rate limited: shared in-memory sliding window, 20 req/60s per user.
+
+    **Auth:** Requires `session_user_id` httpOnly cookie.
+
+    **Response (200):**
+    ```json
+    { "analysis": "<Pak Har's analysis text>" }
+    ```
+
+    **Errors:**
+    - 401: Not authenticated
+    - 404: Activity not found or does not belong to this user
+    - 429: Rate limit exceeded
+    - 503: Ollama not running or unreachable
+    - 504: Ollama did not respond within 60 seconds
+    """
+    # 1. Rate limit check (shared window with /coach/chat)
+    if not check_rate_limit(current_user.id):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests. Wait a moment before requesting another analysis.",
+        )
+
+    # 2. Fetch activity with ownership guard
+    activity = (
+        db.query(Activity)
+        .filter(
+            Activity.id == activity_id,
+            Activity.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    # 3. Build a specific context string for this single run
+    run_date = activity.activity_date.date().isoformat()
+    pace_str = format_pace(activity.average_pace_min_per_km)
+
+    moving_minutes = activity.moving_time_seconds // 60
+    moving_seconds = activity.moving_time_seconds % 60
+    moving_time_str = f"{moving_minutes}m {moving_seconds}s"
+
+    context_lines = [
+        f"Run: {activity.name}",
+        f"Date: {run_date}",
+        f"Distance: {activity.distance_km:.2f} km",
+        f"Moving time: {moving_time_str}",
+        f"Average pace: {pace_str} min/km",
+        f"Elevation gain: {activity.elevation_gain_m} m",
+    ]
+
+    if activity.average_hr is not None:
+        context_lines.append(f"Average heart rate: {activity.average_hr} bpm")
+    if activity.max_hr is not None:
+        context_lines.append(f"Max heart rate: {activity.max_hr} bpm")
+
+    activity_context = "\n".join(context_lines)
+
+    # 4. Build the analysis prompt for Pak Har
+    analysis_prompt = (
+        f"Analyze this specific run. Give your honest assessment of the effort level, "
+        f"what the numbers tell you about what went well, and one or two concrete things "
+        f"to improve next time. Be specific to this run — not general advice.\n\n"
+        f"Run data:\n{activity_context}"
+    )
+
+    # 5. Collect the full streamed response from Ollama
+    try:
+        chunks: list[str] = []
+        async for chunk in stream_chat(
+            user_message=analysis_prompt,
+            strava_context=activity_context,
+            chat_history=[],
+        ):
+            chunks.append(chunk)
+
+    except RuntimeError as exc:
+        logger.error(
+            "Ollama unavailable while analyzing activity_id=%d for user_id=%d: %s",
+            activity_id,
+            current_user.id,
+            exc,
+        )
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    except TimeoutError as exc:
+        logger.error(
+            "Ollama timeout while analyzing activity_id=%d for user_id=%d: %s",
+            activity_id,
+            current_user.id,
+            exc,
+        )
+        raise HTTPException(status_code=504, detail=str(exc))
+
+    full_analysis = "".join(chunks)
+
+    # 6. Persist the analysis to the activity record
+    activity.analysis = full_analysis
+    activity.analysis_generated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(activity)
+
+    logger.info(
+        "Analysis generated for activity_id=%d user_id=%d (%d chars)",
+        activity_id,
+        current_user.id,
+        len(full_analysis),
+    )
+
+    # 7. Return the full analysis as JSON
+    return {"analysis": full_analysis}

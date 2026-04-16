@@ -11,12 +11,13 @@ Key design decisions:
 
 import sys
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.pool import StaticPool
 
 # Add the api directory to sys.path so imports resolve correctly
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -44,6 +45,7 @@ def db_session():
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
     Base.metadata.create_all(engine)
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -94,7 +96,7 @@ def test_user(db_session: Session) -> User:
         strava_athlete_id="test_athlete_123",
         strava_access_token=encrypt_token("fake_access_token"),
         strava_refresh_token=encrypt_token("fake_refresh_token"),
-        strava_token_expires_at=datetime.utcnow() + timedelta(hours=6),
+        strava_token_expires_at=datetime.now(timezone.utc) + timedelta(hours=6),
         name="Test Runner",
         avatar_url=None,
     )
@@ -129,7 +131,7 @@ def test_activity(db_session: Session, test_user: User) -> Activity:
         average_hr=155,
         max_hr=172,
         elevation_gain_m=45,
-        activity_date=datetime.utcnow() - timedelta(days=1),
+        activity_date=datetime.now(timezone.utc) - timedelta(days=1),
         sync_status="synced",
     )
     db_session.add(activity)

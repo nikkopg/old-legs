@@ -286,7 +286,7 @@ async def fetch_activities(access_token: str, days: int = 90) -> list[dict]:
     Raises:
         httpx.HTTPStatusError: If Strava API returns non-200.
     """
-    after_ts = int((datetime.utcnow() - timedelta(days=days)).timestamp())
+    after_ts = int((datetime.now(timezone.utc) - timedelta(days=days)).timestamp())
     url = "https://www.strava.com/api/v3/athlete/activities"
     params = {"after": after_ts, "per_page": 200}
     headers = {"Authorization": f"Bearer {access_token}"}
