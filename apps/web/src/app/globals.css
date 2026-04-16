@@ -1,0 +1,11 @@
+@import "tailwindcss";
+
+/* Design tokens — expanded in TASK-009 by UX agent */
+@theme inline {
+  --font-sans: var(--font-inter);
+}
+
+body {
+  background: #0f0f0f;
+  color: #f0f0f0;
+}

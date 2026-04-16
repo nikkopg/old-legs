@@ -19,14 +19,15 @@ Handles the Authorization Code flow:
 
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
 from sqlalchemy.orm import Session
 
+from models.activity import Activity
 from models.user import User
-from services.encryption import encrypt_token
+from services.encryption import decrypt_token, encrypt_token
 
 logger = logging.getLogger(__name__)
 
@@ -206,3 +207,197 @@ async def complete_oauth_flow(code: str, db: Session) -> User:
     logger.info(f"Created new user: {athlete_id}")
 
     return user
+
+
+async def get_valid_access_token(user: User, db: Session) -> str:
+    """
+    Return a valid plaintext Strava access token for the given user.
+
+    If the current token expires within 5 minutes, refreshes it automatically
+    via the Strava token refresh endpoint, re-encrypts, and saves to DB.
+
+    Args:
+        user: User ORM object with encrypted token fields.
+        db: Database session.
+
+    Returns:
+        Plaintext access token ready for use in Strava API calls.
+
+    Raises:
+        RuntimeError: If Strava credentials are not configured.
+        httpx.HTTPStatusError: If token refresh fails.
+    """
+    now = datetime.now(timezone.utc)
+    expires_at = user.strava_token_expires_at
+
+    # Normalise to aware datetime if stored as naive UTC
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if expires_at - now <= timedelta(minutes=5):
+        logger.info(f"Access token expiring soon for user {user.id} — refreshing")
+
+        if not _settings.client_id or not _settings.client_secret:
+            raise RuntimeError("Strava credentials not configured for token refresh")
+
+        plaintext_refresh = decrypt_token(user.strava_refresh_token)
+
+        payload = {
+            "client_id": _settings.client_id,
+            "client_secret": _settings.client_secret,
+            "grant_type": "refresh_token",
+            "refresh_token": plaintext_refresh,
+        }
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(_settings.auth_url, data=payload)
+            response.raise_for_status()
+            data = response.json()
+
+        new_access = data["access_token"]
+        new_refresh = data["refresh_token"]
+        new_expires_at = datetime.utcnow() + timedelta(seconds=data["expires_in"])
+
+        user.strava_access_token = encrypt_token(new_access)
+        user.strava_refresh_token = encrypt_token(new_refresh)
+        user.strava_token_expires_at = new_expires_at
+        db.commit()
+        db.refresh(user)
+
+        logger.info(f"Token refreshed for user {user.id}")
+        return new_access
+
+    return decrypt_token(user.strava_access_token)
+
+
+async def fetch_activities(access_token: str, days: int = 90) -> list[dict]:
+    """
+    Fetch running activities from Strava for the past `days` days.
+
+    Filters to type == "Run" only. Returns raw Strava activity dicts.
+
+    Args:
+        access_token: Valid plaintext Strava access token.
+        days: How many days back to fetch (default 90).
+
+    Returns:
+        List of raw Strava activity dicts (runs only).
+
+    Raises:
+        httpx.HTTPStatusError: If Strava API returns non-200.
+    """
+    after_ts = int((datetime.utcnow() - timedelta(days=days)).timestamp())
+    url = "https://www.strava.com/api/v3/athlete/activities"
+    params = {"after": after_ts, "per_page": 200}
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, params=params, headers=headers)
+        response.raise_for_status()
+        all_activities = response.json()
+
+    runs = [a for a in all_activities if a.get("type") == "Run"]
+    logger.info(f"Fetched {len(all_activities)} activities from Strava, {len(runs)} are runs")
+    return runs
+
+
+def normalize_activity(raw: dict) -> dict:
+    """
+    Map raw Strava activity fields to our internal schema.
+
+    Unit conversions:
+    - distance: meters → km (round 2dp)
+    - average_speed: m/s → min/km pace (1000 / (speed_m_s * 60))
+    - elevation: kept as int metres
+    - HR fields: kept as int or None
+
+    Args:
+        raw: Single Strava activity dict as returned by the activities API.
+
+    Returns:
+        Dict matching ActivityCreate field names (excluding user_id).
+    """
+    distance_m = raw.get("distance", 0.0) or 0.0
+    distance_km = round(distance_m / 1000, 2)
+
+    average_speed_ms = raw.get("average_speed", 0.0) or 0.0
+    if average_speed_ms > 0:
+        average_pace = round(1000 / (average_speed_ms * 60), 4)
+    else:
+        average_pace = 0.0
+
+    avg_hr_raw = raw.get("average_heartrate")
+    max_hr_raw = raw.get("max_heartrate")
+
+    activity_date_raw = raw.get("start_date", "")
+    try:
+        activity_date = datetime.fromisoformat(activity_date_raw.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        activity_date = datetime.utcnow()
+        logger.warning(
+            f"Could not parse start_date '{activity_date_raw}' for activity "
+            f"{raw.get('id')} — using utcnow"
+        )
+
+    return {
+        "strava_activity_id": str(raw.get("id", "")),
+        "name": raw.get("name", "Run"),
+        "distance_km": distance_km,
+        "moving_time_seconds": int(raw.get("moving_time", 0) or 0),
+        "average_pace_min_per_km": average_pace,
+        "average_hr": int(avg_hr_raw) if avg_hr_raw is not None else None,
+        "max_hr": int(max_hr_raw) if max_hr_raw is not None else None,
+        "elevation_gain_m": int(raw.get("total_elevation_gain", 0) or 0),
+        "activity_date": activity_date,
+    }
+
+
+async def sync_activities(user_id: int, access_token: str, db: Session) -> int:
+    """
+    Fetch, normalize, and upsert Strava running activities for a user.
+
+    Skips any activity whose strava_activity_id already exists in the database
+    (deduplication via unique constraint). Returns count of newly inserted rows.
+
+    Args:
+        user_id: Internal user ID (FK for Activity.user_id).
+        access_token: Valid plaintext Strava access token.
+        db: Database session.
+
+    Returns:
+        Number of newly synced (inserted) activities.
+    """
+    raw_activities = await fetch_activities(access_token)
+    new_count = 0
+
+    for raw in raw_activities:
+        normalized = normalize_activity(raw)
+        strava_id = normalized["strava_activity_id"]
+
+        if not strava_id:
+            logger.warning("Skipping activity with empty strava_activity_id")
+            continue
+
+        existing = (
+            db.query(Activity)
+            .filter(Activity.strava_activity_id == strava_id)
+            .first()
+        )
+        if existing:
+            continue
+
+        activity = Activity(
+            user_id=user_id,
+            sync_status="synced",
+            **normalized,
+        )
+        db.add(activity)
+        new_count += 1
+
+    if new_count > 0:
+        db.commit()
+        logger.info(f"Synced {new_count} new activities for user {user_id}")
+    else:
+        logger.info(f"No new activities to sync for user {user_id}")
+
+    return new_count

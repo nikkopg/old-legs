@@ -22,7 +22,7 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Cookie, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -169,8 +169,8 @@ async def strava_oauth_callback(
         # Complete OAuth flow
         user = await complete_oauth_flow(code, db)
 
-        # Success response
-        return JSONResponse(
+        # Success response — set session cookie so subsequent requests are authenticated
+        response = JSONResponse(
             status_code=200,
             content={
                 "success": True,
@@ -185,6 +185,13 @@ async def strava_oauth_callback(
                 },
             },
         )
+        response.set_cookie(
+            key="session_user_id",
+            value=str(user.id),
+            httponly=True,
+            samesite="lax",
+        )
+        return response
 
     except ValueError as e:
         logger.warning(f"OAuth validation error: {str(e)}")
@@ -207,16 +214,37 @@ async def strava_oauth_callback(
 
 
 @router.get("/strava/status")
-async def oauth_status(db: Session = Depends(get_db)):
+async def oauth_status(
+    session_user_id: str = Cookie(default=None),
+    db: Session = Depends(get_db),
+):
     """
     Check OAuth status for current session/user.
 
-    Returns connection status and basic user info if authenticated.
+    Reads the session_user_id httpOnly cookie and looks up the user in the database.
 
-    TODO: Implement proper session/user detection.
-    For now, returns generic status.
+    Returns:
+        connected: True if a valid session cookie exists and the user is found.
     """
+    if not session_user_id:
+        return {"connected": False, "message": "No active session. Use /auth/strava to connect."}
+
+    try:
+        user_id = int(session_user_id)
+    except (ValueError, TypeError):
+        return {"connected": False, "message": "Invalid session. Use /auth/strava to reconnect."}
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return {"connected": False, "message": "User not found. Use /auth/strava to reconnect."}
+
     return {
-        "connected": False,
-        "message": "Session not implemented yet. Use /auth/strava to connect.",
+        "connected": True,
+        "message": "Strava account connected.",
+        "user": {
+            "id": user.id,
+            "name": user.name,
+            "avatar_url": user.avatar_url,
+            "strava_athlete_id": user.strava_athlete_id,
+        },
     }
