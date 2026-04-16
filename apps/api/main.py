@@ -16,6 +16,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
 from routers import auth, activities, plan, coach
@@ -25,13 +26,11 @@ logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
+    model_config = ConfigDict(env_file=".env", extra="allow")
+
     # Defaults — override via environment variables in production
     api_port: int = 8000
     cors_origin: str = "http://localhost:3000"
-
-    class Config:
-        env_file = ".env"
-        extra = "allow"
 
 
 settings = Settings()

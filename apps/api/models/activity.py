@@ -8,7 +8,7 @@
 #   - unique constraint on strava_activity_id prevents duplicate Strava activities
 #   - average_pace_min_per_km is stored as float (e.g. 5.5 = 5:30 min/km) for easier calculations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import String, DateTime, Boolean, Float, Integer, Text, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -52,9 +52,9 @@ class Activity(Base):
     )  # "pending" | "synced" | "failed"
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc)
     )
 
     # Relationships

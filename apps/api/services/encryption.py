@@ -10,6 +10,7 @@ import os
 import logging
 
 from cryptography.fernet import Fernet
+from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
 logger = logging.getLogger(__name__)
@@ -17,11 +18,9 @@ logger = logging.getLogger(__name__)
 
 class EncryptionSettings(BaseSettings):
     """Fernet key loaded from environment. Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" """
-    fernet_key: str | None = None
+    model_config = ConfigDict(env_file=".env", extra="allow")
 
-    class Config:
-        env_file = ".env"
-        extra = "allow"
+    fernet_key: str | None = None
 
 
 _encryption_settings = EncryptionSettings()

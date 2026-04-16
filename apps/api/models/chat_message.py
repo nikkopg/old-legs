@@ -7,7 +7,7 @@
 #   - Chat history grows indefinitely — consider pagination in service layer when listing
 #   - No encryption needed for message content (not Strava tokens)
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import String, DateTime, Integer, Text, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -34,7 +34,7 @@ class ChatMessage(Base):
     tokens_used: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Timestamps
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="chat_messages")
