@@ -14,11 +14,20 @@ import os
 import logging
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
+load_dotenv()  # populate os.environ from .env before any module reads settings
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
+from models.base import Base
+from models.user import User  # noqa: F401 — must import all models for create_all
+from models.activity import Activity  # noqa: F401
+from models.training_plan import TrainingPlan  # noqa: F401
+from models.chat_message import ChatMessage  # noqa: F401
+from services.database import engine
 from routers import auth, activities, plan, coach
 
 logging.basicConfig(level=logging.INFO)
@@ -38,7 +47,10 @@ settings = Settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: log environment info (no secrets)
+    # Create all tables that don't exist yet — safe to call on every startup
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database tables ready")
+
     logger.info(f"Old Legs API starting — port {settings.api_port}")
     logger.info(f"CORS origin: {settings.cors_origin}")
     yield

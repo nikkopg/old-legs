@@ -22,8 +22,10 @@ import logging
 import os
 from typing import Optional
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse
+import os
+
+from fastapi import APIRouter, Body, Cookie, Depends, HTTPException, BackgroundTasks
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -81,7 +83,7 @@ class OAuthStatusResponse(BaseModel):
 
 
 @router.post("/strava")
-async def initiate_strava_oauth(request: OAuthInitiateRequest):
+async def initiate_strava_oauth(request: OAuthInitiateRequest = Body(default=OAuthInitiateRequest())):
     """
     Initiate Strava OAuth flow.
 
@@ -169,22 +171,10 @@ async def strava_oauth_callback(
         # Complete OAuth flow
         user = await complete_oauth_flow(code, db)
 
-        # Success response — set session cookie so subsequent requests are authenticated
-        response = JSONResponse(
-            status_code=200,
-            content={
-                "success": True,
-                "message": "Strava account connected successfully",
-                "user": {
-                    "id": user.id,
-                    "name": user.name,
-                    "avatar_url": user.avatar_url,
-                    "strava_athlete_id": user.strava_athlete_id,
-                    "created_at": user.created_at.isoformat() if user.created_at else None,
-                    "updated_at": user.updated_at.isoformat() if user.updated_at else None,
-                },
-            },
-        )
+        # Redirect to the frontend dashboard after setting the session cookie.
+        # The browser follows the redirect and the cookie travels with it.
+        frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+        response = RedirectResponse(url=f"{frontend_url}/dashboard", status_code=302)
         response.set_cookie(
             key="session_user_id",
             value=str(user.id),
