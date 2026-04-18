@@ -125,20 +125,12 @@ async def coach_chat(
                 yield f"data: {chunk}\n\n"
 
         except RuntimeError as exc:
-            # Ollama unreachable — if nothing was yielded yet, this surfaces as a
-            # proper HTTP 503 because the generator raises before writing the first byte.
             logger.error("Ollama unavailable for user_id=%d: %s", current_user.id, exc)
-            if not accumulated:
-                # No bytes sent yet — FastAPI can still set the status code.
-                raise HTTPException(status_code=503, detail=str(exc))
-            # Bytes already sent — communicate the error in-stream.
             yield f"data: [ERROR] {exc}\n\n"
             return
 
         except TimeoutError as exc:
             logger.error("Ollama timeout for user_id=%d: %s", current_user.id, exc)
-            if not accumulated:
-                raise HTTPException(status_code=504, detail=str(exc))
             yield f"data: [ERROR] {exc}\n\n"
             return
 

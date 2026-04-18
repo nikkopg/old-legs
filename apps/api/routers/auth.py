@@ -1,14 +1,17 @@
 # READY FOR QA
-# Feature: Strava OAuth flow (TASK-003)
+# Feature: Strava OAuth flow + Disconnect (TASK-003, TASK-031)
 # What was built:
 #   - POST /auth/strava — initiates OAuth, returns redirect URL
 #   - GET /auth/strava/callback — handles OAuth callback, stores tokens
+#   - DELETE /auth/strava — disconnects Strava, clears tokens, deletes session cookie
 # Edge cases to test:
 #   - Missing STRAVA_CLIENT_ID or STRAVA_CLIENT_SECRET environment variables
 #   - Invalid authorization code (expired, already used, revoked)
 #   - Strava API network failures
 #   - User already connected (should update tokens, not create duplicate)
 #   - Missing athlete id in Strava response
+#   - DELETE /auth/strava without cookie → 401
+#   - DELETE /auth/strava with valid session → 200, tokens nulled, cookie cleared
 
 """
 Strava OAuth authentication router.
@@ -22,13 +25,12 @@ import logging
 import os
 from typing import Optional
 
-import os
-
-from fastapi import APIRouter, Body, Cookie, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Body, Cookie, Depends, HTTPException, BackgroundTasks, Response
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from dependencies import get_current_user
 from models.user import User
 from schemas.user import UserRead
 from services.database import get_db
@@ -79,6 +81,12 @@ class OAuthStatusResponse(BaseModel):
     """Response for OAuth status check."""
 
     connected: bool
+    message: str
+
+
+class DisconnectResponse(BaseModel):
+    """Response for Strava disconnect."""
+
     message: str
 
 
@@ -238,3 +246,36 @@ async def oauth_status(
             "strava_athlete_id": user.strava_athlete_id,
         },
     }
+
+
+@router.delete("/strava")
+async def disconnect_strava(
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DisconnectResponse:
+    """
+    Disconnect the current user's Strava account.
+
+    Clears the stored Strava tokens from the database and deletes the session cookie.
+    The user record is retained — only the Strava connection is revoked.
+
+    **Auth:** Requires `session_user_id` httpOnly cookie.
+
+    **Response (200):**
+    ```json
+    {"message": "Disconnected from Strava"}
+    ```
+
+    **Errors:**
+    - 401: Not authenticated
+    """
+    current_user.strava_access_token = None
+    current_user.strava_refresh_token = None
+    current_user.strava_token_expires_at = None
+    db.commit()
+
+    response.delete_cookie(key="session_user_id")
+
+    logger.info(f"User {current_user.id} disconnected from Strava")
+    return DisconnectResponse(message="Disconnected from Strava")

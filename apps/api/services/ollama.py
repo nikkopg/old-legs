@@ -8,21 +8,20 @@ Prepends Pak Har system prompt from prompts/pak_har.py on every request.
 
 import json
 import logging
-import os
 from datetime import datetime, timedelta, timezone
 from typing import AsyncGenerator
 
 import httpx
 from sqlalchemy.orm import Session
 
+from config import settings
 from models.activity import Activity
 from models.user import User
 from prompts.pak_har import SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
-OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "llama3")
+OLLAMA_BASE_URL: str = settings.ollama_base_url
 
 # Timeout for first byte from Ollama — 60 seconds.
 # Streaming itself has no hard timeout.
@@ -158,13 +157,14 @@ async def stream_chat(
     messages.extend(chat_history[-10:])
     messages.append({"role": "user", "content": user_message})
 
+    ollama_model = settings.get_ollama_model()
+    url = f"{OLLAMA_BASE_URL}/api/chat"
+
     payload = {
-        "model": OLLAMA_MODEL,
+        "model": ollama_model,
         "messages": messages,
         "stream": True,
     }
-
-    url = f"{OLLAMA_BASE_URL}/api/chat"
 
     try:
         async with httpx.AsyncClient(
@@ -192,6 +192,12 @@ async def stream_chat(
         logger.error("Ollama is unreachable at %s", OLLAMA_BASE_URL)
         raise RuntimeError(
             "Pak Har is unavailable right now. Make sure Ollama is running."
+        ) from exc
+    except httpx.HTTPStatusError as exc:
+        logger.error("Ollama returned %s for model %s", exc.response.status_code, ollama_model)
+        raise RuntimeError(
+            f"Ollama returned {exc.response.status_code}. "
+            f"Make sure the model is available: ollama pull {ollama_model}"
         ) from exc
     except httpx.ReadTimeout as exc:
         logger.error("Ollama read timeout after %ss", _READ_TIMEOUT)

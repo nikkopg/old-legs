@@ -16,9 +16,9 @@ from sqlalchemy.orm import Session
 from models.training_plan import TrainingPlan
 from models.user import User
 from prompts.pak_har import PLAN_PROMPT
+from config import settings
 from services.ollama import (
     OLLAMA_BASE_URL,
-    OLLAMA_MODEL,
     _CONNECT_TIMEOUT,
     _READ_TIMEOUT,
     build_strava_context,
@@ -132,7 +132,7 @@ async def generate_plan_with_ollama(user: User, db: Session) -> TrainingPlan:
     system_content = PLAN_PROMPT.format(strava_context=strava_context)
 
     payload = {
-        "model": OLLAMA_MODEL,
+        "model": settings.get_ollama_model(),
         "messages": [
             {"role": "system", "content": system_content},
             {

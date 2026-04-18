@@ -30,9 +30,10 @@ class User(Base):
     )
 
     # Encrypted Strava tokens — use encrypt_token() / decrypt_token() from services/encryption
-    strava_access_token: Mapped[str] = mapped_column(String(512))
-    strava_refresh_token: Mapped[str] = mapped_column(String(512))
-    strava_token_expires_at: Mapped[datetime] = mapped_column(DateTime)
+    # Nullable so disconnect can clear them without deleting the user record.
+    strava_access_token: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    strava_refresh_token: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    strava_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Profile snapshot from Strava
     name: Mapped[str] = mapped_column(String(256))

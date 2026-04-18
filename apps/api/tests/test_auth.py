@@ -163,3 +163,40 @@ def test_oauth_status_invalid_user_id(test_app: TestClient):
     response = test_app.get("/auth/strava/status")
     assert response.status_code == 200
     assert response.json()["connected"] is False
+
+
+# ---------------------------------------------------------------------------
+# DELETE /auth/strava — disconnect Strava
+# ---------------------------------------------------------------------------
+
+def test_disconnect_authenticated_user(
+    authenticated_client: TestClient,
+    db_session: Session,
+    test_user,
+):
+    """
+    Authenticated user can disconnect:
+    - Returns 200 with expected message
+    - Strava tokens are cleared in the DB
+    - Session cookie is deleted
+    """
+    response = authenticated_client.delete("/auth/strava")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["message"] == "Disconnected from Strava"
+
+    # Verify tokens cleared in the DB
+    db_session.refresh(test_user)
+    assert test_user.strava_access_token is None
+    assert test_user.strava_refresh_token is None
+    assert test_user.strava_token_expires_at is None
+
+    # Session cookie should be cleared (max-age=0 or absent)
+    assert response.cookies.get("session_user_id") in (None, "")
+
+
+def test_disconnect_unauthenticated(test_app: TestClient):
+    """No session cookie → 401 Unauthorized."""
+    response = test_app.delete("/auth/strava")
+    assert response.status_code == 401
