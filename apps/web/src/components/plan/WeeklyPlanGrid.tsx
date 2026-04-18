@@ -91,8 +91,8 @@ export function WeeklyPlanGrid({ plan, className = '' }: WeeklyPlanGridProps) {
         <DayCard
           key={dayName}
           dayName={dayName}
-          planDay={plan.plan_data[dayName]}
-          note={plan.pak_har_notes[dayName]}
+          planDay={plan.plan_data[dayName.toLowerCase()]}
+          note={plan.pak_har_notes[dayName.toLowerCase()]}
           isToday={dayName === today}
         />
       ))}
