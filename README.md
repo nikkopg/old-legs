@@ -52,13 +52,17 @@ SECRET_KEY=change-this-to-a-random-string
 docker compose up
 ```
 
-This starts Postgres, Ollama, the API, and the web app. First run pulls the Ollama image and model — give it a few minutes.
+This starts Postgres, Ollama, the API, and the web app. On first run it will also pull the AI model — give it a few minutes.
 
-### 3. Pull the model
+### 3. Sign in to Ollama (first time only)
+
+The AI model requires a free Ollama account. [Sign up at ollama.com](https://ollama.com) if you don't have one, then:
 
 ```bash
-docker exec -it oldlegs_ollama ollama pull gemma4:31b-cloud
+docker exec -it oldlegs_ollama ollama login
 ```
+
+Follow the prompts. Your credentials are saved in the `ollama_data` volume — you won't need to do this again.
 
 ### 4. Open
 
