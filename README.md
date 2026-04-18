@@ -23,17 +23,20 @@ Your coach. He's been running since before GPS existed. He has no patience for e
 ### Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/) + Docker Compose
-- A [Strava API application](https://www.strava.com/settings/api) (free) — you need a Client ID and Client Secret
+- A Strava API application (free) — takes 2 minutes:
+  1. Go to [strava.com/settings/api](https://www.strava.com/settings/api)
+  2. Fill in any name and website (e.g. `http://localhost`)
+  3. Set **Authorization Callback Domain** to `localhost`
+  4. Copy your **Client ID** and **Client Secret**
 
 ### 1. Clone and configure
 
 ```bash
 git clone https://github.com/nikkopg/old-legs.git
 cd old-legs
-cp apps/api/.env.example apps/api/.env
 ```
 
-Edit `apps/api/.env`:
+Create `apps/api/.env` and fill in your Strava credentials:
 
 ```env
 STRAVA_CLIENT_ID=your_client_id
@@ -54,7 +57,7 @@ This starts Postgres, Ollama, the API, and the web app. First run pulls the Olla
 ### 3. Pull the model
 
 ```bash
-docker exec -it oldlegs_ollama ollama pull llama3
+docker exec -it oldlegs_ollama ollama pull gemma4:31b-cloud
 ```
 
 ### 4. Open
@@ -71,7 +74,6 @@ docker exec -it oldlegs_ollama ollama pull llama3
 cd apps/api
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env  # fill in your Strava credentials
 uvicorn main:app --reload
 ```
 
@@ -92,7 +94,7 @@ Frontend runs at `http://localhost:3000`.
 Install [Ollama](https://ollama.com), then:
 
 ```bash
-ollama pull llama3
+ollama pull gemma4:31b-cloud
 ```
 
 ---
@@ -104,7 +106,7 @@ ollama pull llama3
 | Frontend | Next.js 16, TypeScript, Tailwind CSS v4 |
 | Backend | FastAPI, Python 3.11+ |
 | Database | SQLite (dev) / PostgreSQL (prod) |
-| AI | Ollama — default model: `llama3` |
+| AI | Ollama — default model: `gemma4:31b-cloud` |
 | Auth | Strava OAuth 2.0 |
 
 ---
