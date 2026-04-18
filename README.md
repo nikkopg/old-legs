@@ -49,7 +49,7 @@ SECRET_KEY=change-this-to-a-random-string
 ### 2. Start
 
 ```bash
-docker compose up
+docker compose up -d
 ```
 
 This starts Postgres, Ollama, the API, and the web app. On first run it will also pull the AI model — give it a few minutes.
@@ -95,9 +95,10 @@ Frontend runs at `http://localhost:3000`.
 
 ### Ollama (local)
 
-Install [Ollama](https://ollama.com), then:
+Install [Ollama](https://ollama.com), create a free account, then:
 
 ```bash
+ollama login
 ollama pull gemma4:31b-cloud
 ```
 
