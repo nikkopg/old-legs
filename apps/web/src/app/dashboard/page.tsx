@@ -1,101 +1,310 @@
 // READY FOR QA
-// Feature: Dashboard page (TASK-019)
-// What was built: /dashboard — authenticated activity feed with loading skeletons,
-//   empty state, error state, and 401 redirect to landing page.
+// Feature: Dashboard hub page restructure (TASK-114)
+// What was built:
+//   Replaced the old run-list dashboard with a weekly hub. The page shows:
+//     1. Weekly stats strip — total km, total runs, total time for the current Mon–Sun window
+//     2. Today's plan card — highlights today's PlanDay (type badge + description + duration)
+//        or a prompt to generate a plan if none exists
+//     3. Last run snapshot — most recent activity (date, distance, pace, optional HR)
+//        with Pak Har's stored one-liner analysis if available, or a static fallback line
+//        that matches his voice
+//     4. Chat CTA — a plain link to /coach
 // Edge cases to test:
-//   - 0 activities returned (empty state message shown)
-//   - 401 response (should redirect to /)
-//   - API unreachable / 500 (error message shown)
-//   - Slow load (3 skeleton blocks visible until data resolves)
-//   - Activity with null average_hr (HR row hidden in ActivityCard)
-//   - Long activity name (truncated via CSS)
+//   - No activities at all (stat strip shows zeros; last run section hidden; correct empty copy shown)
+//   - No plan yet (today's plan section shows "No plan this week" + link to /plan)
+//   - Activities exist but none in the current week (stats show zeros; last run still shown)
+//   - Today is a rest day (today's plan shows the rest day card with muted style)
+//   - lastRun has no analysis yet (fallback Pak Har line shown, not null)
+//   - lastRun has no HR (HR stat row hidden)
+//   - 401 on any fetch (redirect to /)
+//   - API unreachable (non-401 error — error notice shown; rest of page does not crash)
+//   - Loading state (skeleton blocks shown for each section)
 
 'use client'
 
 import { useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { PageWrapper } from '@/components/layout'
-import { ActivityCard } from '@/components/activity'
-import { getActivities } from '@/lib/api'
-import type { ApiError } from '@/types/api'
+import { Badge } from '@/components/ui'
+import { useDashboard } from '@/hooks/useDashboard'
+import { formatDistance, formatDuration, formatPace, formatDate } from '@/lib/formatters'
+import type { PlanDay } from '@/types/api'
 
-// TODO: Replace placeholder once GET /user/me endpoint is implemented (see api-spec.md)
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
 const PLACEHOLDER_USER_NAME = 'Runner'
 const PLACEHOLDER_AVATAR_URL = null
 
-function isUnauthorized(err: unknown): boolean {
-  const apiErr = err as ApiError
-  return apiErr?.status === 401 || apiErr?.detail === 'Not authenticated'
+// Pak Har fallback line shown when no LLM analysis is stored for the last run.
+// Must match his voice — blunt, specific, no hollow positivity.
+const PAK_HAR_NO_ANALYSIS_FALLBACK =
+  "Run logged. That's the only part that matters right now. Get the analysis when you're ready."
+
+const TYPE_BADGE: Record<string, 'success' | 'accent' | 'muted' | 'neutral'> = {
+  easy: 'success',
+  tempo: 'accent',
+  long: 'accent',
+  rest: 'muted',
+  cross: 'neutral',
 }
 
-function ActivityListSkeleton() {
+// ---------------------------------------------------------------------------
+// Sub-components
+// ---------------------------------------------------------------------------
+
+function SectionSkeleton({ height = 'h-20' }: { height?: string }) {
+  return <div className={`bg-surface-raised animate-pulse rounded-md ${height} w-full`} />
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-3">
-      {[0, 1, 2].map((i) => (
-        <div
-          key={i}
-          className="bg-surface-raised animate-pulse rounded-sm h-16 w-full"
-        />
-      ))}
+    <p className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
+      {children}
+    </p>
+  )
+}
+
+// --- Weekly stats strip ---
+
+interface WeeklyStatsCellProps {
+  label: string
+  value: string
+}
+
+function WeeklyStatsCell({ label, value }: WeeklyStatsCellProps) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="font-mono text-xl font-semibold text-text-primary">{value}</span>
+      <span className="text-xs text-text-muted">{label}</span>
     </div>
   )
 }
 
+interface WeeklyStatsStripProps {
+  totalKm: number
+  totalRuns: number
+  totalTimeSeconds: number
+}
+
+function WeeklyStatsStrip({ totalKm, totalRuns, totalTimeSeconds }: WeeklyStatsStripProps) {
+  return (
+    <section>
+      <SectionLabel>This week</SectionLabel>
+      <div className="grid grid-cols-3 gap-4 bg-surface border border-border rounded-md p-4">
+        <WeeklyStatsCell label="km" value={totalKm.toFixed(1)} />
+        <WeeklyStatsCell label="runs" value={String(totalRuns)} />
+        <WeeklyStatsCell label="time" value={formatDuration(totalTimeSeconds)} />
+      </div>
+    </section>
+  )
+}
+
+// --- Today's plan card ---
+
+interface TodayPlanCardProps {
+  planDay: PlanDay | null
+  hasPlan: boolean
+}
+
+function TodayPlanCard({ planDay, hasPlan }: TodayPlanCardProps) {
+  const isRest = !planDay || planDay.type === 'rest'
+  const badgeVariant = planDay ? (TYPE_BADGE[planDay.type] ?? 'neutral') : 'muted'
+
+  return (
+    <section>
+      <SectionLabel>Today</SectionLabel>
+
+      {!hasPlan && (
+        <div className="bg-surface border border-border rounded-md p-4 flex flex-col gap-3">
+          <p className="text-sm text-text-muted">
+            No plan this week. Pak Har needs your recent runs to build one.
+          </p>
+          <Link
+            href="/plan"
+            className="text-sm text-accent underline-offset-2 hover:underline"
+          >
+            Build this week's plan
+          </Link>
+        </div>
+      )}
+
+      {hasPlan && !planDay && (
+        <div className="bg-surface border border-border rounded-md p-4">
+          <p className="text-sm text-text-muted">No session scheduled for today.</p>
+        </div>
+      )}
+
+      {hasPlan && planDay && (
+        <div
+          className={[
+            'bg-surface border rounded-md p-4 flex flex-col gap-3',
+            isRest ? 'border-border opacity-70' : 'border-accent',
+          ].join(' ')}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium text-text-primary">
+              {isRest ? 'Rest day' : planDay.type.charAt(0).toUpperCase() + planDay.type.slice(1)}
+            </span>
+            <Badge variant={badgeVariant}>{planDay.type}</Badge>
+          </div>
+
+          {!isRest && (
+            <>
+              {planDay.duration_minutes > 0 && (
+                <span className="font-mono text-sm text-text-primary">
+                  {planDay.duration_minutes} min
+                </span>
+              )}
+              <p className="text-sm text-text-muted leading-relaxed">{planDay.description}</p>
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
+// --- Last run snapshot ---
+
+interface LastRunSnapshotProps {
+  activity: NonNullable<ReturnType<typeof import('@/hooks/useDashboard').useDashboard>['lastRun']>
+}
+
+function LastRunSnapshot({ activity }: LastRunSnapshotProps) {
+  const pakHarLine = activity.analysis
+    ? // Only use the first sentence of the stored analysis so the card stays compact
+      activity.analysis.split(/[.!?]/)[0]?.trim() + '.'
+    : PAK_HAR_NO_ANALYSIS_FALLBACK
+
+  return (
+    <section>
+      <SectionLabel>Last run</SectionLabel>
+      <div className="bg-surface border border-border rounded-md p-4 flex flex-col gap-4">
+        {/* Run meta */}
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+          <span className="font-mono text-lg font-semibold text-text-primary">
+            {formatDistance(activity.distance_km)}
+          </span>
+          <span className="font-mono text-sm text-text-muted">
+            {formatPace(activity.average_pace_min_per_km)}/km
+          </span>
+          {activity.average_hr !== null && (
+            <span className="text-xs text-text-muted">
+              {activity.average_hr} bpm avg
+            </span>
+          )}
+          <span className="text-xs text-text-muted ml-auto">
+            {formatDate(activity.activity_date)}
+          </span>
+        </div>
+
+        {/* Pak Har one-liner */}
+        <p className="text-sm text-text-muted border-l-2 border-accent pl-3 leading-relaxed italic">
+          {pakHarLine}
+        </p>
+
+        {/* Link to full analysis */}
+        <Link
+          href={`/activities/${activity.id}`}
+          className="text-xs text-accent underline-offset-2 hover:underline self-start"
+        >
+          Full analysis
+        </Link>
+      </div>
+    </section>
+  )
+}
+
+// --- Chat CTA ---
+
+function ChatCTA() {
+  return (
+    <section>
+      <SectionLabel>Coach</SectionLabel>
+      <div className="bg-surface border border-border rounded-md p-4 flex items-center justify-between gap-4">
+        <p className="text-sm text-text-muted">
+          Have a question about your training? Pak Har will tell you what he actually thinks.
+        </p>
+        <Link
+          href="/coach"
+          className="shrink-0 text-sm text-accent underline-offset-2 hover:underline"
+        >
+          Talk to Pak Har
+        </Link>
+      </div>
+    </section>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
 export default function DashboardPage() {
   const router = useRouter()
+  const { weeklyStats, todayPlan, lastRun, plan, isLoading, isError, isUnauthorized } =
+    useDashboard()
 
-  const {
-    data: activities,
-    isLoading,
-    isError,
-    error,
-  } = useQuery({
-    queryKey: ['activities'],
-    queryFn: getActivities,
-    retry: (failureCount, err) => {
-      // Do not retry on 401 — redirect to landing instead
-      if (isUnauthorized(err)) return false
-      return failureCount < 2
-    },
-  })
-
-  // Redirect to landing page on 401
   useEffect(() => {
-    if (isError && error) {
-      if (isUnauthorized(error)) {
-        router.replace('/')
-      }
+    if (isUnauthorized) {
+      router.replace('/')
     }
-  }, [isError, error, router])
+  }, [isUnauthorized, router])
 
   return (
     <PageWrapper
       userName={PLACEHOLDER_USER_NAME}
       avatarUrl={PLACEHOLDER_AVATAR_URL}
-      pageTitle="Your runs"
+      pageTitle="Dashboard"
     >
-      {isLoading && <ActivityListSkeleton />}
+      <div className="flex flex-col gap-6 max-w-2xl">
+        {/* Error banner — only shown for non-auth errors */}
+        {isError && !isUnauthorized && (
+          <p className="text-sm text-text-muted">
+            Could not load your data. Check that the API is running.
+          </p>
+        )}
 
-      {isError && !isUnauthorized(error) && (
-        <p className="text-sm text-muted">
-          Could not load runs. Check that the API is running.
-        </p>
-      )}
+        {/* Weekly stats */}
+        {isLoading ? (
+          <SectionSkeleton height="h-20" />
+        ) : (
+          <WeeklyStatsStrip
+            totalKm={weeklyStats.totalKm}
+            totalRuns={weeklyStats.totalRuns}
+            totalTimeSeconds={weeklyStats.totalTimeSeconds}
+          />
+        )}
 
-      {!isLoading && !isError && activities && activities.length === 0 && (
-        <p className="text-sm text-muted">
-          No runs synced yet. Connect your Strava account to get started.
-        </p>
-      )}
+        {/* Today's plan */}
+        {isLoading ? (
+          <SectionSkeleton height="h-28" />
+        ) : (
+          <TodayPlanCard planDay={todayPlan} hasPlan={plan !== null} />
+        )}
 
-      {!isLoading && !isError && activities && activities.length > 0 && (
-        <div className="flex flex-col gap-3">
-          {activities.map((activity) => (
-            <ActivityCard key={activity.id} activity={activity} />
-          ))}
-        </div>
-      )}
+        {/* Last run snapshot */}
+        {isLoading ? (
+          <SectionSkeleton height="h-32" />
+        ) : lastRun ? (
+          <LastRunSnapshot activity={lastRun} />
+        ) : (
+          <section>
+            <SectionLabel>Last run</SectionLabel>
+            <div className="bg-surface border border-border rounded-md p-4">
+              <p className="text-sm text-text-muted">
+                No runs synced yet. Connect your Strava account to get started.
+              </p>
+            </div>
+          </section>
+        )}
+
+        {/* Chat CTA — always shown */}
+        {!isLoading && <ChatCTA />}
+      </div>
     </PageWrapper>
   )
 }
