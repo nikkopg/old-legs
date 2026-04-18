@@ -101,7 +101,10 @@ class TestCoachChatValidation:
 
 class TestCoachChatOllamaErrors:
     def test_ollama_unreachable_returns_503(self, authenticated_client: TestClient):
-        with patch("services.ollama.stream_chat") as mock_stream:
+        # Per DEC-008: Ollama errors mid-stream are delivered as SSE error events
+        # with HTTP 200 (headers already sent). The stream body contains [ERROR].
+        # Patch at the import site in the router so the mock takes effect.
+        with patch("routers.coach.stream_chat") as mock_stream:
             async def raise_runtime(*args, **kwargs):
                 raise RuntimeError("Pak Har is unavailable right now. Make sure Ollama is running.")
                 yield  # make it an async generator
@@ -113,11 +116,15 @@ class TestCoachChatOllamaErrors:
                 json={"message": "Hello?"},
             )
 
-        assert response.status_code == 503
-        assert "unavailable" in response.json()["detail"].lower()
+        assert response.status_code == 200
+        assert "[ERROR]" in response.text
+        assert "unavailable" in response.text.lower()
 
     def test_ollama_timeout_returns_504(self, authenticated_client: TestClient):
-        with patch("services.ollama.stream_chat") as mock_stream:
+        # Per DEC-008: timeout errors are also delivered as SSE error events
+        # with HTTP 200 (headers already sent). The stream body contains [ERROR].
+        # Patch at the import site in the router so the mock takes effect.
+        with patch("routers.coach.stream_chat") as mock_stream:
             async def raise_timeout(*args, **kwargs):
                 raise TimeoutError("Pak Har took too long to respond.")
                 yield
@@ -129,7 +136,9 @@ class TestCoachChatOllamaErrors:
                 json={"message": "Hello?"},
             )
 
-        assert response.status_code == 504
+        assert response.status_code == 200
+        assert "[ERROR]" in response.text
+        assert "too long" in response.text.lower()
 
 
 class TestCoachChatRateLimit:

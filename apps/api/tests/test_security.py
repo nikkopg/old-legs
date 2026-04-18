@@ -48,8 +48,11 @@ class TestUnauthenticatedAccess:
         assert response.status_code == 401
 
     def test_strava_status_requires_auth(self, test_app: TestClient):
+        # /auth/strava/status is a status-check endpoint, not a protected resource.
+        # It intentionally returns 200 with {"connected": false} for unauthenticated requests.
         response = test_app.get("/auth/strava/status")
-        assert response.status_code == 401
+        assert response.status_code == 200
+        assert response.json()["connected"] is False
 
 
 class TestRateLimiting:

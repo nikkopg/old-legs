@@ -68,8 +68,9 @@ class TestGeneratePlan:
     ):
         with patch("routers.plan.generate_plan_with_ollama") as mock_gen:
             from models.training_plan import TrainingPlan as PlanModel
-            from datetime import date
+            from datetime import date, datetime, timezone
 
+            now = datetime.now(timezone.utc)
             fake_plan = PlanModel(
                 id=1,
                 user_id=1,
@@ -78,6 +79,8 @@ class TestGeneratePlan:
                 pak_har_notes=SAMPLE_NOTES,
                 is_active=True,
             )
+            fake_plan.created_at = now
+            fake_plan.updated_at = now
 
             async def fake_generate(*args, **kwargs):
                 return fake_plan
