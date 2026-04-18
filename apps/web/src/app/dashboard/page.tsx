@@ -26,10 +26,7 @@ const PLACEHOLDER_AVATAR_URL = null
 
 function isUnauthorized(err: unknown): boolean {
   const apiErr = err as ApiError
-  return (
-    apiErr?.detail?.startsWith('API error 401') ||
-    apiErr?.detail === 'Not authenticated'
-  )
+  return apiErr?.status === 401 || apiErr?.detail === 'Not authenticated'
 }
 
 function ActivityListSkeleton() {
@@ -66,11 +63,7 @@ export default function DashboardPage() {
   // Redirect to landing page on 401
   useEffect(() => {
     if (isError && error) {
-      const apiErr = error as ApiError
-      if (
-        apiErr.detail?.startsWith('API error 401') ||
-        apiErr.detail === 'Not authenticated'
-      ) {
+      if (isUnauthorized(error)) {
         router.replace('/')
       }
     }
@@ -84,7 +77,7 @@ export default function DashboardPage() {
     >
       {isLoading && <ActivityListSkeleton />}
 
-      {isError && !((error as ApiError).detail?.startsWith('API error 401') || (error as ApiError).detail === 'Not authenticated') && (
+      {isError && !isUnauthorized(error) && (
         <p className="text-sm text-muted">
           Could not load runs. Check that the API is running.
         </p>

@@ -26,15 +26,12 @@ const PLACEHOLDER_AVATAR_URL = null
 
 function isUnauthorized(err: unknown): boolean {
   const apiErr = err as ApiError
-  return (
-    apiErr?.detail?.startsWith('API error 401') ||
-    apiErr?.detail === 'Not authenticated'
-  )
+  return apiErr?.status === 401 || apiErr?.detail === 'Not authenticated'
 }
 
 function isNotFound(err: unknown): boolean {
   const apiErr = err as ApiError
-  return apiErr?.detail?.startsWith('API error 404') || false
+  return apiErr?.status === 404
 }
 
 export default function PlanPage() {

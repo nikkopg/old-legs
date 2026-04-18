@@ -55,4 +55,5 @@ export interface TrainingPlan {
 
 export interface ApiError {
   detail: string
+  status?: number
 }

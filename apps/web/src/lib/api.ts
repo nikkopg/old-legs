@@ -36,7 +36,7 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
     } catch {
       // response body wasn't JSON — keep the default message
     }
-    const err: ApiError = { detail }
+    const err: ApiError = { detail, status: res.status }
     throw err
   }
 
@@ -114,7 +114,7 @@ export async function streamChat(
     } catch {
       // response body wasn't JSON
     }
-    const err: ApiError = { detail }
+    const err: ApiError = { detail, status: res.status }
     throw err
   }
 
