@@ -16,6 +16,7 @@ from models.user import User  # noqa: F401
 from models.activity import Activity  # noqa: F401
 from models.training_plan import TrainingPlan  # noqa: F401
 from models.chat_message import ChatMessage  # noqa: F401
+from models.weekly_review import WeeklyReview  # noqa: F401
 
 # Alembic Config object — loaded from alembic.ini
 config = context.config

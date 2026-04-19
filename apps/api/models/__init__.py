@@ -9,5 +9,6 @@ from models.user import User
 from models.activity import Activity
 from models.training_plan import TrainingPlan
 from models.chat_message import ChatMessage
+from models.weekly_review import WeeklyReview
 
-__all__ = ["Base", "User", "Activity", "TrainingPlan", "ChatMessage"]
+__all__ = ["Base", "User", "Activity", "TrainingPlan", "ChatMessage", "WeeklyReview"]

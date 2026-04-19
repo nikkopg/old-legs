@@ -1,10 +1,14 @@
 # READY FOR QA
-# Feature: User model
+# Feature: User model (updated for v2 — TASK-101)
 # What was built: Full User model with encrypted Strava tokens, onboarding fields, relationships
+# Changes in v2:
+#   - Renamed weekly_km_goal → weekly_km_target (aligns with api-spec-v2 field name)
+#   - Added onboarding_completed (Boolean) to gate the onboarding flow for first-time users
 # Edge cases to consider:
 #   - User may not have strava_athlete_id until OAuth completes (nullable)
 #   - Token fields must never be logged (encrypt/decrypt only)
-#   - onboarding fields (weekly_km_goal, days_available, biggest_struggle) nullable for first login
+#   - onboarding fields (weekly_km_target, days_available, biggest_struggle) nullable for first login
+#   - onboarding_completed defaults to False — set to True after POST /user/onboarding
 #   - unique constraint on strava_athlete_id once set prevents duplicate Strava accounts
 
 from datetime import datetime, timezone
@@ -39,8 +43,9 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(256))
     avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
-    # Onboarding preferences (set during onboarding flow)
-    weekly_km_goal: Mapped[float] = mapped_column(Float, default=0.0)
+    # Onboarding preferences (set during onboarding flow — POST /user/onboarding)
+    onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    weekly_km_target: Mapped[float] = mapped_column(Float, default=0.0)
     days_available: Mapped[int] = mapped_column(Integer, default=3)
     biggest_struggle: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -59,4 +64,7 @@ class User(Base):
     )
     chat_messages: Mapped[list["ChatMessage"]] = relationship(
         "ChatMessage", back_populates="user", lazy="selectin"
+    )
+    weekly_reviews: Mapped[list["WeeklyReview"]] = relationship(
+        "WeeklyReview", back_populates="user", lazy="selectin"
     )

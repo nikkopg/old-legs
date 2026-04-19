@@ -54,3 +54,11 @@ class ActivityUpdate(BaseModel):
 class ActivityWithAnalysis(ActivityRead):
     """Activity when returned with Pak Har's full analysis."""
     pass
+
+
+class ActivityListResponse(BaseModel):
+    """Paginated activity list response (v2)."""
+    items: list[ActivityRead]
+    total: int
+    page: int
+    per_page: int
