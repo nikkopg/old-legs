@@ -10,7 +10,7 @@
 //   - analyzeActivity on an already-analyzed activity (overwrites — should still return 200)
 //   - getCurrentPlan when no plan exists (404 — ApiError thrown)
 
-import type { Activity, ApiError, TrainingPlan } from '@/types/api'
+import type { Activity, ActivityListResponse, ApiError, TrainingPlan } from '@/types/api'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -63,7 +63,8 @@ export async function getAuthStatus(): Promise<{ connected: boolean; message: st
 // ---------------------------------------------------------------------------
 
 export async function getActivities(): Promise<Activity[]> {
-  return apiFetch<Activity[]>('/activities')
+  const res = await apiFetch<ActivityListResponse>('/activities')
+  return res.items
 }
 
 export async function getActivity(id: number): Promise<Activity> {

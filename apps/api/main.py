@@ -22,12 +22,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ConfigDict
 from pydantic_settings import BaseSettings
 
-from models.base import Base
-from models.user import User  # noqa: F401 — must import all models for create_all
-from models.activity import Activity  # noqa: F401
-from models.training_plan import TrainingPlan  # noqa: F401
-from models.chat_message import ChatMessage  # noqa: F401
-from services.database import engine
+from alembic.config import Config as AlembicConfig
+from alembic import command as alembic_command
+
 from routers import auth, activities, plan, coach
 
 logging.basicConfig(level=logging.INFO)
@@ -45,11 +42,17 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
+def _run_migrations() -> None:
+    from services.database import settings as db_settings
+    alembic_cfg = AlembicConfig("alembic.ini")
+    alembic_cfg.set_main_option("sqlalchemy.url", db_settings.database_url)
+    alembic_command.upgrade(alembic_cfg, "heads")
+    logger.info("Database migrations applied")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create all tables that don't exist yet — safe to call on every startup
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables ready")
+    _run_migrations()
 
     logger.info(f"Old Legs API starting — port {settings.api_port}")
     logger.info(f"CORS origin: {settings.cors_origin}")

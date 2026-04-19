@@ -53,6 +53,13 @@ export interface TrainingPlan {
   updated_at: string
 }
 
+export interface ActivityListResponse {
+  items: Activity[]
+  total: number
+  page: number
+  per_page: number
+}
+
 export interface ApiError {
   detail: string
   status?: number
