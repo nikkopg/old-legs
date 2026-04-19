@@ -1,7 +1,7 @@
 # READY FOR QA
 # Feature: HR zone interpretation for post-run analysis (TASK-109)
 # What was built:
-#   - classify_hr_zone(): maps average HR to a 5-zone label using an assumed max HR of 185 bpm
+#   - classify_hr_zone(): maps average HR to a 5-zone label using derived MHR from activity history (fallback: 185 bpm)
 #   - build_analysis_context(): builds the full context string for the post-run analysis
 #     prompt, including HR zone label, easy-run zone mismatch flag, and a fatigue trend note
 #     when HR is rising at similar distance over the last 3 comparable runs
@@ -39,26 +39,25 @@ logger = logging.getLogger(__name__)
 # HR zone constants
 # ---------------------------------------------------------------------------
 
-# Assumed population-average max HR used when the user's actual max HR is
-# unknown. 185 bpm is a reasonable middle-ground for recreational adult
-# runners. It is intentionally not derived from "220 − age" because we don't
-# collect the user's age either. Update this constant if the product ever
-# collects real max HR data from users.
-_ASSUMED_MAX_HR: int = 185
+# Fallback max HR used only when no max_hr data exists in activity history.
+# 185 bpm is a population-average for recreational adult runners.
+_FALLBACK_MAX_HR: int = 185
 
-# Zone boundaries as (lower_inclusive, upper_inclusive, zone_number, label).
-# Percentages are of _ASSUMED_MAX_HR.
-# Zone 1: < 60%  → below 111 bpm
-# Zone 2: 60–70% → 111–129 bpm  (true easy/aerobic)
-# Zone 3: 70–80% → 130–148 bpm  (tempo / aerobic threshold)
-# Zone 4: 80–90% → 149–166 bpm  (hard / lactate threshold)
-# Zone 5: > 90%  → above 166 bpm (max effort)
-_HR_ZONES: list[tuple[int, int, int, str]] = [
-    (0, 110, 1, "Zone 1 (very easy — below 60% max HR)"),
-    (111, 129, 2, "Zone 2 (easy/aerobic — 60–70% max HR)"),
-    (130, 148, 3, "Zone 3 (tempo/aerobic threshold — 70–80% max HR)"),
-    (149, 166, 4, "Zone 4 (hard/lactate threshold — 80–90% max HR)"),
-    (167, 9999, 5, "Zone 5 (max effort — above 90% max HR)"),
+# Default resting HR used until the user provides their actual RHR via onboarding.
+# 60 bpm is a reasonable population average for recreational runners.
+_DEFAULT_RHR: int = 60
+
+# Zone boundaries as percentage ranges of Heart Rate Reserve (HRR = MHR - RHR).
+# Uses the Karvonen formula: zone_boundary = RHR + (pct × HRR)
+# This is more accurate than % of MHR because it accounts for individual
+# resting HR, shifting zones upward for fitter runners with lower RHR.
+# (lower_pct_inclusive, upper_pct_exclusive, zone_number, label)
+_HR_ZONE_PCTS: list[tuple[float, float, int, str]] = [
+    (0.00, 0.50, 1, "Zone 1 (very easy — below 50% HRR)"),
+    (0.50, 0.60, 2, "Zone 2 (easy/aerobic — 50–60% HRR)"),
+    (0.60, 0.70, 3, "Zone 3 (tempo/aerobic threshold — 60–70% HRR)"),
+    (0.70, 0.85, 4, "Zone 4 (hard/lactate threshold — 70–85% HRR)"),
+    (0.85, 9.99, 5, "Zone 5 (max effort — above 85% HRR)"),
 ]
 
 # Keywords that, when found in the activity name, indicate the runner intended
@@ -78,25 +77,40 @@ _HR_TREND_MIN_RUNS: int = 3
 # Public helpers
 # ---------------------------------------------------------------------------
 
-def classify_hr_zone(average_hr: int) -> tuple[int, str]:
+def _derive_max_hr(current_activity: Activity, recent_activities: list[Activity]) -> int:
     """
-    Map an average HR value to a 5-zone label.
+    Derive the user's max HR from the highest max_hr recorded across all activities.
+    Falls back to _FALLBACK_MAX_HR if no max_hr data exists.
+    """
+    candidates = [
+        a.max_hr for a in [current_activity] + recent_activities
+        if a.max_hr is not None
+    ]
+    return max(candidates) if candidates else _FALLBACK_MAX_HR
 
-    Uses _ASSUMED_MAX_HR (185 bpm) as the reference max HR when the user's
-    actual max HR is not known.
+
+def classify_hr_zone(average_hr: int, max_hr: int, resting_hr: int = _DEFAULT_RHR) -> tuple[int, str]:
+    """
+    Map an average HR to a 5-zone label using the Karvonen formula.
+
+    Zone boundary (bpm) = resting_hr + (pct × (max_hr - resting_hr))
 
     Args:
         average_hr: The average heart rate for a run, in bpm.
+        max_hr: The user's max HR (derived from history or fallback).
+        resting_hr: The user's resting HR (default 60 until user provides actual value).
 
     Returns:
         A (zone_number, zone_label) tuple. zone_number is 1–5.
-        Clamps to Zone 5 for any value above the highest boundary.
     """
-    for lower, upper, zone_num, label in _HR_ZONES:
-        if lower <= average_hr <= upper:
+    hrr = max_hr - resting_hr
+    if hrr <= 0:
+        return 1, _HR_ZONE_PCTS[0][3]
+    pct = (average_hr - resting_hr) / hrr
+    for lower_pct, upper_pct, zone_num, label in _HR_ZONE_PCTS:
+        if lower_pct <= pct < upper_pct:
             return zone_num, label
-    # Anything above the last boundary is Zone 5
-    return 5, _HR_ZONES[-1][3]
+    return 5, _HR_ZONE_PCTS[-1][3]
 
 
 def _is_easy_run(activity_name: str) -> bool:
@@ -166,6 +180,7 @@ def _compute_hr_trend(
 def build_analysis_context(
     activity: Activity,
     recent_activities: list[Activity],
+    resting_hr: int = _DEFAULT_RHR,
 ) -> str:
     """
     Build the full context string for Pak Har's post-run analysis prompt.
@@ -201,8 +216,16 @@ def build_analysis_context(
 
     # --- HR section — only populated when data exists ---
     if activity.average_hr is not None:
-        zone_num, zone_label = classify_hr_zone(activity.average_hr)
-        lines.append(f"Average heart rate: {activity.average_hr} bpm ({zone_label})")
+        derived_mhr = _derive_max_hr(activity, recent_activities)
+        mhr_source = "from activity history" if any(
+            a.max_hr is not None for a in [activity] + recent_activities
+        ) else "population average fallback"
+        rhr_source = "user-provided" if resting_hr != _DEFAULT_RHR else "default"
+        zone_num, zone_label = classify_hr_zone(activity.average_hr, derived_mhr, resting_hr)
+        lines.append(
+            f"Average heart rate: {activity.average_hr} bpm ({zone_label}, "
+            f"Karvonen: MHR {derived_mhr} bpm {mhr_source}, RHR {resting_hr} bpm {rhr_source})"
+        )
 
         if activity.max_hr is not None:
             lines.append(f"Max heart rate: {activity.max_hr} bpm")
