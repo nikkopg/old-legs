@@ -42,6 +42,12 @@ export function AnalysisBlock({ analysis, isLoading, onRequest, className = '' }
           {paragraph}
         </p>
       ))}
+      <button
+        onClick={onRequest}
+        className="mt-2 text-xs text-text-muted hover:text-text-primary transition-colors"
+      >
+        Refresh his take
+      </button>
     </div>
   )
 }
