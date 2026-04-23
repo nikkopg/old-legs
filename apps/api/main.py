@@ -25,7 +25,7 @@ from pydantic_settings import BaseSettings
 from alembic.config import Config as AlembicConfig
 from alembic import command as alembic_command
 
-from routers import auth, activities, plan, coach
+from routers import auth, activities, plan, coach, review, insights
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -90,6 +90,8 @@ app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(activities.router, prefix="/activities", tags=["activities"])
 app.include_router(plan.router, prefix="/plan", tags=["plan"])
 app.include_router(coach.router, prefix="/coach", tags=["coach"])
+app.include_router(review.router, prefix="/review", tags=["review"])
+app.include_router(insights.router, prefix="/insights", tags=["insights"])
 
 
 @app.get("/health", tags=["health"])

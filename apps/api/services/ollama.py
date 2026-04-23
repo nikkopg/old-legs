@@ -123,6 +123,27 @@ def build_strava_context(user: User, db: Session) -> str:
     return "\n".join(lines)
 
 
+def build_user_preferences_context(user: User) -> str:
+    """
+    Build a plain-text summary of the user's stated preferences for LLM injection.
+
+    Args:
+        user: The authenticated User ORM object.
+
+    Returns:
+        A multi-line string describing the user's weekly target, available days,
+        and biggest struggle. Falls back gracefully for unset fields.
+    """
+    target = f"{user.weekly_km_target:.1f} km/week" if user.weekly_km_target else "not set"
+    days = str(user.days_available) if user.days_available else "not set"
+    struggle = user.biggest_struggle if user.biggest_struggle else "not specified"
+    return (
+        f"- Weekly km target: {target}\n"
+        f"- Days available to run: {days}\n"
+        f"- Biggest struggle: {struggle}"
+    )
+
+
 async def stream_chat(
     user_message: str,
     strava_context: str,
