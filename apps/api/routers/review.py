@@ -1,4 +1,4 @@
-# READY FOR QA
+# QA COMPLETE — TASK-120 passed. No blockers.
 # Feature: Weekly review endpoints (TASK-105)
 # What was built:
 #   - POST /review/generate — generates Pak Har's weekly planned-vs-actual assessment.

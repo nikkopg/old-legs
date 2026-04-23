@@ -1,4 +1,4 @@
-# READY FOR QA
+# QA COMPLETE — TASK-120 passed. No blockers.
 # Feature: Multi-week insights endpoint (TASK-106)
 # What was built:
 #   - GET /insights — aggregated trend stats + Pak Har commentary for the last 6 weeks
