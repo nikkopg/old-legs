@@ -1,14 +1,16 @@
 // READY FOR QA
-// Feature: Dashboard hub page restructure (TASK-114)
+// Feature: Dashboard hub page — TASK-114 + TASK-118 (WeeklyReviewCard) + TASK-119 (InsightsSection)
 // What was built:
-//   Replaced the old run-list dashboard with a weekly hub. The page shows:
+//   The dashboard weekly hub now includes:
 //     1. Weekly stats strip — total km, total runs, total time for the current Mon–Sun window
 //     2. Today's plan card — highlights today's PlanDay (type badge + description + duration)
 //        or a prompt to generate a plan if none exists
 //     3. Last run snapshot — most recent activity (date, distance, pace, optional HR)
 //        with Pak Har's stored one-liner analysis if available, or a static fallback line
 //        that matches his voice
-//     4. Chat CTA — a plain link to /coach
+//     4. WeeklyReviewCard (TASK-118) — Pak Har's planned vs actual review for the current week
+//     5. InsightsSection (TASK-119) — 6-week aggregated trends + Pak Har multi-week commentary
+//     6. Chat CTA — a plain link to /coach
 // Edge cases to test:
 //   - No activities at all (stat strip shows zeros; last run section hidden; correct empty copy shown)
 //   - No plan yet (today's plan section shows "No plan this week" + link to /plan)
@@ -19,6 +21,8 @@
 //   - 401 on any fetch (redirect to /)
 //   - API unreachable (non-401 error — error notice shown; rest of page does not crash)
 //   - Loading state (skeleton blocks shown for each section)
+//   - WeeklyReviewCard: 404 on GET /review/current → no review yet state; POST errors surfaced
+//   - InsightsSection: 404 → "Not enough data yet"; 503/504 → Ollama error message
 
 'use client'
 
@@ -27,6 +31,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { PageWrapper } from '@/components/layout'
 import { Badge } from '@/components/ui'
+import { WeeklyReviewCard } from '@/components/review/WeeklyReviewCard'
+import { InsightsSection } from '@/components/insights/InsightsSection'
 import { useDashboard } from '@/hooks/useDashboard'
 import { formatDistance, formatDuration, formatPace, formatDate } from '@/lib/formatters'
 import type { PlanDay } from '@/types/api'
@@ -301,6 +307,19 @@ export default function DashboardPage() {
             </div>
           </section>
         )}
+
+        {/* Weekly review — Pak Har's planned vs actual commentary for this week */}
+        {!isLoading && (
+          <section>
+            <p className="text-xs font-medium text-text-muted uppercase tracking-wider mb-3">
+              This week's review
+            </p>
+            <WeeklyReviewCard />
+          </section>
+        )}
+
+        {/* 6-week insights — trend stats + Pak Har multi-week commentary */}
+        {!isLoading && <InsightsSection />}
 
         {/* Chat CTA — always shown */}
         {!isLoading && <ChatCTA />}

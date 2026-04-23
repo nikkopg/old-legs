@@ -60,6 +60,26 @@ export interface ActivityListResponse {
   per_page: number
 }
 
+export interface Insights {
+  weeks_analyzed: number
+  avg_weekly_km: number
+  avg_pace_min_per_km: number
+  pace_trend: 'improving' | 'declining' | 'stable'
+  consistency_pct: number
+  pak_har_commentary: string
+  generated_at: string
+}
+
+export interface WeeklyReview {
+  id: number
+  user_id: number
+  week_start_date: string
+  planned_runs: number
+  actual_runs: number
+  review_text: string
+  created_at: string
+}
+
 export interface ApiError {
   detail: string
   status?: number

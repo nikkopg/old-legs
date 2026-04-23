@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Old Legs — Post-Run Analysis · 3 Directions</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Playfair+Display:ital,wght@0,700;0,800;0,900;1,700&family=Special+Elite&family=Courier+Prime:wght@400;700&family=Caveat:wght@500;700&family=Source+Serif+Pro:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #1a1612; height: 100%; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  /* Tweaks panel */
+  .tweaks {
+    position: fixed; bottom: 20px; right: 20px; z-index: 999;
+    background: #121010; color: #f0ebe0; border: 1px solid #2a2620;
+    padding: 14px 16px; font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px; letter-spacing: 1px; min-width: 240px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    display: none;
+  }
+  .tweaks.active { display: block; }
+  .tweaks h3 { margin: 0 0 10px; font-size: 10px; letter-spacing: 3px; opacity: 0.7; text-transform: uppercase; font-weight: 500; }
+  .tweaks .row { display: flex; flex-direction: column; gap: 6px; }
+  .tweaks button {
+    background: transparent; color: #f0ebe0; border: 1px solid #3a342c;
+    padding: 8px 10px; text-align: left; cursor: pointer;
+    font-family: inherit; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase;
+  }
+  .tweaks button:hover { background: #1f1b16; }
+  .tweaks button.on { background: #8a2a12; border-color: #8a2a12; color: #fff; }
+  .tweaks .hint { font-size: 9px; letter-spacing: 1px; opacity: 0.5; margin-top: 8px; }
+</style>
+
+<!-- Tweak defaults — persisted via edit-mode protocol -->
+<script>
+  const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+    "view": "focus",
+    "focus": "news"
+  }/*EDITMODE-END*/;
+  window.__TWEAKS = { ...TWEAK_DEFAULTS };
+</script>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<div class="tweaks" id="tweaks">
+  <h3>Direction</h3>
+  <div class="row" id="tweaks-buttons"></div>
+  <div class="hint">Tap a direction to view focused.<br/>Tap "All 3" to return to canvas.</div>
+</div>
+
+<script type="text/babel" src="components/design-canvas.jsx"></script>
+<script type="text/babel" src="components/run-data.jsx"></script>
+<script type="text/babel" src="components/direction-receipt.jsx"></script>
+<script type="text/babel" src="components/direction-news.jsx"></script>
+<script type="text/babel" src="components/direction-dossier.jsx"></script>
+
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect } = React;
+
+// Read persisted view/focus from URL hash for deep-linking + refresh stability
+function initialState() {
+  const t = window.__TWEAKS || {};
+  try {
+    const saved = localStorage.getItem('old-legs-direction');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return { view: parsed.view || t.view || 'canvas', focus: parsed.focus || t.focus || 'receipt' };
+    }
+  } catch {}
+  return { view: t.view || 'canvas', focus: t.focus || 'receipt' };
+}
+
+const DIRECTIONS = [
+  { key: 'receipt',  label: 'A · Receipt',    sub: 'Thermal printout · monospace · pace ladder',          Comp: window.ReceiptDirection },
+  { key: 'news',     label: 'B · Broadsheet', sub: 'Newsprint dispatch · serif · byline verdict',          Comp: window.NewsDirection },
+  { key: 'dossier',  label: 'C · Dossier',    sub: 'Coach\u2019s field notebook · typewriter · stamped',    Comp: window.DossierDirection },
+];
+
+function App() {
+  const [state, setState] = useState(initialState);
+
+  useEffect(() => {
+    try { localStorage.setItem('old-legs-direction', JSON.stringify(state)); } catch {}
+  }, [state]);
+
+  // Tweaks: register listener BEFORE announcing availability
+  useEffect(() => {
+    function onMsg(e) {
+      const d = e.data || {};
+      if (d.type === '__activate_edit_mode') document.getElementById('tweaks').classList.add('active');
+      if (d.type === '__deactivate_edit_mode') document.getElementById('tweaks').classList.remove('active');
+    }
+    window.addEventListener('message', onMsg);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  // Wire tweak buttons
+  useEffect(() => {
+    const host = document.getElementById('tweaks-buttons');
+    if (!host) return;
+    const options = [
+      { key: 'canvas',  label: 'All 3 · canvas' },
+      ...DIRECTIONS.map(d => ({ key: d.key, label: d.label })),
+    ];
+    host.innerHTML = '';
+    options.forEach(o => {
+      const b = document.createElement('button');
+      b.textContent = o.label;
+      const active = (o.key === 'canvas' && state.view === 'canvas') || (o.key !== 'canvas' && state.view === 'focus' && state.focus === o.key);
+      if (active) b.classList.add('on');
+      b.onclick = () => {
+        if (o.key === 'canvas') {
+          setState({ ...state, view: 'canvas' });
+          window.parent.postMessage({ type: '__edit_mode_set_keys', edits: { view: 'canvas' } }, '*');
+        } else {
+          setState({ view: 'focus', focus: o.key });
+          window.parent.postMessage({ type: '__edit_mode_set_keys', edits: { view: 'focus', focus: o.key } }, '*');
+        }
+      };
+      host.appendChild(b);
+    });
+  }, [state]);
+
+  if (state.view === 'focus') {
+    const dir = DIRECTIONS.find(d => d.key === state.focus) || DIRECTIONS[0];
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: '#1a1612',
+        padding: '48px 24px',
+        display: 'flex', justifyContent: 'center', alignItems: 'flex-start',
+      }}>
+        <div>
+          <div style={{
+            color: '#c8bfae', fontFamily: 'JetBrains Mono, ui-monospace, monospace',
+            fontSize: 11, letterSpacing: 3, textTransform: 'uppercase',
+            marginBottom: 14, opacity: 0.7,
+          }}>
+            Direction {dir.label} &nbsp;·&nbsp; {dir.sub}
+          </div>
+          <dir.Comp />
+          <div style={{ textAlign: 'center', color: '#7a7365', fontFamily: 'JetBrains Mono, monospace', fontSize: 10, letterSpacing: 2, marginTop: 24 }}>
+            TAP THE TWEAKS PANEL · SWITCH DIRECTION · OR CHOOSE "ALL 3 · CANVAS"
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <DesignCanvas>
+      <DCSection
+        title="Old Legs — Post-Run Analysis"
+        subtitle="Three aesthetic directions for the hero moment: Pak Har reads your run. Same data, same verdict, three voices."
+      >
+        {DIRECTIONS.map(d => (
+          <DCArtboard key={d.key} label={`${d.label} — ${d.sub}`} width="auto" height="auto">
+            <d.Comp />
+          </DCArtboard>
+        ))}
+      </DCSection>
+
+      <DCSection
+        title="Why three? And what to look for."
+        subtitle="Pan + pinch-zoom to inspect. Open Tweaks (bottom-right) to view any direction focused."
+      >
+        <DCArtboard label="Design notes" width={720} height="auto" style={{ background:'#faf7f1' }}>
+          <div style={{ padding: '28px 34px', fontFamily: 'Source Serif Pro, Georgia, serif', color: '#1a1612', fontSize: 14, lineHeight: 1.65 }}>
+            <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize: 10, letterSpacing: 3, opacity: 0.6, textTransform:'uppercase', marginBottom: 10 }}>The brief</div>
+            <p style={{ margin: '0 0 14px' }}>
+              Pak Har's honesty is the product. The existing tokens (dark slate, orange accent, Inter) read like every other
+              fitness dashboard — they undersell him. These three directions each give the analysis screen a distinct point
+              of view that <em>feels</em> like an unsparing elder coach.
+            </p>
+            <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize: 10, letterSpacing: 3, opacity: 0.6, textTransform:'uppercase', margin:'18px 0 8px' }}>A · Receipt</div>
+            <p style={{ margin: '0 0 10px' }}>
+              A run is a transaction. You spent effort; here's the slip. Monospace, dot-matrix rules, ASCII pace ladder.
+              The verdict arrives as a coach's-note stamp at the bottom. Cheapest-feeling, most cult-potential.
+            </p>
+            <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize: 10, letterSpacing: 3, opacity: 0.6, textTransform:'uppercase', margin:'18px 0 8px' }}>B · Broadsheet</div>
+            <p style={{ margin: '0 0 10px' }}>
+              The dispatch. Pak Har is the op-ed columnist; your run is the news. Serif masthead, drop cap, pull-quote,
+              hairline column rules. Densest data layout — splits + zones + weekly rail fit naturally in the margin column.
+              Best for long-form honesty.
+            </p>
+            <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize: 10, letterSpacing: 3, opacity: 0.6, textTransform:'uppercase', margin:'18px 0 8px' }}>C · Dossier</div>
+            <p style={{ margin: '0 0 10px' }}>
+              A coach's working file. Graph paper, taped cards, circled mistakes, margin notes in a different hand.
+              The stamped verdict ("PACED POORLY") is visceral. Most "character" of the three; easiest to mistake for novelty
+              if not disciplined.
+            </p>
+
+            <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize: 10, letterSpacing: 3, opacity: 0.6, textTransform:'uppercase', margin:'22px 0 8px' }}>On multiple coaches (later)</div>
+            <p style={{ margin: '0 0 10px' }}>
+              Because Pak Har is the point, a dropdown diminishes him. I'd make each coach inhabit a visual world:
+              Pak Har gets one of these. A data-nerd coach could get clinical Swiss-grid PDF. A chaotic ultrarunner,
+              a handwritten postcard. Switching coaches is picking up a different book — not toggling a filter.
+              A small "COACH ON DUTY" byline ties everything together.
+            </p>
+
+            <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize: 10, letterSpacing: 3, opacity: 0.6, textTransform:'uppercase', margin:'22px 0 8px' }}>Next</div>
+            <p style={{ margin: 0 }}>
+              Pick a direction → I'll take it through the weekly plan, chat, activities list, and onboarding. Propose tweaks or mix:
+              e.g. "Broadsheet headline voice on a Dossier body" is a real option.
+            </p>
+          </div>
+        </DCArtboard>
+
+        <DCArtboard label="The data (shared across all three)" width={360} height="auto" style={{ background:'#1a1612', color: '#c8bfae' }}>
+          <div style={{ padding: '22px 24px', fontFamily:'JetBrains Mono, monospace', fontSize: 11, lineHeight: 1.7 }}>
+            <div style={{ fontSize: 10, letterSpacing: 3, opacity: 0.7, textTransform:'uppercase', marginBottom: 8 }}>Fixture</div>
+            <div>Sunday Easy · 10.4 km · 58:12</div>
+            <div>avg 5:36/km · HR 162 · cad 174</div>
+            <div style={{ opacity: 0.6, marginTop: 4 }}>Senayan loop × 2 · 27°C humid</div>
+            <div style={{ borderTop: '1px dashed #3a342c', margin: '14px 0' }}/>
+            <div style={{ fontSize: 10, letterSpacing: 3, opacity: 0.7, textTransform:'uppercase', marginBottom: 8 }}>Problem</div>
+            <div>km 1: 5:12 (too hot)</div>
+            <div>km 7: into Z4</div>
+            <div>km 10: 5:44 surge (ego)</div>
+            <div>3 runs this week vs. 5 last</div>
+            <div style={{ borderTop: '1px dashed #3a342c', margin: '14px 0' }}/>
+            <div style={{ fontSize: 10, letterSpacing: 3, opacity: 0.7, textTransform:'uppercase', marginBottom: 8 }}>Pak Har's Rx</div>
+            <div style={{ lineHeight: 1.6 }}>35 min tomorrow. HR &lt; 148. If you cannot hold it, slow down until you can.</div>
+          </div>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

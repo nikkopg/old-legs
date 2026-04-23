@@ -10,7 +10,7 @@
 //   - analyzeActivity on an already-analyzed activity (overwrites — should still return 200)
 //   - getCurrentPlan when no plan exists (404 — ApiError thrown)
 
-import type { Activity, ActivityListResponse, ApiError, TrainingPlan } from '@/types/api'
+import type { Activity, ActivityListResponse, ApiError, Insights, TrainingPlan, WeeklyReview } from '@/types/api'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -87,6 +87,28 @@ export async function getCurrentPlan(): Promise<TrainingPlan> {
 
 export async function generatePlan(): Promise<TrainingPlan> {
   return apiFetch<TrainingPlan>('/plan/generate', {
+    method: 'POST',
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Insights
+// ---------------------------------------------------------------------------
+
+export async function getInsights(): Promise<Insights> {
+  return apiFetch<Insights>('/insights')
+}
+
+// ---------------------------------------------------------------------------
+// Weekly Review
+// ---------------------------------------------------------------------------
+
+export async function getCurrentReview(): Promise<WeeklyReview> {
+  return apiFetch<WeeklyReview>('/review/current')
+}
+
+export async function generateWeeklyReview(): Promise<WeeklyReview> {
+  return apiFetch<WeeklyReview>('/review/generate', {
     method: 'POST',
   })
 }

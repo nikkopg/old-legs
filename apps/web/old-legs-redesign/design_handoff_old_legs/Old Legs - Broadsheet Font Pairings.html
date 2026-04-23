@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Old Legs — Broadsheet · Font Pairings</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Playfair+Display:ital,wght@0,700;0,800;0,900;1,700&family=Source+Serif+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,700;0,9..144,900;1,9..144,700;1,9..144,900&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,700&family=EB+Garamond:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600;700&family=Abril+Fatface&family=Lora:ital,wght@0,400;0,700;1,400;1,700&family=Work+Sans:wght@400;500;600;800&family=Space+Mono:wght@400;700&family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;600;700&family=Special+Elite&family=Courier+Prime:wght@400;700&family=Recoleta&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #1a1612; height: 100%; }
+  * { box-sizing: border-box; }
+  body { font-family: "Inter", -apple-system, system-ui, sans-serif; }
+  .tweaks {
+    position: fixed; bottom: 20px; right: 20px; z-index: 999;
+    background: #121010; color: #f0ebe0; border: 1px solid #2a2620;
+    padding: 14px 16px; font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px; min-width: 300px; max-height: 80vh; overflow-y: auto;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5); display: none;
+  }
+  .tweaks.active { display: block; }
+  .tweaks h3 { margin: 0 0 10px; font-size: 10px; letter-spacing: 3px; opacity: 0.7; text-transform: uppercase; font-weight: 500; }
+  .tweaks .row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .tweaks button {
+    background: transparent; color: #f0ebe0; border: 1px solid #3a342c;
+    padding: 8px 10px; text-align: left; cursor: pointer;
+    font-family: inherit; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+  }
+  .tweaks button:hover { background: #1f1b16; }
+  .tweaks button.on { background: #8a2a12; border-color: #8a2a12; color: #fff; }
+</style>
+
+<script>
+  const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+    "view": "focus",
+    "focusPairing": "tabloid"
+  }/*EDITMODE-END*/;
+  window.__TWEAKS = { ...TWEAK_DEFAULTS };
+</script>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<div class="tweaks" id="tweaks">
+  <h3>View</h3>
+  <div class="row" id="tweaks-view"></div>
+  <h3>Focus on pairing</h3>
+  <div class="row" id="tweaks-pairing"></div>
+</div>
+
+<script type="text/babel" src="components/design-canvas.jsx"></script>
+<script type="text/babel" src="components/run-data.jsx"></script>
+<script type="text/babel" src="components/direction-news.jsx"></script>
+
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect } = React;
+
+function initialState() {
+  const t = window.__TWEAKS || {};
+  try {
+    const saved = localStorage.getItem('old-legs-pairings');
+    if (saved) return { ...t, ...JSON.parse(saved) };
+  } catch {}
+  return { view: t.view || 'canvas', focusPairing: t.focusPairing || 'editorial' };
+}
+
+function App() {
+  const [state, setState] = useState(initialState);
+  const pairings = window.NEWS_PAIRINGS;
+  const keys = Object.keys(pairings);
+
+  useEffect(() => {
+    try { localStorage.setItem('old-legs-pairings', JSON.stringify(state)); } catch {}
+  }, [state]);
+
+  useEffect(() => {
+    function onMsg(e) {
+      const d = e.data || {};
+      if (d.type === '__activate_edit_mode') document.getElementById('tweaks').classList.add('active');
+      if (d.type === '__deactivate_edit_mode') document.getElementById('tweaks').classList.remove('active');
+    }
+    window.addEventListener('message', onMsg);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  useEffect(() => {
+    const viewHost = document.getElementById('tweaks-view');
+    const pairHost = document.getElementById('tweaks-pairing');
+    if (!viewHost || !pairHost) return;
+
+    viewHost.innerHTML = '';
+    [['canvas','All · canvas'], ['focus','Focus one']].forEach(([k, l]) => {
+      const b = document.createElement('button');
+      b.textContent = l;
+      if (state.view === k) b.classList.add('on');
+      b.onclick = () => {
+        const next = { ...state, view: k };
+        setState(next);
+        window.parent.postMessage({ type: '__edit_mode_set_keys', edits: { view: k } }, '*');
+      };
+      viewHost.appendChild(b);
+    });
+
+    pairHost.innerHTML = '';
+    keys.forEach(k => {
+      const b = document.createElement('button');
+      b.textContent = pairings[k].label;
+      if (state.view === 'focus' && state.focusPairing === k) b.classList.add('on');
+      b.onclick = () => {
+        const next = { view: 'focus', focusPairing: k };
+        setState(next);
+        window.parent.postMessage({ type: '__edit_mode_set_keys', edits: next }, '*');
+      };
+      pairHost.appendChild(b);
+    });
+  }, [state]);
+
+  if (state.view === 'focus') {
+    const key = state.focusPairing in pairings ? state.focusPairing : keys[0];
+    const P = pairings[key];
+    return (
+      <div style={{ minHeight:'100vh', background:'#1a1612', padding:'48px 24px', display:'flex', justifyContent:'center', alignItems:'flex-start' }}>
+        <div>
+          <div style={{
+            color:'#c8bfae', fontFamily:'JetBrains Mono, monospace', fontSize: 11,
+            letterSpacing: 3, textTransform:'uppercase', marginBottom: 14, opacity: 0.8,
+          }}>
+            {P.label}
+          </div>
+          <div style={{ color:'#8d8578', fontFamily: P.bodySerif, fontSize: 13, fontStyle:'italic', marginBottom: 18, maxWidth: 720 }}>
+            {P.sub}
+          </div>
+          <NewsDirection pairingKey={key}/>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <DesignCanvas>
+      <DCSection
+        title="Broadsheet — font pairings"
+        subtitle={`Six typographic voices on the same layout and copy. Pan + pinch-zoom to inspect; open Tweaks to focus one at a time. The accent color, chart, and rhythm stay constant so only the voice changes.`}
+      >
+        {keys.map(k => (
+          <DCArtboard key={k} label={`${pairings[k].label} — ${pairings[k].sub}`} width="auto" height="auto">
+            <NewsDirection pairingKey={k}/>
+          </DCArtboard>
+        ))}
+      </DCSection>
+
+      <DCSection title="How I'd pick" subtitle="One designer's read — take it or leave it.">
+        <DCArtboard label="Recommendation" width={680} height="auto" style={{ background:'#faf7f1' }}>
+          <div style={{ padding: '28px 34px', fontFamily: 'Fraunces, Georgia, serif', color: '#1a1612', fontSize: 14, lineHeight: 1.7 }}>
+            <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize: 10, letterSpacing: 3, opacity: 0.6, textTransform:'uppercase', marginBottom: 10 }}>Shortlist</div>
+            <p style={{ margin: '0 0 14px' }}>
+              <b>Editorial (Fraunces + IBM Plex)</b> and <b>Typewriter (Instrument Serif + Special Elite)</b> are
+              the two I'd ship. Both make Pak Har feel <em>considered</em> rather than noisy.
+            </p>
+            <p style={{ margin: '0 0 14px' }}>
+              <b>Editorial</b> is the safer, more commercial pick — Fraunces's warmth reads like a book jacket, IBM Plex
+              keeps the data legible, and the whole thing feels like something you'd actually read on a Sunday morning.
+              This is the "Pak Har as columnist" direction.
+            </p>
+            <p style={{ margin: '0 0 14px' }}>
+              <b>Typewriter</b> is bolder. The typed body copy makes every verdict feel like Pak Har <em>actually wrote it</em>.
+              Risk: monospace body across many runs could fatigue. Mitigation — use it only for the verdict prose and keep
+              everything else in a clean serif.
+            </p>
+            <p style={{ margin: '0 0 14px' }}>
+              <b>Opinion (Cormorant + Inter)</b> is elegant but a bit fragile at small sizes. <b>Tabloid</b> is the
+              riskiest — very loud, hard to sustain past the homepage. <b>Modern</b> and <b>Current</b> are fine but
+              don't push far enough beyond "generic editorial."
+            </p>
+            <div style={{ borderTop:'1px solid rgba(0,0,0,0.15)', margin:'16px 0', paddingTop: 14 }}>
+              <div style={{ fontFamily:'JetBrains Mono, monospace', fontSize: 10, letterSpacing: 3, opacity: 0.6, textTransform:'uppercase', marginBottom: 8 }}>My vote</div>
+              <p style={{ margin: 0 }}>
+                <b>Editorial</b> for the broadsheet base, with the option to toggle the verdict prose into <b>typewriter</b> body
+                as a character-forward flourish. Tell me which resonates and I'll lock it in and move to the weekly plan page.
+              </p>
+            </div>
+          </div>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
