@@ -1,8 +1,9 @@
 /* TASK-009 complete */
+/* TASK-125 + TASK-126: tabloid design tokens added */
 @import "tailwindcss";
 
 @theme inline {
-  /* ---- Colors ---- */
+  /* ---- Colors — dark theme (existing) ---- */
   --color-background: #0f0f0f;
   --color-surface: #1a1a1a;
   --color-surface-raised: #242424;
@@ -13,9 +14,23 @@
   --color-success: #27ae60;
   --color-border: #2a2a2a;
 
-  /* ---- Typography ---- */
+  /* ---- Colors — tabloid palette (new) ---- */
+  --color-paper: #f4efe4;
+  --color-ink: #141210;
+  --color-accent-tabloid: #8a2a12;
+  --color-muted-tabloid: rgba(20, 18, 16, 0.55);
+  --color-hairline: rgba(20, 18, 16, 0.35);
+  --color-frame: #1a1612;
+  --color-data-fill-bg: rgba(20, 18, 16, 0.08);
+
+  /* ---- Typography — dark theme (existing) ---- */
   --font-sans: var(--font-inter);
   --font-mono: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+
+  /* ---- Typography — tabloid (new) ---- */
+  --font-display: "Abril Fatface", "Playfair Display", Didot, serif;
+  --font-body: "Lora", Georgia, serif;
+  --font-mono-tabloid: "Space Mono", "JetBrains Mono", monospace;
 
   --font-size-xs: 0.75rem;
   --font-size-sm: 0.875rem;
@@ -65,4 +80,37 @@ body {
 ::-webkit-scrollbar-thumb {
   background: #333;
   border-radius: 3px;
+}
+
+/* ---- Tabloid utility classes (TASK-125 + TASK-126) ---- */
+.bg-paper {
+  background-color: var(--color-paper);
+}
+.text-ink {
+  color: var(--color-ink);
+}
+.bg-frame {
+  background-color: var(--color-frame);
+}
+.border-hairline {
+  border-color: var(--color-hairline);
+}
+.text-muted-tabloid {
+  color: var(--color-muted-tabloid);
+}
+.font-display {
+  font-family: var(--font-display);
+}
+.font-body {
+  font-family: var(--font-body);
+}
+
+/* Tabloid dispatch drop cap — applied to the first paragraph of Pak Har's analysis */
+.dispatch-drop-cap::first-letter {
+  font-family: var(--font-display);
+  font-size: 46px;
+  line-height: 0.9;
+  float: left;
+  padding-right: 6px;
+  padding-top: 2px;
 }

@@ -33,6 +33,9 @@ export interface Activity {
   sync_status: string
   created_at: string
   updated_at: string
+  verdict_short?: string | null
+  verdict_tag?: string | null
+  tone?: 'critical' | 'good' | 'neutral' | null
 }
 
 export interface PlanDay {
