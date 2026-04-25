@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Old Legs — More Pages · Prototype</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Abril+Fatface&family=Lora:ital,wght@0,400;0,700;1,400;1,700&family=Work+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #1a1612; min-height: 100%; }
+  * { box-sizing: border-box; }
+  body { font-family: "Work Sans", -apple-system, system-ui, sans-serif; color: #e6dfd0; }
+  .stage { min-height: 100vh; padding: 40px 20px 80px; display: flex; justify-content: center; align-items: flex-start; }
+  .ol-cursor { display: inline-block; width: 8px; margin-left: 2px; animation: olblink 1s steps(2, end) infinite; }
+  @keyframes olblink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
+
+  .tweaks {
+    position: fixed; bottom: 20px; right: 20px; z-index: 999;
+    background: #121010; color: #f0ebe0; border: 1px solid #2a2620;
+    padding: 14px 16px; font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px; min-width: 280px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    display: none; max-height: 82vh; overflow: auto;
+  }
+  .tweaks.active { display: block; }
+  .tweaks h3 { margin: 0 0 8px; font-size: 10px; letter-spacing: 3px; opacity: 0.7; text-transform: uppercase; font-weight: 500; }
+  .tweaks .row { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+  .tweaks button {
+    background: transparent; color: #f0ebe0; border: 1px solid #3a342c;
+    padding: 7px 10px; text-align: left; cursor: pointer;
+    font-family: inherit; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
+  }
+  .tweaks button:hover { background: #1f1b16; }
+  .tweaks button.on { background: #8a2a12; border-color: #8a2a12; color: #fff; }
+  .tweaks .hint { font-size: 9px; letter-spacing: 1px; opacity: 0.55; line-height: 1.5; }
+</style>
+
+<script>
+  const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+    "startAt": "landing",
+    "connectState": "idle",
+    "offlineKind": "strava",
+    "thinkingContext": "dispatch"
+  }/*EDITMODE-END*/;
+  window.__TWEAKS = { ...TWEAK_DEFAULTS };
+</script>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<div class="tweaks" id="tweaks">
+  <h3>Page</h3>
+  <div class="row" id="tweaks-page"></div>
+  <h3>Connect Strava State</h3>
+  <div class="row" id="tweaks-connect"></div>
+  <h3>Offline Kind</h3>
+  <div class="row" id="tweaks-offline"></div>
+  <h3>Thinking Context</h3>
+  <div class="row" id="tweaks-thinking"></div>
+  <div class="hint">Five pages of Old Legs. The nav in each page's masthead also works — try it.</div>
+</div>
+
+<script type="text/babel" src="components/newspaper-chrome.jsx"></script>
+<script type="text/babel" src="components/page-landing.jsx"></script>
+<script type="text/babel" src="components/page-dashboard.jsx"></script>
+<script type="text/babel" src="components/page-plan.jsx"></script>
+<script type="text/babel" src="components/page-coach.jsx"></script>
+<script type="text/babel" src="components/page-extras.jsx"></script>
+
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect } = React;
+
+const PAGES = [
+  ['landing',   'Landing (/)'],
+  ['dashboard', 'Dashboard'],
+  ['plan',      'Plan'],
+  ['coach',     'Coach chat'],
+  ['thinking',  'Pak Har thinking'],
+  ['offline',   'Offline / error'],
+  ['settings',  'Settings · Desk'],
+];
+
+function App() {
+  const t = window.__TWEAKS || {};
+  const [page, setPage] = useState(t.startAt || 'landing');
+  const [connectState, setConnectState] = useState(t.connectState || 'idle');
+  const [offlineKind, setOfflineKind] = useState(t.offlineKind || 'api');
+  const [thinkingContext, setThinkingContext] = useState(t.thinkingContext || 'dispatch');
+
+  useEffect(() => {
+    function onMsg(e) {
+      const d = e.data || {};
+      if (d.type === '__activate_edit_mode') document.getElementById('tweaks').classList.add('active');
+      if (d.type === '__deactivate_edit_mode') document.getElementById('tweaks').classList.remove('active');
+    }
+    window.addEventListener('message', onMsg);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  useEffect(() => renderTweaks('tweaks-page', PAGES, page, (k) => { setPage(k); persist({ startAt: k }); }), [page]);
+  useEffect(() => renderTweaks('tweaks-connect',
+    [['idle', 'Idle'], ['connecting', 'Connecting'], ['error', 'Error']],
+    connectState, (k) => { setConnectState(k); persist({ connectState: k }); }
+  ), [connectState]);
+  useEffect(() => renderTweaks('tweaks-offline',
+    [['api', 'API down'], ['ollama', 'Pak Har offline'], ['strava', 'Strava timeout']],
+    offlineKind, (k) => { setOfflineKind(k); persist({ offlineKind: k }); }
+  ), [offlineKind]);
+  useEffect(() => renderTweaks('tweaks-thinking',
+    [['dispatch', 'Writing dispatch'], ['plan', 'Writing plan']],
+    thinkingContext, (k) => { setThinkingContext(k); persist({ thinkingContext: k }); }
+  ), [thinkingContext]);
+
+  function persist(edits) {
+    window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*');
+  }
+  function renderTweaks(hostId, options, active, onPick) {
+    const host = document.getElementById(hostId);
+    if (!host) return;
+    host.innerHTML = '';
+    options.forEach(([k, l]) => {
+      const b = document.createElement('button');
+      b.textContent = l;
+      if (active === k) b.classList.add('on');
+      b.onclick = () => onPick(k);
+      host.appendChild(b);
+    });
+  }
+
+  const onNav = (k) => {
+    if (k === 'activities') { window.open('Old Legs - Front Page.html', '_self'); return; }
+    setPage(k);
+    persist({ startAt: k });
+  };
+  const onConnect = () => {
+    setConnectState('connecting');
+    persist({ connectState: 'connecting' });
+    setTimeout(() => {
+      setConnectState('error');
+      persist({ connectState: 'error' });
+    }, 1800);
+  };
+
+  let view;
+  if (page === 'landing')   view = <LandingPage onConnect={onConnect} connectingState={connectState}/>;
+  else if (page === 'dashboard') view = <DashboardPage onNav={onNav} onOpenRun={() => window.open('Old Legs - Front Page.html', '_self')} onOpenPlan={() => onNav('plan')} onOpenCoach={() => onNav('coach')}/>;
+  else if (page === 'plan')      view = <PlanPage onNav={onNav} onOpenCoach={() => onNav('coach')}/>;
+  else if (page === 'coach')     view = <CoachPage onNav={onNav}/>;
+  else if (page === 'thinking')  view = <ThinkingPage onNav={onNav} context={thinkingContext}/>;
+  else if (page === 'offline')   view = <OfflinePage onNav={onNav} kind={offlineKind} onRetry={() => { setPage('dashboard'); persist({ startAt: 'dashboard' }); }}/>;
+  else if (page === 'settings')  view = <SettingsPage onNav={onNav} onDisconnect={() => { setPage('landing'); persist({ startAt: 'landing' }); }}/>;
+
+  return (
+    <div className="stage">
+      {view}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
