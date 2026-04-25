@@ -47,9 +47,15 @@ def _parse_plan_response(raw_json: str) -> tuple[dict, dict]:
     The expected structure is:
         {
           "week_summary": "...",
-          "days": [{"day": ..., "type": ..., "description": ..., "duration_minutes": ...}, ...],
+          "days": [
+            {"day": ..., "type": ..., "description": ..., "duration_minutes": ..., "target": ...},
+            ...
+          ],
           "pak_har_notes": {"Monday": ..., ...}
         }
+
+    ``target`` is optional in the raw JSON (absent in plans generated before TASK-147).
+    It is stored as ``None`` when missing or empty.
 
     Args:
         raw_json: The raw string output from Ollama.
@@ -83,10 +89,13 @@ def _parse_plan_response(raw_json: str) -> tuple[dict, dict]:
         day = entry.get("day", "").strip()
         if day not in required_days:
             raise ValueError(f"Unexpected day value in plan: '{day}'")
+        # target is nullable — present in new plans, absent in plans generated before TASK-147
+        raw_target: str | None = entry.get("target") or None
         plan_data[day.lower()] = {
             "type": entry.get("type", "rest"),
             "description": entry.get("description", ""),
             "duration_minutes": int(entry.get("duration_minutes", 0)),
+            "target": raw_target,
         }
 
     if len(plan_data) != 7:

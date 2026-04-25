@@ -43,6 +43,7 @@ export interface PlanDay {
   type: string
   description: string
   duration_minutes: number
+  target?: string | null
 }
 
 export interface TrainingPlan {

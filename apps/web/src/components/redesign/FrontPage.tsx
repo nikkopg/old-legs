@@ -32,6 +32,7 @@ export interface FrontPageProps {
   onActivityClick: (id: number) => void;
   onRefreshSync: () => void;
   onNav?: (key: string) => void;
+  isSyncing?: boolean;
 }
 
 // ---- Helper functions ----
@@ -143,6 +144,7 @@ export function FrontPage({
   onActivityClick,
   onRefreshSync,
   onNav,
+  isSyncing = false,
 }: FrontPageProps) {
   const lead = activities[0] ?? null;
   const previousEditions = activities.slice(1);
@@ -390,10 +392,11 @@ export function FrontPage({
               <p>
                 Strava: synced {lastSyncedAt ? timeAgo(lastSyncedAt) : 'recently'}.{' '}
                 <button
-                  onClick={onRefreshSync}
-                  className="font-sans text-[10px] uppercase tracking-widest underline decoration-[#141210] cursor-pointer"
+                  onClick={isSyncing ? undefined : onRefreshSync}
+                  disabled={isSyncing}
+                  className="font-sans text-[10px] uppercase tracking-widest underline decoration-[#141210] cursor-pointer disabled:opacity-40 disabled:cursor-default"
                 >
-                  Tap Refresh for latest
+                  {isSyncing ? 'Syncing_' : 'Tap Refresh for latest'}
                 </button>
               </p>
               <p>This week&#39;s plan is filed on page 2.</p>

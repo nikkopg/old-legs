@@ -118,6 +118,21 @@ export async function generateWeeklyReview(): Promise<WeeklyReview> {
 }
 
 // ---------------------------------------------------------------------------
+// Plan Verdict
+// ---------------------------------------------------------------------------
+
+export async function getPlanVerdict(
+  activityId: number,
+  target: string,
+  sessionType: string,
+): Promise<{ verdict_short: string | null; verdict_tag: string | null; tone: string | null }> {
+  return apiFetch(`/activities/${activityId}/plan-verdict`, {
+    method: 'POST',
+    body: JSON.stringify({ target, session_type: sessionType }),
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Coach — SSE streaming
 // ---------------------------------------------------------------------------
 

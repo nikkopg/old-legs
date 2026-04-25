@@ -1,16 +1,21 @@
 # READY FOR QA
 # Feature: HR zone interpretation in post-run analysis prompt (TASK-109)
+#          + target field in plan generation prompt (TASK-147)
 # What was built:
 #   - ANALYSIS_PROMPT: a dedicated system prompt for single-run post-run analysis
 #   - Instructs Pak Har to use hr_zone_context (injected at runtime) when available
 #   - When HR data is present: comment on zone, flag easy/hard mismatches specifically
 #   - When HR data is absent: skip HR commentary entirely — no speculation
 #   - Voice stays consistent: blunt, specific, no "listen to your body"
+#   - PLAN_PROMPT: each day now includes a "target" field (≤10 words, measurable)
 # Edge cases to test:
 #   - hr_zone_context="(no heart rate data for this run)" → HR section omitted from response
 #   - hr_zone_context contains a mismatch flag → Pak Har names it explicitly
 #   - hr_zone_context contains a fatigue trend → Pak Har names it without hedging
 #   - Response must not contain "listen to your body", emojis, or hollow affirmations
+#   - PLAN_PROMPT: target for rest days must be "Rest completely" or "No running"
+#   - PLAN_PROMPT: target for cross-training days must be ≤10 words with no running cue
+#   - PLAN_PROMPT: target for running days must include distance or duration + key constraint
 
 """
 Pak Har system prompt — the soul of Old Legs coaching.
@@ -52,43 +57,50 @@ The JSON must have exactly this structure:
       "day": "Monday",
       "type": "<one of: easy | tempo | long | rest | cross>",
       "description": "<concrete instruction — e.g. '40 min easy, HR under 145, no watch-checking'>",
-      "duration_minutes": <integer, 0 for rest days>
+      "duration_minutes": <integer, 0 for rest days>,
+      "target": "<short measurable target, 10 words or fewer. Running days: distance or duration + key constraint, e.g. '8 km easy' or '40 min, HR ≤ 145 bpm' or '5 km at 5:15/km'. Rest days: 'Rest completely'. Cross-training: '30 min low-impact, no running'. No fluff, no punctuation beyond what is needed.>"
     }},
     {{
       "day": "Tuesday",
       "type": "...",
       "description": "...",
-      "duration_minutes": ...
+      "duration_minutes": ...,
+      "target": "..."
     }},
     {{
       "day": "Wednesday",
       "type": "...",
       "description": "...",
-      "duration_minutes": ...
+      "duration_minutes": ...,
+      "target": "..."
     }},
     {{
       "day": "Thursday",
       "type": "...",
       "description": "...",
-      "duration_minutes": ...
+      "duration_minutes": ...,
+      "target": "..."
     }},
     {{
       "day": "Friday",
       "type": "...",
       "description": "...",
-      "duration_minutes": ...
+      "duration_minutes": ...,
+      "target": "..."
     }},
     {{
       "day": "Saturday",
       "type": "...",
       "description": "...",
-      "duration_minutes": ...
+      "duration_minutes": ...,
+      "target": "..."
     }},
     {{
       "day": "Sunday",
       "type": "...",
       "description": "...",
-      "duration_minutes": ...
+      "duration_minutes": ...,
+      "target": "..."
     }}
   ],
   "pak_har_notes": {{

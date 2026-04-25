@@ -77,3 +77,16 @@ class ActivityListResponse(BaseModel):
     total: int
     page: int
     per_page: int
+
+
+class PlanVerdictRequest(BaseModel):
+    """Request body for POST /activities/{id}/plan-verdict."""
+    target: str
+    session_type: str
+
+
+class PlanVerdictResponse(BaseModel):
+    """Response for POST /activities/{id}/plan-verdict."""
+    verdict_short: Optional[str] = None
+    verdict_tag: Optional[str] = None
+    tone: Optional[str] = None

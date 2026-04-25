@@ -329,13 +329,24 @@ def normalize_activity(raw: dict) -> dict:
     avg_hr_raw = raw.get("average_heartrate")
     max_hr_raw = raw.get("max_heartrate")
 
-    activity_date_raw = raw.get("start_date", "")
+    # Prefer start_date_local (naive local time) over start_date (UTC) so the
+    # stored date matches the runner's local clock rather than UTC.
+    # start_date_local from Strava is a naive ISO string with no tz suffix,
+    # e.g. "2026-04-25T06:00:00". start_date is UTC with a Z suffix.
+    activity_date_raw = raw.get("start_date_local") or raw.get("start_date", "")
     try:
-        activity_date = datetime.fromisoformat(activity_date_raw.replace("Z", "+00:00"))
-    except (ValueError, AttributeError):
+        if "Z" in activity_date_raw or "+" in activity_date_raw:
+            # Fallback start_date (UTC) — strip tz info for consistent naive storage
+            activity_date = datetime.fromisoformat(
+                activity_date_raw.replace("Z", "+00:00")
+            ).replace(tzinfo=None)
+        else:
+            # start_date_local — already a naive local time string, parse as-is
+            activity_date = datetime.fromisoformat(activity_date_raw)
+    except (ValueError, TypeError, AttributeError):
         activity_date = datetime.utcnow()
         logger.warning(
-            f"Could not parse start_date '{activity_date_raw}' for activity "
+            f"Could not parse activity date '{activity_date_raw}' for activity "
             f"{raw.get('id')} — using utcnow"
         )
 
@@ -356,8 +367,12 @@ async def sync_activities(user_id: int, access_token: str, db: Session) -> int:
     """
     Fetch, normalize, and upsert Strava running activities for a user.
 
-    Skips any activity whose strava_activity_id already exists in the database
-    (deduplication via unique constraint). Returns count of newly inserted rows.
+    For activities that already exist in the database, mutable Strava-owned fields
+    (name, date, distance, pace, HR, elevation) are updated in place.  App-owned
+    fields (analysis, analysis_generated_at, verdict_short, verdict_tag, tone,
+    sync_status) are never overwritten on existing rows.
+
+    Returns count of *newly inserted* activities only; updates are not counted.
 
     Args:
         user_id: Internal user ID (FK for Activity.user_id).
@@ -369,6 +384,7 @@ async def sync_activities(user_id: int, access_token: str, db: Session) -> int:
     """
     raw_activities = await fetch_activities(access_token)
     new_count = 0
+    updated_count = 0
 
     for raw in raw_activities:
         normalized = normalize_activity(raw)
@@ -384,6 +400,19 @@ async def sync_activities(user_id: int, access_token: str, db: Session) -> int:
             .first()
         )
         if existing:
+            # Update mutable Strava fields only — do not touch app-owned fields
+            # (analysis, analysis_generated_at, verdict_short, verdict_tag, tone,
+            # sync_status).
+            existing.name = normalized["name"]
+            existing.activity_date = normalized["activity_date"]
+            existing.distance_km = normalized["distance_km"]
+            existing.moving_time_seconds = normalized["moving_time_seconds"]
+            existing.average_pace_min_per_km = normalized["average_pace_min_per_km"]
+            existing.average_hr = normalized["average_hr"]
+            existing.max_hr = normalized["max_hr"]
+            existing.elevation_gain_m = normalized["elevation_gain_m"]
+            db.add(existing)
+            updated_count += 1
             continue
 
         activity = Activity(
@@ -394,10 +423,13 @@ async def sync_activities(user_id: int, access_token: str, db: Session) -> int:
         db.add(activity)
         new_count += 1
 
-    if new_count > 0:
+    if new_count > 0 or updated_count > 0:
         db.commit()
-        logger.info(f"Synced {new_count} new activities for user {user_id}")
+        logger.info(
+            f"Sync complete for user {user_id}: "
+            f"{new_count} new, {updated_count} updated"
+        )
     else:
-        logger.info(f"No new activities to sync for user {user_id}")
+        logger.info(f"No activities to sync for user {user_id}")
 
     return new_count

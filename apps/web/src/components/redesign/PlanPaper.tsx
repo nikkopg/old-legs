@@ -1,7 +1,7 @@
 "use client";
 
 // READY FOR QA
-// Component: PlanPaper (TASK-138)
+// Component: PlanPaper (TASK-138, updated TASK-148)
 // What was built: Tabloid weekly plan layout — fixtures table, editor's note, key/corrections.
 //   Uses NewspaperChrome chrome, Paper wrapper, and all shared primitives.
 // Edge cases to test:
@@ -13,6 +13,9 @@
 //   - Totals row derives run/rest counts and peak day label from plan.days
 //   - editorNote split on \n\n renders each paragraph separately; first para gets drop cap
 //   - Header h1 derives copy from run-day count (5 runs → special copy, else generic)
+//   - REALIZATION cell: shows actual distance+duration if activity matched; "—" if not
+//   - REST day where user ran anyway: data shown with small "RAN" caps label in accent
+//   - INSTRUCTION/VERDICT: shows verdictShort+ToneBadge when realization exists, else notes
 
 import React from 'react';
 import {
@@ -35,11 +38,20 @@ type ToneBadgeTone = 'critical' | 'good' | 'neutral';
 interface PlanDay {
   day: string;
   date: string;
+  isoDate: string;       // YYYY-MM-DD for realization matching
   type: string;
-  target: string;
+  target: string;        // real data from backend (TASK-147)
   durationMin: string;
-  distanceKm: string;
   notes: string;
+}
+
+interface ActivityMatch {
+  activityId: number;
+  distanceKm: number;
+  durationMin: number;
+  verdictShort: string | null;
+  verdictTag: string | null;
+  tone: 'critical' | 'good' | 'neutral' | null;
 }
 
 interface TrainingPlan {
@@ -50,6 +62,12 @@ interface TrainingPlan {
   filedAt: string;
 }
 
+interface PlanVerdictResult {
+  verdict_short: string | null;
+  verdict_tag: string | null;
+  tone: string | null;
+}
+
 interface PlanPaperProps {
   plan: TrainingPlan | null;
   isGenerating: boolean;
@@ -57,6 +75,8 @@ interface PlanPaperProps {
   onOpenCoach: () => void;
   onNav: (key: string) => void;
   todayDow: string;
+  realizations: Record<string, ActivityMatch | null>;
+  planVerdicts?: Record<string, PlanVerdictResult | null>;
 }
 
 // ---------- helpers ----------
@@ -67,31 +87,28 @@ function typeTone(t: string): 'critical' | 'good' | 'neutral' {
   return 'neutral';
 }
 
-function deriveTotals(days: PlanDay[]): { totalMin: number; totalKm: number; runCount: number; restCount: number; peakDay: string } {
+function deriveTotals(days: PlanDay[]): { totalMin: number; runCount: number; restCount: number; peakDay: string } {
   let totalMin = 0;
-  let totalKm = 0;
   let runCount = 0;
   let restCount = 0;
-  let peakKm = 0;
+  let peakMin = 0;
   let peakDay = '';
 
   for (const d of days) {
-    const km = parseFloat(d.distanceKm) || 0;
     const min = parseInt(d.durationMin) || 0;
-    totalKm += km;
     totalMin += min;
     if (d.type === 'Rest') {
       restCount += 1;
     } else {
       runCount += 1;
-      if (km > peakKm) {
-        peakKm = km;
+      if (min > peakMin) {
+        peakMin = min;
         peakDay = d.day;
       }
     }
   }
 
-  return { totalMin, totalKm, runCount, restCount, peakDay };
+  return { totalMin, runCount, restCount, peakDay };
 }
 
 function deriveH1(runCount: number): string {
@@ -110,6 +127,8 @@ export function PlanPaper({
   onOpenCoach,
   onNav,
   todayDow,
+  realizations,
+  planVerdicts,
 }: PlanPaperProps) {
   const nav = [
     { key: 'dashboard', label: 'Front Page' },
@@ -168,11 +187,11 @@ export function PlanPaper({
                   letterSpacing: 3,
                   textTransform: 'uppercase',
                   fontWeight: 600,
-                  background: 'transparent',
-                  border: `1px solid ${OL.ink}`,
+                  background: OL.ink,
+                  border: 'none',
                   padding: '10px 20px',
                   cursor: 'pointer',
-                  color: OL.ink,
+                  color: OL.paper,
                   borderRadius: 0,
                 }}
               >
@@ -249,7 +268,6 @@ export function PlanPaper({
                 {([
                   ['Runs', String(totals.runCount)],
                   ['Rest', String(totals.restCount)],
-                  ['Km', totals.totalKm.toFixed(1)],
                   ['Minutes', String(totals.totalMin)],
                 ] as [string, string][]).map(([label, value]) => (
                   <div key={label}>
@@ -278,13 +296,13 @@ export function PlanPaper({
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: '44px 92px 1fr 130px 80px 80px 2.2fr 20px',
+                gridTemplateColumns: '44px 92px 1fr 160px 160px 2fr 20px',
                 gap: 14,
                 padding: '8px 4px',
                 borderBottom: `1px solid ${OL.ink}`,
               }}
             >
-              {['Day', 'Date', 'Session', 'Target', 'Duration', 'Distance', 'Instructions'].map(
+              {['Day', 'Date', 'Session', 'Target', 'Realization', 'Instruction / Verdict'].map(
                 (col) => (
                   <Caps key={col} size={9} ls={2} opacity={0.7}>
                     {col}
@@ -299,13 +317,14 @@ export function PlanPaper({
               const isToday = d.day === todayDow;
               const isRest = d.type === 'Rest';
               const isLast = i === plan.days.length - 1;
+              const match: ActivityMatch | null = realizations[d.isoDate] ?? null;
 
               return (
                 <div
                   key={d.day}
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '44px 92px 1fr 130px 80px 80px 2.2fr 20px',
+                    gridTemplateColumns: '44px 92px 1fr 160px 160px 2fr 20px',
                     gap: 14,
                     padding: '14px 4px',
                     paddingLeft: isToday ? 8 : 4,
@@ -392,49 +411,107 @@ export function PlanPaper({
                   <div
                     style={{
                       fontFamily: OL.mono,
-                      fontSize: 12,
-                      paddingTop: 6,
-                    }}
-                  >
-                    {d.target}
-                  </div>
-
-                  {/* Col 5: Duration */}
-                  <div
-                    style={{
-                      fontFamily: OL.mono,
-                      fontSize: 13,
-                      fontWeight: 700,
-                      paddingTop: 6,
-                    }}
-                  >
-                    {d.durationMin}
-                  </div>
-
-                  {/* Col 6: Distance */}
-                  <div
-                    style={{
-                      fontFamily: OL.mono,
                       fontSize: 13,
                       paddingTop: 6,
                     }}
                   >
-                    {d.distanceKm}
+                    {d.target || '—'}
                   </div>
 
-                  {/* Col 7: Instructions */}
-                  <div
-                    style={{
-                      fontFamily: OL.body,
-                      fontSize: 12.5,
-                      lineHeight: 1.55,
-                      paddingTop: 4,
-                    }}
-                  >
-                    {d.notes}
+                  {/* Col 5: Realization */}
+                  <div style={{ paddingTop: 6 }}>
+                    {match ? (
+                      <>
+                        {isRest && (
+                          <Caps
+                            size={8}
+                            ls={2}
+                            opacity={1}
+                            style={{
+                              color: OL.accent,
+                              display: 'block',
+                              marginBottom: 3,
+                            }}
+                          >
+                            Ran
+                          </Caps>
+                        )}
+                        <div
+                          style={{
+                            fontFamily: OL.mono,
+                            fontSize: 13,
+                            fontWeight: 700,
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          {match.distanceKm.toFixed(1)} km
+                        </div>
+                        <div
+                          style={{
+                            fontFamily: OL.mono,
+                            fontSize: 11,
+                            color: OL.muted,
+                            lineHeight: 1.2,
+                            marginTop: 2,
+                          }}
+                        >
+                          {match.durationMin} min
+                        </div>
+                      </>
+                    ) : (
+                      <span
+                        style={{
+                          fontFamily: OL.body,
+                          fontSize: 12,
+                          fontStyle: 'italic',
+                          color: OL.muted,
+                        }}
+                      >
+                        —
+                      </span>
+                    )}
                   </div>
 
-                  {/* Col 8: Arrow */}
+                  {/* Col 6: Instruction / Verdict */}
+                  {(() => {
+                    const planVerdict = planVerdicts?.[d.isoDate] ?? null;
+                    return (
+                      <div
+                        style={{
+                          fontFamily: OL.body,
+                          fontSize: 12.5,
+                          lineHeight: 1.55,
+                          paddingTop: 4,
+                        }}
+                      >
+                        {planVerdict?.verdict_short ? (
+                          <>
+                            <div>{planVerdict.verdict_short}</div>
+                            {planVerdict.verdict_tag && (
+                              <div style={{ marginTop: 4 }}>
+                                <ToneBadge tone={(planVerdict.tone ?? 'neutral') as ToneBadgeTone}>
+                                  {planVerdict.verdict_tag}
+                                </ToneBadge>
+                              </div>
+                            )}
+                          </>
+                        ) : match?.verdictShort ? (
+                          <>
+                            <div>{match.verdictShort}</div>
+                            {match.verdictTag && match.tone && (
+                              <div style={{ marginTop: 4 }}>
+                                <ToneBadge tone={match.tone}>{match.verdictTag}</ToneBadge>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          d.notes
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Col 7: Arrow */}
                   <div
                     style={{
                       paddingTop: 6,
@@ -455,7 +532,7 @@ export function PlanPaper({
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: '44px 92px 1fr 130px 80px 80px 2.2fr 20px',
+              gridTemplateColumns: '44px 92px 1fr 160px 160px 2fr 20px',
               gap: 14,
               padding: '10px 4px',
               background: OL.ink,
@@ -483,15 +560,6 @@ export function PlanPaper({
               }}
             >
               {totals.totalMin} min
-            </span>
-            <span
-              style={{
-                fontFamily: OL.mono,
-                fontSize: 13,
-                fontWeight: 700,
-              }}
-            >
-              {totals.totalKm.toFixed(1)} km
             </span>
             <Caps
               size={9}
@@ -652,6 +720,35 @@ export function PlanPaper({
                 </p>
               </div>
             </div>
+          </div>
+
+          {/* Regenerate */}
+          <div
+            style={{
+              marginTop: 26,
+              display: 'flex',
+              justifyContent: 'flex-end',
+            }}
+          >
+            <button
+              onClick={onGeneratePlan}
+              disabled={isGenerating}
+              style={{
+                fontFamily: OL.sans,
+                fontSize: 11,
+                letterSpacing: 3,
+                textTransform: 'uppercase',
+                fontWeight: 600,
+                background: isGenerating ? 'rgba(20,18,16,0.4)' : OL.ink,
+                border: 'none',
+                padding: '10px 20px',
+                cursor: isGenerating ? 'not-allowed' : 'pointer',
+                color: OL.paper,
+                borderRadius: 0,
+              }}
+            >
+              {isGenerating ? 'Filing...' : 'Regenerate Plan'}
+            </button>
           </div>
 
           <FooterRail

@@ -26,7 +26,7 @@
 'use client'
 
 import { useEffect, useCallback } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { FrontPage } from '@/components/redesign/FrontPage'
 import type { WeeklyKmEntry } from '@/components/redesign/FrontPage'
@@ -187,11 +187,12 @@ function ActivitiesPageError() {
 
 export default function ActivitiesPage() {
   const router = useRouter()
-  const queryClient = useQueryClient()
 
   const {
     data: activities,
     isLoading,
+    isFetching,
+    refetch,
     isError,
     error,
   } = useQuery<Activity[], ApiError>({
@@ -218,10 +219,10 @@ export default function ActivitiesPage() {
   )
 
   // GET /activities triggers a Strava sync on every call (per api-spec-v2.md).
-  // Invalidating the query re-fetches getActivities(), which causes the backend to sync.
+  // Using refetch() directly gives us isFetching feedback while the request is in-flight.
   const handleRefreshSync = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: ['activities'] })
-  }, [queryClient])
+    void refetch()
+  }, [refetch])
 
   if (isLoading) {
     return <ActivitiesPageSkeleton />
@@ -241,6 +242,7 @@ export default function ActivitiesPage() {
       lastSyncedAt={null}
       onActivityClick={handleActivityClick}
       onRefreshSync={handleRefreshSync}
+      isSyncing={isFetching}
       onNav={(key) => {
         const routes: Record<string, string> = {
           dashboard: '/dashboard',

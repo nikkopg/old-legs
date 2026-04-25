@@ -102,7 +102,7 @@ from dependencies import get_current_user
 from models.activity import Activity
 from models.user import User
 from prompts.pak_har import ANALYSIS_PROMPT
-from schemas.activity import ActivityListResponse, ActivityRead
+from schemas.activity import ActivityListResponse, ActivityRead, PlanVerdictRequest, PlanVerdictResponse
 from services.coach import build_analysis_context
 from services.database import get_db
 from services.ollama import OLLAMA_BASE_URL, _CONNECT_TIMEOUT, _READ_TIMEOUT
@@ -514,3 +514,188 @@ async def analyze_activity(
 
     # 11. Return the full analysis as JSON.
     return {"analysis": full_analysis}
+
+
+# READY FOR QA
+# Feature: Plan-aware activity verdict (TASK-149)
+# What was built:
+#   - POST /activities/{id}/plan-verdict
+#   - Takes target (e.g. "40 min, HR < 140 bpm") and session_type (e.g. "EASY")
+#   - Builds a compact activity summary and calls Ollama (non-streaming) to compare
+#     actual run data against what the plan required
+#   - Returns verdict_short (≤12 words), verdict_tag, and tone — stateless, nothing persisted
+# Edge cases to test:
+#   - Unauthenticated → 401
+#   - activity_id not found → 404
+#   - activity_id belongs to another user → 404 (not 403, no ID enumeration)
+#   - activity.analysis is None → immediate fallback response (no Ollama call)
+#   - Ollama returns valid JSON → parsed, validated, returned
+#   - Ollama returns malformed JSON → fallback {"verdict_short": null, "verdict_tag": null, "tone": "neutral"}
+#   - Ollama returns out-of-range verdict_tag or tone → nulled out, endpoint still returns 200
+#   - Ollama unreachable (ConnectError) → fallback (no crash)
+#   - Ollama timeout (ReadTimeout) → fallback (no crash)
+#   - Activity with no HR monitor (average_hr=None) → "not recorded" injected in prompt
+#   - session_type and target with unusual casing/characters → passed as-is to the prompt
+
+
+@router.post("/{activity_id}/plan-verdict", response_model=PlanVerdictResponse)
+async def plan_verdict(
+    activity_id: int,
+    body: PlanVerdictRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PlanVerdictResponse:
+    """
+    POST /activities/{activity_id}/plan-verdict — plan-aware verdict for a matched activity.
+
+    Compares what the training plan required for a session against what the runner
+    actually did. Returns a short Pak Har verdict, a tag, and a tone classification.
+
+    This is a stateless endpoint — nothing is persisted to the database.
+
+    **Auth:** Requires `session_user_id` httpOnly cookie.
+
+    **Request body:**
+    ```json
+    { "target": "40 min, HR < 140 bpm", "session_type": "EASY" }
+    ```
+
+    **Response (200):**
+    ```json
+    { "verdict_short": "5 minutes short and HR drifted over 140 in the last km.",
+      "verdict_tag": "PACED POORLY",
+      "tone": "critical" }
+    ```
+    All fields are null if Ollama is unavailable, returns malformed JSON, or the
+    activity has no analysis. The endpoint always returns 200 — it never crashes.
+
+    **Errors:**
+    - 401: Not authenticated
+    - 404: Activity not found or does not belong to this user
+    """
+    import json as _json
+
+    _FALLBACK = PlanVerdictResponse(verdict_short=None, verdict_tag=None, tone="neutral")
+
+    _VERDICT_TAGS = frozenset({
+        "PACED POORLY", "ON PLAN", "HELD THE LINE", "FADED LATE",
+        "FUELING", "RESTRAINED", "STEADY", "NO SHOW",
+    })
+    _TONES = frozenset({"critical", "good", "neutral"})
+
+    # 1. Fetch the activity — ownership-guarded (404 for other users, no ID enumeration).
+    activity = (
+        db.query(Activity)
+        .filter(
+            Activity.id == activity_id,
+            Activity.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    # 2. Require an existing analysis — without it there is no meaningful plan context.
+    if activity.analysis is None:
+        logger.info(
+            "plan-verdict skipped for activity_id=%d — no analysis present",
+            activity_id,
+        )
+        return _FALLBACK
+
+    # 3. Build the compact activity summary for the prompt.
+    moving_time_min = round(activity.moving_time_seconds / 60)
+
+    from services.ollama import format_pace
+    pace_str = format_pace(activity.average_pace_min_per_km)
+
+    avg_hr_str = f"{activity.average_hr} bpm" if activity.average_hr is not None else "not recorded"
+
+    user_message = (
+        f"Plan for this session: {body.session_type} — {body.target}\n\n"
+        f"What actually happened:\n"
+        f"- Distance: {activity.distance_km:.1f} km\n"
+        f"- Duration: {moving_time_min} min\n"
+        f"- Avg pace: {pace_str} min/km\n"
+        f"- Avg HR: {avg_hr_str}\n\n"
+        f"Evaluate how well this run matched the plan. Be specific. "
+        f"One sentence max 12 words, no praise, no fluff.\n\n"
+        f"Also output:\n"
+        f"- verdict_tag: exactly one of: "
+        f"PACED POORLY | ON PLAN | HELD THE LINE | FADED LATE | "
+        f"FUELING | RESTRAINED | STEADY | NO SHOW\n"
+        f"- tone: exactly one of: critical | good | neutral\n\n"
+        'Respond with only valid JSON: {"verdict_short": "...", "verdict_tag": "...", "tone": "..."}'
+    )
+
+    payload = {
+        "model": settings.get_ollama_model(),
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are Pak Har — a blunt, experienced running coach. "
+                    "Output only valid JSON, no markdown, no explanation."
+                ),
+            },
+            {"role": "user", "content": user_message},
+        ],
+        "stream": False,
+    }
+
+    url = f"{OLLAMA_BASE_URL}/api/chat"
+    logger.info(
+        "Requesting plan-verdict from Ollama for activity_id=%d user_id=%d",
+        activity_id,
+        current_user.id,
+    )
+
+    # 4. Non-streaming Ollama call — any exception returns the fallback (never crashes).
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=_CONNECT_TIMEOUT, read=_READ_TIMEOUT, write=10.0, pool=5.0)
+        ) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            response_data = response.json()
+
+        raw_content: str = (
+            response_data.get("message", {}).get("content", "")
+            or response_data.get("response", "")
+        ).strip()
+
+        parsed = _json.loads(raw_content)
+
+        raw_verdict_short = parsed.get("verdict_short")
+        raw_verdict_tag = parsed.get("verdict_tag")
+        raw_tone = parsed.get("tone")
+
+        verdict_short: str | None = str(raw_verdict_short).strip() if raw_verdict_short else None
+
+        raw_tag_upper = str(raw_verdict_tag).strip().upper() if raw_verdict_tag else None
+        verdict_tag: str | None = raw_tag_upper if raw_tag_upper in _VERDICT_TAGS else None
+
+        raw_tone_lower = str(raw_tone).strip().lower() if raw_tone else None
+        tone: str | None = raw_tone_lower if raw_tone_lower in _TONES else None
+
+        logger.info(
+            "plan-verdict succeeded for activity_id=%d: tag=%r tone=%r",
+            activity_id,
+            verdict_tag,
+            tone,
+        )
+
+        return PlanVerdictResponse(
+            verdict_short=verdict_short,
+            verdict_tag=verdict_tag,
+            tone=tone,
+        )
+
+    except Exception as exc:  # noqa: BLE001 — intentionally broad; must never crash
+        logger.error(
+            "plan-verdict failed for activity_id=%d: %s",
+            activity_id,
+            exc,
+        )
+        return _FALLBACK
