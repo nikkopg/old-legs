@@ -160,21 +160,27 @@ function buildRealizations(
     // Only build the map for days that exist in the plan
     if (!(dayName in planData)) continue
 
-    const activity = activities.find(
+    const dayActivities = activities.filter(
       (a) => a.activity_date.slice(0, 10) === isoDate,
-    ) ?? null
+    )
 
-    if (activity) {
-      result[isoDate] = {
-        activityId: activity.id,
-        distanceKm: activity.distance_km,
-        durationMin: Math.round(activity.moving_time_seconds / 60),
-        verdictShort: activity.verdict_short ?? null,
-        verdictTag: activity.verdict_tag ?? null,
-        tone: activity.tone ?? null,
-      }
-    } else {
+    if (dayActivities.length === 0) {
       result[isoDate] = null
+    } else {
+      // Use longest run as primary (for plan-verdict call); sum distance + duration across all sessions
+      const primary = dayActivities.reduce((best, a) =>
+        a.distance_km > best.distance_km ? a : best,
+      )
+      result[isoDate] = {
+        activityId: primary.id,
+        distanceKm: dayActivities.reduce((sum, a) => sum + a.distance_km, 0),
+        durationMin: Math.round(
+          dayActivities.reduce((sum, a) => sum + a.moving_time_seconds, 0) / 60,
+        ),
+        verdictShort: primary.verdict_short ?? null,
+        verdictTag: primary.verdict_tag ?? null,
+        tone: primary.tone ?? null,
+      }
     }
   }
 
