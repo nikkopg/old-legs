@@ -58,6 +58,10 @@ export async function getAuthStatus(): Promise<{ connected: boolean; message: st
   return apiFetch<{ connected: boolean; message: string }>('/auth/strava/status')
 }
 
+export async function disconnectStrava(): Promise<void> {
+  await apiFetch<unknown>('/auth/strava', { method: 'DELETE' })
+}
+
 // ---------------------------------------------------------------------------
 // Activities
 // ---------------------------------------------------------------------------

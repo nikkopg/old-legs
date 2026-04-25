@@ -241,6 +241,16 @@ export default function ActivitiesPage() {
       lastSyncedAt={null}
       onActivityClick={handleActivityClick}
       onRefreshSync={handleRefreshSync}
+      onNav={(key) => {
+        const routes: Record<string, string> = {
+          dashboard: '/dashboard',
+          activities: '/activities',
+          plan: '/plan',
+          coach: '/coach',
+          settings: '/settings',
+        }
+        if (routes[key]) router.push(routes[key])
+      }}
     />
   )
 }

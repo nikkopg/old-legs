@@ -16,6 +16,7 @@
 
 import type { Activity } from '@/types/api';
 import { ToneBadge } from './ToneBadge';
+import { NewspaperChrome, Paper } from './NewspaperChrome';
 
 export interface WeeklyKmEntry {
   label: string; // "This", "W-1", "W-2", "W-3"
@@ -30,6 +31,7 @@ export interface FrontPageProps {
   lastSyncedAt?: string | null;
   onActivityClick: (id: number) => void;
   onRefreshSync: () => void;
+  onNav?: (key: string) => void;
 }
 
 // ---- Helper functions ----
@@ -132,10 +134,6 @@ function DoubleRule() {
   );
 }
 
-function ThickRule({ className = '' }: { className?: string }) {
-  return <div className={`border-t-[3px] border-[#141210] ${className}`} />;
-}
-
 // ---- Main component ----
 
 export function FrontPage({
@@ -144,6 +142,7 @@ export function FrontPage({
   lastSyncedAt,
   onActivityClick,
   onRefreshSync,
+  onNav,
 }: FrontPageProps) {
   const lead = activities[0] ?? null;
   const previousEditions = activities.slice(1);
@@ -151,50 +150,32 @@ export function FrontPage({
   // Current week entry for footer stats
   const currentWeek = weeklyKm.find((w) => w.current);
 
-  // Most recent activity date for top rail
-  const topRailDate = lead
-    ? formatActivityDate(lead.activity_date).full
-    : '—';
-
   return (
-    <div className="min-h-screen bg-[#1a1612] flex justify-center items-start py-10 px-5">
-      <div className="bg-[#f4efe4] text-[#141210] w-[980px] max-w-full px-9 pt-7 pb-10">
+    <Paper width={980}>
 
-        {/* Top rail */}
-        <div className="flex justify-between items-baseline text-[10px] font-sans font-medium uppercase tracking-widest opacity-75 pb-2">
-          <span>Vol. III · Edition No. 412</span>
-          <span>Old Legs Daily — The Runner&#39;s Paper</span>
-          <span>{topRailDate}</span>
-        </div>
-
-        {/* Thick rule */}
-        <ThickRule className="my-3" />
-
-        {/* Masthead */}
-        <div className="text-center">
-          <div className="font-display text-[88px] uppercase tracking-[-0.04em] leading-none">
-            Old Legs
-          </div>
-          <div className="font-sans text-[10px] tracking-[0.4em] uppercase opacity-60 mt-1">
-            · No Cheerleading Since 1976 · Jakarta Edition ·
-          </div>
-        </div>
-
-        {/* Double rule */}
-        <div className="mt-3">
-          <ThickRule />
-          <div className="border-t border-[#141210] mt-[3px] mb-4" />
-        </div>
+        <NewspaperChrome
+          section="Dispatches · The Editions"
+          big={false}
+          nav={[
+            { key: 'dashboard', label: 'Front Page' },
+            { key: 'activities', label: 'Dispatches' },
+            { key: 'plan', label: 'Plan' },
+            { key: 'coach', label: 'Letters' },
+            { key: 'settings', label: 'Desk' },
+          ]}
+          activeNav="activities"
+          onNav={onNav ?? (() => {})}
+        />
 
         {/* Lead story */}
         {lead === null ? (
-          <div className="py-10 text-center">
+          <div className="py-10 mt-5 text-center">
             <div className="font-display text-[44px] uppercase leading-none tracking-[-0.03em]">
               No editions yet. Connect Strava and run.
             </div>
           </div>
         ) : (
-          <div className="pb-[14px] border-b-[3px] border-[#141210] cursor-pointer" onClick={() => onActivityClick(lead.id)}>
+          <div className="pb-[14px] mt-5 border-b-[3px] border-[#141210] cursor-pointer" onClick={() => onActivityClick(lead.id)}>
             {/* Lead header row */}
             <div className="flex justify-between items-center mb-3">
               <span className="font-sans text-[10px] uppercase tracking-widest opacity-70">
@@ -443,8 +424,7 @@ export function FrontPage({
           <span>&#34;Besok pagi, lari lagi ya.&#34;</span>
           <span>— continued page 2: Plan for the week —</span>
         </div>
-      </div>
-    </div>
+    </Paper>
   );
 }
 

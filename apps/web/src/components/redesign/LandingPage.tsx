@@ -28,14 +28,24 @@ export function LandingPage({ onConnect, connectState = 'idle' }: LandingPagePro
   return (
     <div
       style={{
-        width: 760,
         background: OL.paper,
         color: OL.ink,
-        padding: '60px 48px 48px',
         fontFamily: OL.body,
-        minHeight: 620,
+        minHeight: '100vh',
+        width: '100%',
         display: 'flex',
         flexDirection: 'column',
+        alignItems: 'center',
+      }}
+    >
+    <div
+      style={{
+        width: '100%',
+        maxWidth: 760,
+        padding: '60px 48px 48px',
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
       }}
     >
       {/* Top rail */}
@@ -209,6 +219,7 @@ export function LandingPage({ onConnect, connectState = 'idle' }: LandingPagePro
           — filed daily, rain or otherwise —
         </Caps>
       </div>
+    </div>
     </div>
   );
 }

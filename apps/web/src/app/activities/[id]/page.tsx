@@ -49,9 +49,9 @@ function isNotFound(err: unknown): boolean {
 
 function LoadingState() {
   return (
-    <div className="min-h-screen bg-[#1a1612] flex justify-center items-start py-10 px-5">
-      <div className="w-[760px] max-w-full">
-        <div className="bg-[#f4efe4] w-[760px] max-w-full h-[700px] animate-pulse" />
+    <div style={{ minHeight: '100vh', background: '#f4efe4' }}>
+      <div style={{ maxWidth: 760, margin: '0 auto' }} className="px-9 pt-7 pb-12">
+        <div className="bg-[rgba(20,18,16,0.06)] w-full h-[700px] animate-pulse" />
       </div>
     </div>
   );
@@ -59,11 +59,9 @@ function LoadingState() {
 
 function ErrorState({ message }: { message: string }) {
   return (
-    <div className="min-h-screen bg-[#1a1612] flex justify-center items-start py-10 px-5">
-      <div className="w-[760px] max-w-full">
-        <div className="bg-[#f4efe4] w-[760px] max-w-full p-8">
-          <p className="font-body italic text-[13px] opacity-60">{message}</p>
-        </div>
+    <div style={{ minHeight: '100vh', background: '#f4efe4', color: '#141210' }}>
+      <div style={{ maxWidth: 760, margin: '0 auto' }} className="px-9 pt-7 pb-12">
+        <p className="font-body italic text-[13px] opacity-60">{message}</p>
       </div>
     </div>
   );
@@ -159,6 +157,16 @@ export default function ActivityDetailPage() {
       weeklyKm={weeklyKm}
       splits={undefined}
       onBack={() => router.push('/activities')}
+      onNav={(key) => {
+        const routes: Record<string, string> = {
+          dashboard: '/dashboard',
+          activities: '/activities',
+          plan: '/plan',
+          coach: '/coach',
+          settings: '/settings',
+        };
+        if (routes[key]) router.push(routes[key]);
+      }}
     />
   );
 }

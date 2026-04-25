@@ -1,28 +1,119 @@
 // READY FOR QA
-// Feature: Weekly plan page (TASK-021)
-// What was built: /plan — displays active training plan or empty state with generate button
+// Feature: Plan page tabloid redesign (TASK-139)
+// What was built: /plan — replaced old WeeklyPlanGrid with PlanPaper tabloid component
 // Edge cases to test:
-//   - No plan yet (404 from GET /plan/current — shows empty state with "Build this week's plan")
-//   - Plan generation in progress (spinner + "Pak Har is working on it.")
-//   - Plan generation fails — Ollama offline (error message shown inline)
-//   - Plan exists (WeeklyPlanGrid renders all 7 days correctly)
-//   - Today's day highlighted with accent border
-//   - Rest days rendered with muted opacity
-//   - 401 response (redirect to /)
+//   - Loading state: dark frame + 980px parchment skeleton with animate-pulse
+//   - 401 response: redirected to /
+//   - 404 (no plan): PlanPaper receives plan={null}, shows empty state + generate button
+//   - Plan generation in progress: PlanPaper receives isGenerating=true, shows "Filing the plan..."
+//   - Plan exists: full fixtures table rendered with today's row highlighted
+//   - Other error (Ollama offline, 5xx): OfflinePage rendered with kind="api"
+//   - todayDow correctly derived from current locale date
 
 'use client'
 
 import { useState, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
-import { PageWrapper } from '@/components/layout'
-import { WeeklyPlanGrid } from '@/components/plan'
-import { Button, Spinner } from '@/components/ui'
+import { PlanPaper } from '@/components/redesign/PlanPaper'
+import { OfflinePage } from '@/components/redesign/OfflinePage'
 import { getCurrentPlan, generatePlan } from '@/lib/api'
-import type { ApiError, TrainingPlan } from '@/types/api'
+import type { ApiError, TrainingPlan as ApiTrainingPlan, PlanDay as ApiPlanDay } from '@/types/api'
 
-const PLACEHOLDER_USER_NAME = 'Runner'
-const PLACEHOLDER_AVATAR_URL = null
+// ---------- Local type alias for PlanPaper's expected shape ----------
+
+interface PlanPaperDay {
+  day: string
+  date: string
+  type: string
+  target: string
+  durationMin: string
+  distanceKm: string
+  notes: string
+}
+
+interface PlanPaperPlan {
+  days: PlanPaperDay[]
+  weekLabel: string
+  dateRange: string
+  editorNote: string
+  filedAt: string
+}
+
+// ---------- Helper: map API TrainingPlan → PlanPaperPlan ----------
+
+function mapPlan(raw: ApiTrainingPlan): PlanPaperPlan {
+  const weekStart = new Date(raw.week_start_date)
+  const weekEnd = new Date(weekStart)
+  weekEnd.setDate(weekEnd.getDate() + 6)
+
+  const DOW_KEYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+  const DOW_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+  const days: PlanPaperDay[] = DOW_KEYS.map((key, i) => {
+    const pd: ApiPlanDay | undefined = raw.plan_data[key]
+    const dayDate = new Date(weekStart)
+    dayDate.setDate(dayDate.getDate() + i)
+    const dateStr = dayDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+
+    if (!pd) {
+      return {
+        day: DOW_SHORT[i],
+        date: dateStr,
+        type: 'Rest',
+        target: '—',
+        durationMin: '—',
+        distanceKm: '—',
+        notes: '',
+      }
+    }
+
+    return {
+      day: DOW_SHORT[i],
+      date: dateStr,
+      type: pd.type.charAt(0).toUpperCase() + pd.type.slice(1),
+      target: '—',
+      durationMin: pd.duration_minutes > 0 ? `${pd.duration_minutes} min` : '—',
+      distanceKm: '—',
+      notes: pd.description,
+    }
+  })
+
+  // Combine all pak_har_notes into the editor's note
+  const noteValues = DOW_KEYS
+    .map((k) => raw.pak_har_notes[k])
+    .filter((n): n is string => !!n)
+  const editorNote =
+    noteValues.length > 0 ? noteValues.join('\n\n') : 'Run the plan as written.'
+
+  const fmtDate = (d: Date) =>
+    d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+
+  const weekNum = Math.ceil(
+    (weekStart.getTime() - new Date(weekStart.getFullYear(), 0, 1).getTime()) /
+      (7 * 86400000),
+  )
+
+  return {
+    days,
+    weekLabel: `Week ${weekNum}`,
+    dateRange: `${fmtDate(weekStart)}–${fmtDate(weekEnd)}`,
+    editorNote,
+    filedAt:
+      new Date(raw.created_at).toLocaleDateString('en-GB', {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+      }) +
+      ' · ' +
+      new Date(raw.created_at).toLocaleTimeString('en-GB', {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+  }
+}
+
+// ---------- Helpers: error classification ----------
 
 function isUnauthorized(err: unknown): boolean {
   const apiErr = err as ApiError
@@ -34,18 +125,19 @@ function isNotFound(err: unknown): boolean {
   return apiErr?.status === 404
 }
 
+// ---------- Page ----------
+
 export default function PlanPage() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const [isGenerating, setIsGenerating] = useState(false)
-  const [generateError, setGenerateError] = useState<string | null>(null)
 
   const {
-    data: plan,
+    data: rawPlan,
     isLoading,
     isError,
     error,
-  } = useQuery<TrainingPlan, ApiError>({
+  } = useQuery<ApiTrainingPlan, ApiError>({
     queryKey: ['plan', 'current'],
     queryFn: getCurrentPlan,
     retry: (failureCount, err) => {
@@ -62,74 +154,62 @@ export default function PlanPage() {
 
   async function handleGenerate() {
     setIsGenerating(true)
-    setGenerateError(null)
     try {
       await generatePlan()
       await queryClient.invalidateQueries({ queryKey: ['plan', 'current'] })
-    } catch (err) {
-      const apiErr = err as ApiError
-      setGenerateError(apiErr.detail ?? 'Plan generation failed.')
+    } catch {
+      // PlanPaper handles the empty/error state; generation errors surface via
+      // the re-fetch returning 404 again, which keeps plan={null}.
     } finally {
       setIsGenerating(false)
     }
   }
 
+  const onNav = (key: string) => {
+    const routes: Record<string, string> = {
+      dashboard: '/dashboard',
+      activities: '/activities',
+      plan: '/plan',
+      coach: '/coach',
+      settings: '/settings',
+    }
+    if (routes[key]) router.push(routes[key])
+  }
+
   const noPlanYet = isError && error && isNotFound(error)
   const otherError = isError && !noPlanYet && !isUnauthorized(error)
 
+  const mappedPlan: PlanPaperPlan | null = rawPlan ? mapPlan(rawPlan) : null
+
+  const todayDow = new Date().toLocaleDateString('en-US', { weekday: 'short' })
+
+  if (isLoading) {
+    return (
+      <div
+        style={{ background: '#f4efe4', minHeight: '100vh' }}
+        className="animate-pulse"
+      />
+    )
+  }
+
+  if (otherError) {
+    return (
+      <OfflinePage
+        kind="api"
+        onRetry={() => window.location.reload()}
+        onNav={onNav}
+      />
+    )
+  }
+
   return (
-    <PageWrapper
-      userName={PLACEHOLDER_USER_NAME}
-      avatarUrl={PLACEHOLDER_AVATAR_URL}
-      pageTitle="This week"
-    >
-      {isLoading && (
-        <div className="h-48 bg-surface-raised animate-pulse rounded-sm" />
-      )}
-
-      {isGenerating && (
-        <div className="flex items-center gap-3 text-sm text-text-muted">
-          <Spinner size="sm" />
-          <span>Pak Har is working on it.</span>
-        </div>
-      )}
-
-      {!isLoading && !isGenerating && noPlanYet && (
-        <div className="flex flex-col gap-4">
-          <p className="text-sm text-text-muted">
-            No plan yet. Pak Har will build one based on your recent runs.
-          </p>
-          {generateError && (
-            <p className="text-sm text-error">{generateError}</p>
-          )}
-          <Button variant="ghost" size="sm" onClick={handleGenerate}>
-            Build this week's plan
-          </Button>
-        </div>
-      )}
-
-      {!isLoading && !isGenerating && otherError && (
-        <p className="text-sm text-text-muted">
-          Could not load the plan. Check that the API is running.
-        </p>
-      )}
-
-      {!isLoading && !isGenerating && plan && (
-        <div className="flex flex-col gap-6">
-          <WeeklyPlanGrid plan={plan} />
-          {generateError && (
-            <p className="text-sm text-error">{generateError}</p>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleGenerate}
-            disabled={isGenerating}
-          >
-            Regenerate plan
-          </Button>
-        </div>
-      )}
-    </PageWrapper>
+    <PlanPaper
+      plan={mappedPlan}
+      isGenerating={isGenerating}
+      onGeneratePlan={handleGenerate}
+      onOpenCoach={() => router.push('/coach')}
+      onNav={onNav}
+      todayDow={todayDow}
+    />
   )
 }

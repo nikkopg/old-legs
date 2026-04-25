@@ -192,19 +192,26 @@ interface PaperProps {
 export function Paper({ children, width = 980, style, screenLabel }: PaperProps) {
   return (
     <div
-      data-screen-label={screenLabel}
       style={{
-        width,
         background: OL.paper,
-        color: OL.ink,
-        padding: '28px 36px 40px',
-        fontFamily: OL.body,
-        fontSize: 13,
-        lineHeight: 1.5,
-        ...style,
+        minHeight: '100vh',
       }}
     >
-      {children}
+      <div
+        data-screen-label={screenLabel}
+        style={{
+          maxWidth: width,
+          margin: '0 auto',
+          color: OL.ink,
+          padding: '28px 36px 40px',
+          fontFamily: OL.body,
+          fontSize: 13,
+          lineHeight: 1.5,
+          ...style,
+        }}
+      >
+        {children}
+      </div>
     </div>
   );
 }

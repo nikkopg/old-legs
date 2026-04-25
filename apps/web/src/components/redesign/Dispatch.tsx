@@ -17,6 +17,7 @@
 
 import type { Activity } from '@/types/api';
 import type { WeeklyKmEntry } from './FrontPage';
+import { NewspaperChrome } from './NewspaperChrome';
 
 export interface DispatchSplit {
   km: number;
@@ -33,6 +34,7 @@ export interface DispatchProps {
   weeklyKm: WeeklyKmEntry[];
   splits?: DispatchSplit[];
   onBack: () => void;
+  onNav?: (key: string) => void;
 }
 
 // ---- Helper functions ----
@@ -122,7 +124,7 @@ function Hairline({ className = '' }: { className?: string }) {
 
 // ---- Main component ----
 
-export function Dispatch({ activity, weeklyKm, splits, onBack }: DispatchProps) {
+export function Dispatch({ activity, weeklyKm, splits, onBack, onNav }: DispatchProps) {
   const dateInfo = formatActivityDate(activity.activity_date);
   const headline = getVerdictHeadline(activity);
   const paragraphs = activity.analysis ? getAnalysisParagraphs(activity.analysis) : [];
@@ -143,42 +145,25 @@ export function Dispatch({ activity, weeklyKm, splits, onBack }: DispatchProps) 
   const hasSplits = splits !== undefined && splits.length > 0;
 
   return (
-    <div className="min-h-screen bg-[#1a1612] flex justify-center items-start py-10 px-5">
-      <div className="w-[760px] max-w-full">
+    <div style={{ minHeight: '100vh', background: '#f4efe4', color: '#141210' }}>
+      <div style={{ maxWidth: 760, margin: '0 auto' }} className="px-9 pt-7 pb-12">
 
-        {/* Back button */}
-        <button
-          onClick={onBack}
-          className="text-[rgba(244,239,228,0.6)] hover:text-[#f4efe4] font-sans text-[10px] uppercase tracking-widest cursor-pointer mb-4 inline-block transition-colors"
-        >
-          ← Back to editions
-        </button>
+        <NewspaperChrome
+          section="Dispatch · Run Detail"
+          big={false}
+          nav={[
+            { key: 'dashboard', label: 'Front Page' },
+            { key: 'activities', label: 'Dispatches' },
+            { key: 'plan', label: 'Plan' },
+            { key: 'coach', label: 'Letters' },
+            { key: 'settings', label: 'Desk' },
+          ]}
+          activeNav="activities"
+          onNav={onNav ?? (() => {})}
+        />
 
         {/* Paper */}
-        <div className="bg-[#f4efe4] text-[#141210] w-full px-9 pt-7 pb-12">
-
-          {/* Top rail */}
-          <div className="flex justify-between items-baseline text-[10px] font-sans font-medium uppercase tracking-widest opacity-75 pb-2">
-            <span>Vol. III · Edition No. 412</span>
-            <span>Old Legs Daily · Post-Run Dispatch</span>
-            <span>{dateInfo.full}</span>
-          </div>
-
-          {/* Thick rule */}
-          <ThickRule className="my-[10px]" />
-
-          {/* Masthead */}
-          <div className="text-center py-[6px]">
-            <div className="font-display text-[64px] uppercase tracking-[-0.04em] leading-none">
-              The Old Legs
-            </div>
-            <div className="font-sans text-[10px] tracking-[0.375em] uppercase opacity-60 mt-1">
-              · No Cheerleading Since 1976 ·
-            </div>
-          </div>
-
-          {/* Thick rule */}
-          <ThickRule className="my-[10px]" />
+        <div>
 
           {/* Headline block */}
           <div className="grid grid-cols-[1fr_240px] gap-6 my-5">

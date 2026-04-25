@@ -1,41 +1,44 @@
 // READY FOR QA
-// Feature: Pak Har chat page (TASK-022)
-// What was built: /coach — full-height chat interface with SSE streaming from /coach/chat
+// Feature: Coach page — ChatPaper tabloid component (TASK-141)
+// What was built: /coach replaced with ChatPaper (tabloid wire-desk design).
+//   All SSE streaming logic is unchanged. Store (useChatStore) persists history
+//   across navigations. Messages are mapped from store shape to ChatPaper shape
+//   (timestamp → createdAt ISO string).
 // Edge cases to test:
-//   - Streaming response renders token by token with blinking cursor (|)
-//   - Ollama offline — error message shown in chat bubble (not a page crash)
-//   - Empty input is not sendable (button disabled)
-//   - ChatInput disabled while streaming
-//   - Chat history persists across page navigations (Zustand store)
-//   - Rate limit 429 — error shown in assistant bubble
-//   - Very long Pak Har response — page scrolls to bottom
+//   - Streaming response renders token by token with blinking ol-cursor
+//   - Ollama offline — error text appears in last assistant message, not a crash
+//   - Empty input is not sendable (ChatPaper button disabled when draft is blank)
+//   - Composer textarea disabled while streaming
+//   - Chat history survives navigating away and back (Zustand store)
+//   - Rate limit 429 — error shown in assistant message
+//   - Very long response — transcript box scrolls to bottom automatically
+//   - onNav routes all five nav keys to correct paths
+//   - createdAt present on all messages (uses timestamp.toISOString())
 
 'use client'
 
-import { useEffect, useRef } from 'react'
-import { PageWrapper } from '@/components/layout'
-import { ChatBubble, ChatInput } from '@/components/coach'
+import { useRouter } from 'next/navigation'
+import { ChatPaper } from '@/components/redesign/ChatPaper'
 import { useChatStore } from '@/store/chat'
 import { streamChat } from '@/lib/api'
 import type { ApiError } from '@/types/api'
 
-const PLACEHOLDER_USER_NAME = 'Runner'
-const PLACEHOLDER_AVATAR_URL = null
-
 export default function CoachPage() {
   const { messages, isStreaming, addMessage, appendToLastAssistant, setStreaming } =
     useChatStore()
-  const bottomRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  const router = useRouter()
+
+  const mappedMessages = messages.map((msg) => ({
+    role: msg.role,
+    content: msg.content,
+    createdAt: msg.timestamp.toISOString(),
+  }))
 
   async function handleSend(text: string) {
     addMessage({ role: 'user', content: text, timestamp: new Date() })
     addMessage({ role: 'assistant', content: '', timestamp: new Date() })
     setStreaming(true)
-
     try {
       await streamChat(
         text,
@@ -44,6 +47,10 @@ export default function CoachPage() {
       )
     } catch (err) {
       const apiErr = err as ApiError
+      if (apiErr?.status === 401) {
+        router.replace('/')
+        return
+      }
       const errorMsg =
         apiErr?.detail ?? 'Pak Har is unavailable right now. Make sure Ollama is running.'
       appendToLastAssistant(errorMsg)
@@ -51,34 +58,23 @@ export default function CoachPage() {
     }
   }
 
-  return (
-    <PageWrapper
-      userName={PLACEHOLDER_USER_NAME}
-      avatarUrl={PLACEHOLDER_AVATAR_URL}
-      pageTitle="Pak Har"
-    >
-      <div className="flex flex-col" style={{ height: 'calc(100vh - 8rem)' }}>
-        <div className="flex-1 overflow-y-auto flex flex-col gap-4 pb-4">
-          {messages.length === 0 && (
-            <p className="text-sm text-text-muted">Ask Pak Har about your training.</p>
-          )}
-          {messages.map((msg, i) => {
-            const isLast = i === messages.length - 1
-            const showCursor = isLast && msg.role === 'assistant' && isStreaming
-            return (
-              <ChatBubble
-                key={i}
-                role={msg.role}
-                message={msg.content + (showCursor ? '|' : '')}
-                timestamp={msg.timestamp}
-              />
-            )
-          })}
-          <div ref={bottomRef} />
-        </div>
+  function onNav(key: string) {
+    const routes: Record<string, string> = {
+      dashboard: '/dashboard',
+      activities: '/activities',
+      plan: '/plan',
+      coach: '/coach',
+      settings: '/settings',
+    }
+    if (routes[key]) router.push(routes[key])
+  }
 
-        <ChatInput onSend={handleSend} isStreaming={isStreaming} />
-      </div>
-    </PageWrapper>
+  return (
+    <ChatPaper
+      messages={mappedMessages}
+      isStreaming={isStreaming}
+      onSend={handleSend}
+      onNav={onNav}
+    />
   )
 }
