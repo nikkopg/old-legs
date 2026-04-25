@@ -529,48 +529,66 @@ export function PlanPaper({
           </div>
 
           {/* Totals row */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '44px 92px 1fr 160px 160px 2fr 20px',
-              gap: 14,
-              padding: '10px 4px',
-              background: OL.ink,
-              color: OL.paper,
-              marginTop: -1,
-            }}
-          >
-            <span />
-            <span />
-            <Caps
-              size={9}
-              ls={3}
-              opacity={1}
-              weight={800}
-              style={{ color: OL.paper }}
-            >
-              Totals
-            </Caps>
-            <span />
-            <span
-              style={{
-                fontFamily: OL.mono,
-                fontSize: 13,
-                fontWeight: 700,
-              }}
-            >
-              {totals.totalMin} min
-            </span>
-            <Caps
-              size={9}
-              ls={2}
-              opacity={0.8}
-              style={{ color: OL.paper }}
-            >
-              {totals.runCount} runs · {totals.restCount} rest · peak {totals.peakDay}
-            </Caps>
-            <span />
-          </div>
+          {(() => {
+            const actualTotalMin = plan.days.reduce((sum, d) => {
+              const match = realizations[d.isoDate] ?? null;
+              return sum + (match ? match.durationMin : 0);
+            }, 0);
+            return (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '44px 92px 1fr 160px 160px 2fr 20px',
+                  gap: 14,
+                  padding: '10px 4px',
+                  background: OL.ink,
+                  color: OL.paper,
+                  marginTop: -1,
+                }}
+              >
+                <span />
+                <span />
+                <Caps
+                  size={9}
+                  ls={3}
+                  opacity={1}
+                  weight={800}
+                  style={{ color: OL.paper }}
+                >
+                  Totals
+                </Caps>
+                {/* Col 4: TARGET total */}
+                <span
+                  style={{
+                    fontFamily: OL.mono,
+                    fontSize: 13,
+                    fontWeight: 700,
+                  }}
+                >
+                  {totals.totalMin} min
+                </span>
+                {/* Col 5: REALIZATION total */}
+                <span
+                  style={{
+                    fontFamily: OL.mono,
+                    fontSize: 13,
+                    fontWeight: 700,
+                  }}
+                >
+                  {actualTotalMin > 0 ? `${actualTotalMin} min` : '—'}
+                </span>
+                <Caps
+                  size={9}
+                  ls={2}
+                  opacity={0.8}
+                  style={{ color: OL.paper }}
+                >
+                  {totals.runCount} runs · {totals.restCount} rest · peak {totals.peakDay}
+                </Caps>
+                <span />
+              </div>
+            );
+          })()}
 
           {/* Editor's note + key */}
           <div
