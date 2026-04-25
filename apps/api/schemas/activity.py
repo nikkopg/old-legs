@@ -6,8 +6,12 @@
 #   - analysis is nullable — analysis_generated_at indicates if analysis was attempted
 #   - sync_status enum validated in service layer, not DB
 #   - average_pace_min_per_km displayed as float (e.g. 5.5 = 5:30/km)
+#   - verdict_short, verdict_tag, tone: all Optional[str], default None
+#     Populated only after /analyze is called and structured extraction succeeds.
+#     If extraction fails or Ollama returns malformed JSON, all three remain None.
 
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -37,18 +41,29 @@ class ActivityRead(ActivityBase):
     id: int
     user_id: int
     activity_date: datetime
-    analysis: str | None = None
-    analysis_generated_at: datetime | None = None
+    analysis: Optional[str] = None
+    analysis_generated_at: Optional[datetime] = None
     sync_status: str
     created_at: datetime
     updated_at: datetime
 
+    # Structured verdict fields — null until /analyze is called and extraction succeeds.
+    # verdict_tag allowed values: PACED POORLY | ON PLAN | HELD THE LINE | FADED LATE |
+    #                              FUELING | RESTRAINED | STEADY | NO SHOW
+    # tone allowed values: critical | good | neutral
+    verdict_short: Optional[str] = None
+    verdict_tag: Optional[str] = None
+    tone: Optional[str] = None
+
 
 class ActivityUpdate(BaseModel):
     """Fields updatable after initial sync (e.g. analysis fields)."""
-    analysis: str | None = None
-    analysis_generated_at: datetime | None = None
-    sync_status: str | None = None
+    analysis: Optional[str] = None
+    analysis_generated_at: Optional[datetime] = None
+    sync_status: Optional[str] = None
+    verdict_short: Optional[str] = None
+    verdict_tag: Optional[str] = None
+    tone: Optional[str] = None
 
 
 class ActivityWithAnalysis(ActivityRead):

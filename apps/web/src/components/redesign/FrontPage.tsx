@@ -194,8 +194,8 @@ export function FrontPage({
                     return `${d.dow} ${d.day} ${d.mon} · ${lead.name}`;
                   })()}
                 </div>
-                <div className="font-display text-[64px] uppercase leading-none tracking-[-0.03em] mb-3">
-                  {getVerdictHeadline(lead)}
+                <div className="font-display text-[64px] leading-none tracking-[-0.03em] mb-3">
+                  {toSentenceCase(getVerdictHeadline(lead))}
                 </div>
                 <div className="font-body text-[14px] leading-relaxed mb-3">
                   Pak Har&#39;s full dispatch is inside — splits, zones, the detail.{' '}

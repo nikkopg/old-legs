@@ -35,6 +35,8 @@ export interface DispatchProps {
   splits?: DispatchSplit[];
   onBack: () => void;
   onNav?: (key: string) => void;
+  onAnalyze?: () => void;
+  isAnalyzing?: boolean;
 }
 
 // ---- Helper functions ----
@@ -124,7 +126,7 @@ function Hairline({ className = '' }: { className?: string }) {
 
 // ---- Main component ----
 
-export function Dispatch({ activity, weeklyKm, splits, onBack, onNav }: DispatchProps) {
+export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze, isAnalyzing }: DispatchProps) {
   const dateInfo = formatActivityDate(activity.activity_date);
   const headline = getVerdictHeadline(activity);
   const paragraphs = activity.analysis ? getAnalysisParagraphs(activity.analysis) : [];
@@ -253,9 +255,33 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav }: Dispatch
               <Hairline className="my-[6px]" />
 
               {activity.analysis === null || paragraphs.length === 0 ? (
-                <p className="font-body italic text-[13px] opacity-60">
-                  Pak Har hasn&#39;t seen this run yet.
-                </p>
+                <>
+                  <p className="font-body italic text-[13px] opacity-60">
+                    Pak Har hasn&#39;t seen this run yet.
+                  </p>
+                  {onAnalyze && (
+                    <button
+                      onClick={onAnalyze}
+                      disabled={isAnalyzing}
+                      style={{
+                        marginTop: 12,
+                        background: isAnalyzing ? 'transparent' : 'var(--color-ink, #141210)',
+                        color: isAnalyzing ? 'var(--color-ink, #141210)' : '#fff',
+                        border: '1px solid var(--color-ink, #141210)',
+                        padding: '10px 24px',
+                        fontFamily: 'var(--font-sans)',
+                        fontSize: 11,
+                        letterSpacing: 3,
+                        fontWeight: 700,
+                        textTransform: 'uppercase' as const,
+                        cursor: isAnalyzing ? 'default' : 'pointer',
+                        opacity: isAnalyzing ? 0.5 : 1,
+                      }}
+                    >
+                      {isAnalyzing ? 'Filing dispatch_' : 'Get his take →'}
+                    </button>
+                  )}
+                </>
               ) : (
                 <>
                   {/* First paragraph with drop cap */}
@@ -284,6 +310,31 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav }: Dispatch
                   <div className="font-sans text-[9px] uppercase tracking-widest opacity-70 text-right mt-4">
                     — PAK HAR · POST-RUN DISPATCH
                   </div>
+
+                  {/* Regenerate button */}
+                  {onAnalyze && (
+                    <div className="text-right mt-3">
+                      <button
+                        onClick={onAnalyze}
+                        disabled={isAnalyzing}
+                        style={{
+                          background: isAnalyzing ? 'transparent' : 'var(--color-ink, #141210)',
+                          color: isAnalyzing ? 'var(--color-ink, #141210)' : '#fff',
+                          border: '1px solid var(--color-ink, #141210)',
+                          padding: '10px 24px',
+                          fontFamily: 'var(--font-sans)',
+                          fontSize: 11,
+                          letterSpacing: 3,
+                          fontWeight: 700,
+                          textTransform: 'uppercase' as const,
+                          cursor: isAnalyzing ? 'default' : 'pointer',
+                          opacity: isAnalyzing ? 0.5 : 1,
+                        }}
+                      >
+                        {isAnalyzing ? 'Filing dispatch_' : 'Refresh his take →'}
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
             </div>

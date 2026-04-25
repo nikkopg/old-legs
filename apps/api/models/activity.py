@@ -1,12 +1,15 @@
 # READY FOR QA
 # Feature: Activity model
-# What was built: Full Activity model with all Strava fields, sync status, and Pak Har analysis
+# What was built: Full Activity model with all Strava fields, sync status, Pak Har analysis,
+#   and structured verdict fields (verdict_short, verdict_tag, tone)
 # Edge cases to consider:
 #   - HR fields (average_hr, max_hr) nullable for activities without a HR monitor
 #   - analysis is nullable — analysis_generated_at used to know if analysis was attempted
 #   - sync_status tracks the full sync lifecycle: pending → synced | failed
 #   - unique constraint on strava_activity_id prevents duplicate Strava activities
 #   - average_pace_min_per_km is stored as float (e.g. 5.5 = 5:30 min/km) for easier calculations
+#   - verdict_short / verdict_tag / tone are all nullable — populated only after analysis runs
+#     the structured extraction second Ollama call; remain null if extraction fails or is skipped
 
 from datetime import datetime, timezone
 
@@ -45,6 +48,16 @@ class Activity(Base):
     # Pak Har's analysis of this run
     analysis: Mapped[str | None] = mapped_column(Text, nullable=True)
     analysis_generated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Structured verdict fields — populated by a second Ollama extraction call after analysis.
+    # All nullable; extraction failure stores null rather than crashing the analysis endpoint.
+    # verdict_short: one-line summary ≤12 words (no praise, no fluff)
+    # verdict_tag:   one of PACED POORLY | ON PLAN | HELD THE LINE | FADED LATE |
+    #                        FUELING | RESTRAINED | STEADY | NO SHOW
+    # tone:          one of critical | good | neutral
+    verdict_short: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    verdict_tag: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    tone: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Sync lifecycle
     sync_status: Mapped[str] = mapped_column(

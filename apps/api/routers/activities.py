@@ -41,6 +41,7 @@
 
 # READY FOR QA
 # Feature: Post-run analysis with HR zone interpretation (TASK-007 + TASK-109)
+# Feature: Structured verdict extraction — verdict_short, verdict_tag, tone (TASK-133)
 # What was built:
 #   - POST /activities/{activity_id}/analyze — triggers Pak Har's analysis for a specific run
 #   - Activity ownership guard: 404 if activity belongs to another user (no ID enumeration)
@@ -53,6 +54,14 @@
 #       - HR rising across last 3 comparable-distance runs → fatigue trend note injected
 #       - average_hr is None → HR section omitted entirely, no HR lines in prompt
 #   - ANALYSIS_PROMPT used (prompts/pak_har.py) — separate from SYSTEM_PROMPT used for chat
+#   - Second non-streaming Ollama call extracts structured verdict fields from the analysis text:
+#       - verdict_short: one-line summary ≤12 words (no praise, no fluff)
+#       - verdict_tag: one of PACED POORLY | ON PLAN | HELD THE LINE | FADED LATE |
+#                            FUELING | RESTRAINED | STEADY | NO SHOW
+#       - tone: one of critical | good | neutral
+#     Stored on the Activity row alongside the analysis. If the extraction call fails or
+#     Ollama returns malformed JSON / out-of-range values, all three fields are stored as
+#     null — the long-form analysis is always persisted regardless.
 # Edge cases to test:
 #   - Unauthenticated → 401
 #   - Activity not found → 404
@@ -65,6 +74,10 @@
 #   - Fewer than 3 comparable recent runs → no fatigue trend note
 #   - HR rising across 3+ comparable runs at same distance → fatigue trend in prompt
 #   - Re-analyzing an already-analyzed activity — overwrites previous analysis (idempotent)
+#   - Verdict extraction: Ollama returns malformed JSON → verdict fields stored as null (no crash)
+#   - Verdict extraction: Ollama returns invalid verdict_tag or tone value → stored as null
+#   - Verdict extraction: Ollama offline on second call → verdict fields null, analysis still saved
+#   - Verdict extraction: empty full_analysis string → extraction skipped, fields stored as null
 
 """
 Activities router.
@@ -390,7 +403,8 @@ async def analyze_activity(
 
     full_analysis = "".join(chunks)
 
-    # 8. Persist the analysis to the activity record.
+    # 8. Persist the long-form analysis to the activity record.
+    #    Always committed here — the verdict extraction below is best-effort only.
     activity.analysis = full_analysis
     activity.analysis_generated_at = datetime.now(timezone.utc)
     db.commit()
@@ -403,5 +417,100 @@ async def analyze_activity(
         len(full_analysis),
     )
 
-    # 9. Return the full analysis as JSON.
+    # 9. Second Ollama call — structured verdict extraction.
+    #    Non-streaming. Extracts verdict_short, verdict_tag, and tone from the full analysis.
+    #    Any failure (network error, JSON parse error, invalid enum value) is caught and
+    #    logged — fields are stored as null and the endpoint still returns 200.
+    _VERDICT_TAGS = frozenset({
+        "PACED POORLY", "ON PLAN", "HELD THE LINE", "FADED LATE",
+        "FUELING", "RESTRAINED", "STEADY", "NO SHOW",
+    })
+    _TONES = frozenset({"critical", "good", "neutral"})
+
+    verdict_short: str | None = None
+    verdict_tag: str | None = None
+    tone: str | None = None
+
+    if full_analysis.strip():
+        extraction_payload = {
+            "model": settings.get_ollama_model(),
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a JSON extractor. Output only valid JSON, no markdown.",
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        "Given this running analysis:\n"
+                        "---\n"
+                        f"{full_analysis}\n"
+                        "---\n\n"
+                        "Extract three fields:\n"
+                        "1. verdict_short: One sentence, max 12 words, summarising what this run showed. "
+                        "No praise, no fluff.\n"
+                        "2. verdict_tag: Pick exactly one from this list: "
+                        "PACED POORLY | ON PLAN | HELD THE LINE | FADED LATE | "
+                        "FUELING | RESTRAINED | STEADY | NO SHOW\n"
+                        "3. tone: Pick exactly one: critical | good | neutral\n\n"
+                        'Respond with only valid JSON: {"verdict_short": "...", "verdict_tag": "...", "tone": "..."}'
+                    ),
+                },
+            ],
+            "stream": False,
+        }
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(connect=_CONNECT_TIMEOUT, read=_READ_TIMEOUT, write=10.0, pool=5.0)
+            ) as client:
+                extraction_response = await client.post(url, json=extraction_payload)
+                extraction_response.raise_for_status()
+                extraction_data = extraction_response.json()
+
+            raw_content: str = (
+                extraction_data.get("message", {}).get("content", "")
+                or extraction_data.get("response", "")
+            ).strip()
+
+            parsed = _json.loads(raw_content)
+
+            raw_verdict_short = parsed.get("verdict_short")
+            raw_verdict_tag = parsed.get("verdict_tag")
+            raw_tone = parsed.get("tone")
+
+            verdict_short = str(raw_verdict_short).strip() if raw_verdict_short else None
+            verdict_tag = str(raw_verdict_tag).strip().upper() if raw_verdict_tag and str(raw_verdict_tag).strip().upper() in _VERDICT_TAGS else None
+            tone = str(raw_tone).strip().lower() if raw_tone and str(raw_tone).strip().lower() in _TONES else None
+
+            logger.info(
+                "Verdict extraction succeeded for activity_id=%d: tag=%r tone=%r",
+                activity_id,
+                verdict_tag,
+                tone,
+            )
+
+        except Exception as exc:  # noqa: BLE001 — intentionally broad; extraction must never crash analysis
+            logger.error(
+                "Verdict extraction failed for activity_id=%d: %s",
+                activity_id,
+                exc,
+            )
+            verdict_short = None
+            verdict_tag = None
+            tone = None
+    else:
+        logger.warning(
+            "Skipping verdict extraction for activity_id=%d — analysis text is empty",
+            activity_id,
+        )
+
+    # 10. Persist verdict fields and commit.
+    activity.verdict_short = verdict_short
+    activity.verdict_tag = verdict_tag
+    activity.tone = tone
+    db.commit()
+    db.refresh(activity)
+
+    # 11. Return the full analysis as JSON.
     return {"analysis": full_analysis}

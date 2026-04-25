@@ -21,11 +21,11 @@
 
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useParams } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Dispatch } from '@/components/redesign';
-import { getActivity, getActivities } from '@/lib/api';
+import { getActivity, getActivities, analyzeActivity } from '@/lib/api';
 import { computeWeeklyKm } from '@/lib/weeklyKm';
 import type { Activity, ApiError } from '@/types/api';
 
@@ -75,6 +75,18 @@ export default function ActivityDetailPage() {
   const router = useRouter();
   const params = useParams();
   const id = Number(params.id);
+  const queryClient = useQueryClient();
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+
+  async function handleAnalyze(): Promise<void> {
+    setIsAnalyzing(true);
+    try {
+      await analyzeActivity(id);
+      await queryClient.invalidateQueries({ queryKey: ['activity', id] });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
 
   const {
     data: activity,
@@ -157,6 +169,8 @@ export default function ActivityDetailPage() {
       weeklyKm={weeklyKm}
       splits={undefined}
       onBack={() => router.push('/activities')}
+      onAnalyze={handleAnalyze}
+      isAnalyzing={isAnalyzing}
       onNav={(key) => {
         const routes: Record<string, string> = {
           dashboard: '/dashboard',
