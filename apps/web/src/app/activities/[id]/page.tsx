@@ -25,6 +25,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Dispatch } from '@/components/redesign';
+import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton';
 import { getActivity, getActivities, analyzeActivity } from '@/lib/api';
 import { computeWeeklyKm } from '@/lib/weeklyKm';
 import type { Activity, ApiError } from '@/types/api';
@@ -48,13 +49,7 @@ function isNotFound(err: unknown): boolean {
 // ---------------------------------------------------------------------------
 
 function LoadingState() {
-  return (
-    <div style={{ minHeight: '100vh', background: '#f4efe4' }}>
-      <div style={{ maxWidth: 760, margin: '0 auto' }} className="px-9 pt-7 pb-12">
-        <div className="bg-[rgba(20,18,16,0.06)] w-full h-[700px] animate-pulse" />
-      </div>
-    </div>
-  );
+  return <PageLoadingSkeleton />;
 }
 
 function ErrorState({ message }: { message: string }) {

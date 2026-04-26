@@ -24,6 +24,7 @@ import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { DashboardPaper } from '@/components/redesign/DashboardPaper'
 import { OfflinePage } from '@/components/redesign/OfflinePage'
+import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton'
 import { OnboardingModal } from '@/components/onboarding'
 import { useDashboard } from '@/hooks/useDashboard'
 import { useUser } from '@/hooks/useUser'
@@ -71,12 +72,7 @@ export default function DashboardPage() {
 
   // Loading state
   if (isLoading) {
-    return (
-      <div
-        style={{ background: '#f4efe4', minHeight: '100vh' }}
-        className="animate-pulse"
-      />
-    )
+    return <PageLoadingSkeleton />
   }
 
   // Error state (non-auth errors only — auth redirects are handled above via useEffect)

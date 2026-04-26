@@ -30,6 +30,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { FrontPage } from '@/components/redesign/FrontPage'
 import type { WeeklyKmEntry } from '@/components/redesign/FrontPage'
+import { OfflinePage } from '@/components/redesign/OfflinePage'
+import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton'
 import { getActivities } from '@/lib/api'
 import type { Activity, ApiError } from '@/types/api'
 
@@ -112,74 +114,6 @@ function computeWeeklyKm(activities: Activity[]): WeeklyKmEntry[] {
   })
 }
 
-// ---------------------------------------------------------------------------
-// Loading skeleton
-// ---------------------------------------------------------------------------
-
-function ActivitiesPageSkeleton() {
-  return (
-    <div className="min-h-screen bg-[#1a1612] flex justify-center items-start py-10 px-5">
-      <div className="bg-[#f4efe4] text-[#141210] w-[980px] max-w-full px-9 pt-7 pb-10">
-        {/* Top rail skeleton */}
-        <div className="h-3 w-full animate-pulse bg-[rgba(20,18,16,0.08)] rounded mb-4" />
-
-        {/* Masthead skeleton */}
-        <div className="h-20 w-3/4 mx-auto animate-pulse bg-[rgba(20,18,16,0.08)] rounded mb-4" />
-
-        {/* Double rule skeleton */}
-        <div className="h-1 w-full animate-pulse bg-[rgba(20,18,16,0.08)] rounded mb-6" />
-
-        {/* Lead story skeleton */}
-        <div className="grid grid-cols-[1.35fr_1fr] gap-7 mb-6">
-          <div className="space-y-3">
-            <div className="h-3 w-1/3 animate-pulse bg-[rgba(20,18,16,0.08)] rounded" />
-            <div className="h-16 w-full animate-pulse bg-[rgba(20,18,16,0.08)] rounded" />
-            <div className="h-4 w-2/3 animate-pulse bg-[rgba(20,18,16,0.08)] rounded" />
-          </div>
-          <div className="h-40 animate-pulse bg-[rgba(20,18,16,0.08)] rounded" />
-        </div>
-
-        {/* Previous editions skeleton rows */}
-        <div className="flex gap-7">
-          <div className="flex-1 space-y-4">
-            {[0, 1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="h-16 w-full animate-pulse bg-[rgba(20,18,16,0.08)] rounded"
-              />
-            ))}
-          </div>
-          {/* Sidebar skeleton */}
-          <div className="w-[260px] shrink-0 space-y-3">
-            <div className="h-4 w-1/2 animate-pulse bg-[rgba(20,18,16,0.08)] rounded" />
-            {[0, 1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="h-8 w-full animate-pulse bg-[rgba(20,18,16,0.08)] rounded"
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Error state
-// ---------------------------------------------------------------------------
-
-function ActivitiesPageError() {
-  return (
-    <div className="min-h-screen bg-[#1a1612] flex justify-center items-start py-10 px-5">
-      <div className="bg-[#f4efe4] text-[#141210] w-[980px] max-w-full px-9 pt-7 pb-10">
-        <p className="font-body italic text-[13px] opacity-60 p-8">
-          Could not load your runs. Make sure the API is running.
-        </p>
-      </div>
-    </div>
-  )
-}
 
 // ---------------------------------------------------------------------------
 // Page
@@ -229,12 +163,29 @@ export default function ActivitiesPage() {
     })
   }, [refetch])
 
+  const onNav = (key: string) => {
+    const routes: Record<string, string> = {
+      dashboard: '/dashboard',
+      activities: '/activities',
+      plan: '/plan',
+      coach: '/coach',
+      settings: '/settings',
+    }
+    if (routes[key]) router.push(routes[key])
+  }
+
   if (isLoading) {
-    return <ActivitiesPageSkeleton />
+    return <PageLoadingSkeleton />
   }
 
   if (isError && !isUnauthorized(error)) {
-    return <ActivitiesPageError />
+    return (
+      <OfflinePage
+        kind="api"
+        onRetry={() => window.location.reload()}
+        onNav={onNav}
+      />
+    )
   }
 
   const items = activities ?? []
@@ -248,16 +199,7 @@ export default function ActivitiesPage() {
       onActivityClick={handleActivityClick}
       onRefreshSync={handleRefreshSync}
       isSyncing={isFetching}
-      onNav={(key) => {
-        const routes: Record<string, string> = {
-          dashboard: '/dashboard',
-          activities: '/activities',
-          plan: '/plan',
-          coach: '/coach',
-          settings: '/settings',
-        }
-        if (routes[key]) router.push(routes[key])
-      }}
+      onNav={onNav}
     />
   )
 }

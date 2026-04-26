@@ -20,6 +20,7 @@ import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { PlanPaper } from '@/components/redesign/PlanPaper'
 import { OfflinePage } from '@/components/redesign/OfflinePage'
+import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton'
 import { getCurrentPlan, generatePlan, getActivities, getPlanVerdict } from '@/lib/api'
 import type { ApiError, TrainingPlan as ApiTrainingPlan, PlanDay as ApiPlanDay, Activity } from '@/types/api'
 
@@ -291,12 +292,7 @@ export default function PlanPage() {
   const todayDow = new Date().toLocaleDateString('en-US', { weekday: 'short' })
 
   if (isLoading) {
-    return (
-      <div
-        style={{ background: '#f4efe4', minHeight: '100vh' }}
-        className="animate-pulse"
-      />
-    )
+    return <PageLoadingSkeleton />
   }
 
   if (otherError) {

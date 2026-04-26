@@ -34,6 +34,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { SettingsPaper } from '@/components/redesign/SettingsPaper'
+import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton'
 import { getAuthStatus, disconnectStrava, resetPakHarContext, saveOnboarding } from '@/lib/api'
 import { useUser } from '@/hooks/useUser'
 import { useChatStore } from '@/store/chat'
@@ -220,12 +221,7 @@ export default function SettingsPage() {
 
   // Loading state
   if (isLoading) {
-    return (
-      <div
-        style={{ background: '#f4efe4', minHeight: '100vh' }}
-        className="animate-pulse"
-      />
-    )
+    return <PageLoadingSkeleton />
   }
 
   // User and stats props wired to real data
