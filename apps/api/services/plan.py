@@ -22,6 +22,7 @@ from services.ollama import (
     _CONNECT_TIMEOUT,
     _READ_TIMEOUT,
     build_strava_context,
+    build_user_preferences_context,
 )
 
 logger = logging.getLogger(__name__)
@@ -138,7 +139,11 @@ async def generate_plan_with_ollama(user: User, db: Session) -> TrainingPlan:
         ValueError: If the Ollama response cannot be parsed into a valid plan.
     """
     strava_context = build_strava_context(user, db)
-    system_content = PLAN_PROMPT.format(strava_context=strava_context)
+    user_preferences = build_user_preferences_context(user)
+    system_content = PLAN_PROMPT.format(
+        strava_context=strava_context,
+        user_preferences=user_preferences,
+    )
 
     payload = {
         "model": settings.get_ollama_model(),

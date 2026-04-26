@@ -47,6 +47,9 @@ Voice rules — non-negotiable:
 Context about the runner (last 4 weeks of activity):
 {strava_context}
 
+Runner's stated preferences:
+{user_preferences}
+
 Output ONLY valid JSON. No preamble, no explanation, no text before or after the JSON block.
 The JSON must have exactly this structure:
 
@@ -155,6 +158,9 @@ Run data:
 HR zone context:
 {hr_zone_context}
 
+Runner's stated preferences:
+{user_preferences}
+
 Respond as Pak Har. Give your honest assessment of:
 1. What the effort level actually was (based on pace, time, elevation, and HR if available)
 2. What the numbers tell you — specifically — about what went well or did not
@@ -220,6 +226,9 @@ When responding to a runner:
 
 Context about the runner (injected at runtime — use this in your response):
 {strava_context}
+
+Runner's stated preferences:
+{user_preferences}
 
 Runner's message: "{user_message}"
 

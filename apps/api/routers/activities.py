@@ -105,7 +105,7 @@ from prompts.pak_har import ANALYSIS_PROMPT
 from schemas.activity import ActivityListResponse, ActivityRead, PlanVerdictRequest, PlanVerdictResponse
 from services.coach import build_analysis_context
 from services.database import get_db
-from services.ollama import OLLAMA_BASE_URL, _CONNECT_TIMEOUT, _READ_TIMEOUT
+from services.ollama import build_user_preferences_context, OLLAMA_BASE_URL, _CONNECT_TIMEOUT, _READ_TIMEOUT
 from services.rate_limiter import check_rate_limit
 from services.strava import get_valid_access_token, sync_activities
 
@@ -312,10 +312,12 @@ async def analyze_activity(
     else:
         hr_zone_context = "(no heart rate data for this run)"
 
-    # 6. Assemble the system prompt with run context and HR zone context injected.
+    # 6. Assemble the system prompt with run context, HR zone context, and user preferences injected.
+    user_preferences = build_user_preferences_context(current_user)
     system_content = ANALYSIS_PROMPT.format(
         run_context=run_context,
         hr_zone_context=hr_zone_context,
+        user_preferences=user_preferences,
     )
 
     payload = {

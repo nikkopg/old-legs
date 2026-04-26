@@ -36,7 +36,7 @@ from models.training_plan import TrainingPlan
 from models.user import User
 from models.weekly_review import WeeklyReview
 from services.database import get_db
-from services.ollama import build_strava_context, stream_chat
+from services.ollama import build_strava_context, build_user_preferences_context, stream_chat
 from services.rate_limiter import check_rate_limit
 
 logger = logging.getLogger(__name__)
@@ -101,8 +101,9 @@ async def coach_chat(
     # Reverse so messages are in chronological order for the LLM
     recent_messages = list(reversed(recent_messages))
 
-    # 4. Build Strava context
+    # 4. Build Strava context and user preferences
     strava_context = build_strava_context(current_user, db)
+    user_preferences = build_user_preferences_context(current_user)
 
     # 5. Build chat history for Ollama (map "coach" → "assistant")
     chat_history = [
@@ -129,7 +130,7 @@ async def coach_chat(
         accumulated: list[str] = []
 
         try:
-            async for chunk in stream_chat(body.message, strava_context, chat_history):
+            async for chunk in stream_chat(body.message, strava_context, user_preferences, chat_history):
                 accumulated.append(chunk)
                 yield f"data: {chunk}\n\n"
 

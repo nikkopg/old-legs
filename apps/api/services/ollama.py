@@ -147,6 +147,7 @@ def build_user_preferences_context(user: User) -> str:
 async def stream_chat(
     user_message: str,
     strava_context: str,
+    user_preferences: str,
     chat_history: list[dict],
 ) -> AsyncGenerator[str, None]:
     """
@@ -159,6 +160,7 @@ async def stream_chat(
     Args:
         user_message: The raw message from the user.
         strava_context: Pre-built activity context string from build_strava_context().
+        user_preferences: Pre-built preferences string from build_user_preferences_context().
         chat_history: List of {"role": ..., "content": ...} dicts for the last N
                       messages (role values must be "user" or "assistant").
 
@@ -172,6 +174,7 @@ async def stream_chat(
     system_content = SYSTEM_PROMPT.format(
         strava_context=strava_context,
         user_message=user_message,
+        user_preferences=user_preferences,
     )
 
     messages = [{"role": "system", "content": system_content}]
