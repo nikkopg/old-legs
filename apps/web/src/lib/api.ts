@@ -10,7 +10,7 @@
 //   - analyzeActivity on an already-analyzed activity (overwrites — should still return 200)
 //   - getCurrentPlan when no plan exists (404 — ApiError thrown)
 
-import type { Activity, ActivityListResponse, ApiError, Insights, TrainingPlan, WeeklyReview } from '@/types/api'
+import type { Activity, ActivityListResponse, ApiError, Insights, TrainingPlan, WeeklyReview, UserProfile, OnboardingRequest, OnboardingResponse } from '@/types/api'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -44,6 +44,21 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
 }
 
 // ---------------------------------------------------------------------------
+// User
+// ---------------------------------------------------------------------------
+
+export async function getUserMe(): Promise<UserProfile> {
+  return apiFetch<UserProfile>('/user/me')
+}
+
+export async function saveOnboarding(body: OnboardingRequest): Promise<OnboardingResponse> {
+  return apiFetch<OnboardingResponse>('/user/onboarding', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+// ---------------------------------------------------------------------------
 // Auth
 // ---------------------------------------------------------------------------
 
@@ -59,7 +74,7 @@ export async function getAuthStatus(): Promise<{ connected: boolean; message: st
 }
 
 export async function disconnectStrava(): Promise<void> {
-  await apiFetch<unknown>('/auth/strava', { method: 'DELETE' })
+  await fetch('/api/disconnect', { method: 'POST' })
 }
 
 // ---------------------------------------------------------------------------

@@ -19,12 +19,14 @@
 
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { DashboardPaper } from '@/components/redesign/DashboardPaper'
 import { OfflinePage } from '@/components/redesign/OfflinePage'
+import { OnboardingModal } from '@/components/onboarding'
 import { useDashboard } from '@/hooks/useDashboard'
+import { useUser } from '@/hooks/useUser'
 import { getInsights } from '@/lib/api'
 import { formatDuration, formatPace } from '@/lib/formatters'
 import type { Insights } from '@/types/api'
@@ -38,6 +40,8 @@ export default function DashboardPage() {
   const router = useRouter()
 
   const { weeklyStats, todayPlan, lastRun, isLoading, isError, isUnauthorized } = useDashboard()
+  const { user } = useUser()
+  const [onboardingDone, setOnboardingDone] = useState(false)
 
   // Non-blocking insights query — failures are silently treated as null
   const { data: insightsData } = useQuery<Insights, ApiError>({
@@ -144,16 +148,21 @@ export default function DashboardPage() {
   const lastSyncedAt = lastRun?.updated_at ?? null
 
   return (
-    <DashboardPaper
-      weeklyStats={mappedWeeklyStats}
-      todayPlan={mappedTodayPlan}
-      lastRun={mappedLastRun}
-      insights={mappedInsights}
-      lastSyncedAt={lastSyncedAt}
-      onOpenRun={(id) => router.push(`/activities/${id}`)}
-      onOpenPlan={() => router.push('/plan')}
-      onOpenCoach={() => router.push('/coach')}
-      onNav={onNav}
-    />
+    <>
+      <DashboardPaper
+        weeklyStats={mappedWeeklyStats}
+        todayPlan={mappedTodayPlan}
+        lastRun={mappedLastRun}
+        insights={mappedInsights}
+        lastSyncedAt={lastSyncedAt}
+        onOpenRun={(id) => router.push(`/activities/${id}`)}
+        onOpenPlan={() => router.push('/plan')}
+        onOpenCoach={() => router.push('/coach')}
+        onNav={onNav}
+      />
+      {user !== null && !user.onboarding_completed && !onboardingDone && (
+        <OnboardingModal onComplete={() => setOnboardingDone(true)} />
+      )}
+    </>
   )
 }

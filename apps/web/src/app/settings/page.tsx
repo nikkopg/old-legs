@@ -35,6 +35,7 @@ import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { SettingsPaper } from '@/components/redesign/SettingsPaper'
 import { getAuthStatus, disconnectStrava, resetPakHarContext } from '@/lib/api'
+import { useUser } from '@/hooks/useUser'
 import { useChatStore } from '@/store/chat'
 import type { ApiError } from '@/types/api'
 
@@ -65,13 +66,18 @@ export default function SettingsPage() {
   // Auth status query
   const {
     data: authData,
-    isLoading,
+    isLoading: authLoading,
     error,
   } = useQuery<{ connected: boolean; message: string }, ApiError>({
     queryKey: ['authStatus'],
     queryFn: getAuthStatus,
     retry: false,
   })
+
+  // User profile query
+  const { user: userProfile, isLoading: userLoading } = useUser()
+
+  const isLoading = authLoading || userLoading
 
   // Local-only preferences state (no backend yet)
   const [voice, setVoice] = useState<VoiceLevel>('standard')
@@ -158,19 +164,25 @@ export default function SettingsPage() {
     )
   }
 
-  // Minimal user and stats props (backend not yet wired)
+  // User and stats props wired to real data
   const user = {
-    name: 'Athlete',
-    stravaAthleteId: null,
-    subscribedSince: '25 Apr 2026',
+    name: userProfile?.name ?? 'Athlete',
+    stravaAthleteId: userProfile?.strava_athlete_id ?? null,
+    subscribedSince: userProfile
+      ? new Date(userProfile.created_at).toLocaleDateString('en-GB', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+        })
+      : '—',
     timezone: 'Asia/Jakarta',
     preferredUnit: 'km',
   }
 
   const stats = {
-    editionsReceived: 0,
-    dispatchesFiled: 0,
-    weeklyPlans: 0,
+    editionsReceived: userProfile?.total_activities ?? 0,
+    dispatchesFiled: userProfile?.total_activities ?? 0,
+    weeklyPlans: userProfile?.weeks_on_plan ?? 0,
     lettersExchanged: 0,
   }
 

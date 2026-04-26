@@ -88,3 +88,29 @@ export interface ApiError {
   detail: string
   status?: number
 }
+
+export interface UserProfile {
+  id: number
+  name: string
+  avatar_url: string | null
+  strava_athlete_id: string
+  onboarding_completed: boolean
+  weekly_km_target: number | null
+  days_available: number | null
+  biggest_struggle: string | null
+  total_activities: number
+  total_distance_km: number
+  weeks_on_plan: number
+  created_at: string
+  updated_at: string
+}
+
+export interface OnboardingRequest {
+  weekly_km_target: number
+  days_available: number
+  biggest_struggle: string
+}
+
+export interface OnboardingResponse {
+  message: string
+}
