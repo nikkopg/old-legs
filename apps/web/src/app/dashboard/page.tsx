@@ -96,7 +96,7 @@ export default function DashboardPage() {
     totalKm: weeklyStats.totalKm,
     totalRuns: weeklyStats.totalRuns,
     totalTimeSec: weeklyStats.totalTimeSeconds,
-    targetKm: 40, // default — user preferences not yet in frontend
+    targetKm: user?.weekly_km_target ?? null,
   }
 
   const mappedTodayPlan = todayPlan

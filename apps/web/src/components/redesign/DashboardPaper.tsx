@@ -35,7 +35,7 @@ interface WeeklyStats {
   totalKm: number;
   totalRuns: number;
   totalTimeSec: number;
-  targetKm: number;
+  targetKm: number | null;
 }
 
 interface TodayPlan {
@@ -124,6 +124,7 @@ function fmtSyncedAt(raw: string | null): string {
 
 function heroHeadline(stats: WeeklyStats): string {
   const { totalKm, targetKm } = stats;
+  if (targetKm === null) return `${totalKm.toFixed(1)} km this week. Set a target in your desk.`;
   if (totalKm < targetKm * 0.5) return 'Week is thin. Pick it up.';
   if (totalKm >= targetKm) return 'Target met. Don\'t stop now.';
   return `${totalKm.toFixed(1)} km in. ${(targetKm - totalKm).toFixed(1)} to go.`;
@@ -149,7 +150,7 @@ export function DashboardPaper({
   onNav,
 }: DashboardPaperProps) {
   const { totalKm, totalRuns, totalTimeSec, targetKm } = weeklyStats;
-  const completionPct = targetKm > 0 ? (totalKm / targetKm) * 100 : 0;
+  const completionPct = targetKm !== null && targetKm > 0 ? (totalKm / targetKm) * 100 : null;
 
   // Parse lastRun date parts
   const lastRunParts = lastRun ? lastRun.date.split(' ') : [];
@@ -223,8 +224,12 @@ export function DashboardPaper({
               maxWidth: 560,
             }}
           >
-            You are at <b>{totalKm.toFixed(1)} km</b> with the target sitting at{' '}
-            <b>{targetKm}</b>.{' '}
+            You are at <b>{totalKm.toFixed(1)} km</b>{' '}
+            {targetKm !== null ? (
+              <>with the target sitting at <b>{targetKm}</b>.</>
+            ) : (
+              <>with no weekly target set yet.</>
+            )}{' '}
             {totalRuns} run{totalRuns === 1 ? '' : 's'} filed so far this week.
           </div>
 
@@ -242,10 +247,10 @@ export function DashboardPaper({
           >
             {(
               [
-                ['This Week', totalKm.toFixed(1), `km of ${targetKm}`],
+                ['This Week', totalKm.toFixed(1), targetKm !== null ? `km of ${targetKm}` : 'km'],
                 ['Runs', String(totalRuns), 'this week'],
                 ['Time on Feet', fmtTime(totalTimeSec), 'minutes'],
-                ['Week Completion', `${Math.round(completionPct)}%`, 'target'],
+                ['Week Completion', completionPct !== null ? `${Math.round(completionPct)}%` : '—', completionPct !== null ? 'target' : 'no target'],
               ] as [string, string, string][]
             ).map(([label, value, sub]) => (
               <div key={label}>
@@ -294,11 +299,11 @@ export function DashboardPaper({
                   opacity: 0.7,
                 }}
               >
-                {totalKm.toFixed(1)} / {targetKm.toFixed(1)} km
+                {targetKm !== null ? `${totalKm.toFixed(1)} / ${targetKm.toFixed(1)} km` : `${totalKm.toFixed(1)} km · no target set`}
               </span>
             </div>
             <div style={{ marginTop: 6 }}>
-              <MiniBar pct={completionPct} accent height={14} />
+              <MiniBar pct={completionPct !== null ? Math.min(completionPct, 100) : 0} accent height={14} />
             </div>
           </div>
         </article>
