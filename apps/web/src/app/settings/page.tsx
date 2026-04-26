@@ -34,7 +34,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { SettingsPaper } from '@/components/redesign/SettingsPaper'
-import { getAuthStatus, disconnectStrava, resetPakHarContext } from '@/lib/api'
+import { getAuthStatus, disconnectStrava, resetPakHarContext, saveOnboarding } from '@/lib/api'
 import { useUser } from '@/hooks/useUser'
 import { useChatStore } from '@/store/chat'
 import type { ApiError } from '@/types/api'
@@ -88,6 +88,17 @@ export default function SettingsPage() {
     missedRunNudge: true,
   })
 
+  // Runner's Brief preferences state
+  const [preferences, setPreferences] = useState({
+    weeklyKmTarget: '',
+    daysAvailable: '',
+    biggestStruggle: '',
+  })
+  const [prefSeeded, setPrefSeeded] = useState(false)
+  const [isSavingPreferences, setIsSavingPreferences] = useState(false)
+  const [preferencesSaved, setPreferencesSaved] = useState(false)
+  const [preferencesError, setPreferencesError] = useState<string | null>(null)
+
   // Reset context state machine
   const [resetContextState, setResetContextState] = useState<ResetContextState>('idle')
 
@@ -100,6 +111,18 @@ export default function SettingsPage() {
       router.replace('/')
     }
   }, [isUnauthorized, isNotConnected, router])
+
+  // Seed Runner's Brief from userProfile (once)
+  useEffect(() => {
+    if (userProfile && !prefSeeded) {
+      setPreferences({
+        weeklyKmTarget: userProfile.weekly_km_target !== null ? String(userProfile.weekly_km_target) : '',
+        daysAvailable: userProfile.days_available !== null ? String(userProfile.days_available) : '',
+        biggestStruggle: userProfile.biggest_struggle ?? '',
+      })
+      setPrefSeeded(true)
+    }
+  }, [userProfile, prefSeeded])
 
   // Navigation handler
   const onNav = (key: string) => {
@@ -126,6 +149,37 @@ export default function SettingsPage() {
   // Delivery toggle handler
   const handleToggleDelivery = (key: keyof DeliveryPreferences) => {
     setDeliveryPrefs((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  // Runner's Brief preference handlers
+  const handlePreferenceChange = (
+    field: 'weeklyKmTarget' | 'daysAvailable' | 'biggestStruggle',
+    value: string,
+  ) => {
+    setPreferencesSaved(false)
+    setPreferences((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const handleSavePreferences = async () => {
+    const parsedKm = Number(preferences.weeklyKmTarget)
+    const parsedDays = Number(preferences.daysAvailable)
+    if (parsedDays < 1 || parsedDays > 7) return
+    setIsSavingPreferences(true)
+    setPreferencesError(null)
+    setPreferencesSaved(false)
+    try {
+      await saveOnboarding({
+        weekly_km_target: parsedKm,
+        days_available: parsedDays,
+        biggest_struggle: preferences.biggestStruggle.trim(),
+      })
+      setPreferencesSaved(true)
+    } catch (err) {
+      const apiErr = err as ApiError
+      setPreferencesError(apiErr?.detail ?? 'Something went wrong.')
+    } finally {
+      setIsSavingPreferences(false)
+    }
   }
 
   // Reset context handlers
@@ -200,6 +254,12 @@ export default function SettingsPage() {
       resetContextState={resetContextState}
       onResetContextConfirm={handleResetContextConfirm}
       onResetContextCancel={handleResetContextCancel}
+      preferences={preferences}
+      onPreferenceChange={handlePreferenceChange}
+      onSavePreferences={handleSavePreferences}
+      isSavingPreferences={isSavingPreferences}
+      preferencesSaved={preferencesSaved}
+      preferencesError={preferencesError}
     />
   )
 }

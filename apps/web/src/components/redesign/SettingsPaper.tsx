@@ -69,6 +69,16 @@ interface SettingsPaperProps {
   resetContextState?: 'idle' | 'confirming' | 'loading' | 'error';
   onResetContextConfirm?: () => void;
   onResetContextCancel?: () => void;
+  preferences: {
+    weeklyKmTarget: string;
+    daysAvailable: string;
+    biggestStruggle: string;
+  };
+  onPreferenceChange: (field: 'weeklyKmTarget' | 'daysAvailable' | 'biggestStruggle', value: string) => void;
+  onSavePreferences: () => void;
+  isSavingPreferences: boolean;
+  preferencesSaved: boolean;
+  preferencesError: string | null;
 }
 
 // ---------- component ----------
@@ -86,6 +96,12 @@ export function SettingsPaper({
   resetContextState = 'idle',
   onResetContextConfirm,
   onResetContextCancel,
+  preferences,
+  onPreferenceChange,
+  onSavePreferences,
+  isSavingPreferences,
+  preferencesSaved,
+  preferencesError,
 }: SettingsPaperProps) {
   const voiceOptions: Array<{ opt: VoiceLevel; label: string; description: string }> = [
     { opt: 'gentle', label: 'Gentle', description: 'Mentor. Still honest. Less bite.' },
@@ -185,7 +201,111 @@ export function SettingsPaper({
             </div>
           </section>
 
-          {/* Section 2 — Editor's Voice */}
+          {/* Section 2 — Runner's Brief */}
+          <section style={{ padding: '14px 0', borderBottom: `1px solid ${OL.ink}` }}>
+            <SectionLabel>Runner&apos;s Brief</SectionLabel>
+            <p style={{ fontFamily: OL.body, fontSize: 13, lineHeight: 1.6, color: OL.muted, maxWidth: 560, margin: '0 0 12px' }}>
+              What Pak Har uses when building your plan and reading your week.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 14 }}>
+              {/* Weekly km target */}
+              <div>
+                <Caps size={8} ls={2} opacity={0.6}>Weekly km target</Caps>
+                <input
+                  type="number"
+                  min={0}
+                  value={preferences.weeklyKmTarget}
+                  onChange={e => onPreferenceChange('weeklyKmTarget', e.target.value)}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    marginTop: 4,
+                    fontFamily: OL.mono,
+                    fontSize: 13,
+                    padding: '6px 8px',
+                    border: `1px solid ${OL.ink}`,
+                    background: 'transparent',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+              {/* Days available */}
+              <div>
+                <Caps size={8} ls={2} opacity={0.6}>Days per week</Caps>
+                <input
+                  type="number"
+                  min={1}
+                  max={7}
+                  value={preferences.daysAvailable}
+                  onChange={e => onPreferenceChange('daysAvailable', e.target.value)}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    marginTop: 4,
+                    fontFamily: OL.mono,
+                    fontSize: 13,
+                    padding: '6px 8px',
+                    border: `1px solid ${OL.ink}`,
+                    background: 'transparent',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+              {/* Biggest struggle */}
+              <div>
+                <Caps size={8} ls={2} opacity={0.6}>Biggest struggle</Caps>
+                <input
+                  type="text"
+                  value={preferences.biggestStruggle}
+                  onChange={e => onPreferenceChange('biggestStruggle', e.target.value)}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    marginTop: 4,
+                    fontFamily: OL.mono,
+                    fontSize: 13,
+                    padding: '6px 8px',
+                    border: `1px solid ${OL.ink}`,
+                    background: 'transparent',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+            </div>
+            {/* Save row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <button
+                onClick={onSavePreferences}
+                disabled={isSavingPreferences || preferences.biggestStruggle.trim() === '' || preferences.weeklyKmTarget === '' || preferences.daysAvailable === ''}
+                style={{
+                  background: isSavingPreferences ? OL.muted : OL.ink,
+                  color: OL.paper,
+                  border: 'none',
+                  padding: '8px 20px',
+                  fontFamily: OL.sans,
+                  fontSize: 11,
+                  letterSpacing: 3,
+                  fontWeight: 700,
+                  textTransform: 'uppercase' as const,
+                  cursor: isSavingPreferences ? 'not-allowed' : 'pointer',
+                  opacity: (preferences.biggestStruggle.trim() === '' || preferences.weeklyKmTarget === '' || preferences.daysAvailable === '') ? 0.4 : 1,
+                }}
+              >
+                {isSavingPreferences ? 'Saving...' : 'Save →'}
+              </button>
+              {preferencesSaved && (
+                <span style={{ fontFamily: OL.body, fontSize: 13, color: OL.muted }}>Saved.</span>
+              )}
+              {preferencesError && (
+                <span style={{ fontFamily: OL.body, fontSize: 13, color: OL.accent }}>{preferencesError}</span>
+              )}
+            </div>
+          </section>
+
+          {/* Section 3 — Editor's Voice */}
           <section style={{ padding: '14px 0', borderBottom: `1px solid ${OL.ink}` }}>
             <SectionLabel>Editor&apos;s Voice</SectionLabel>
             <p style={{
@@ -241,7 +361,7 @@ export function SettingsPaper({
             </div>
           </section>
 
-          {/* Section 3 — Delivery Preferences */}
+          {/* Section 4 — Delivery Preferences */}
           <section style={{ padding: '14px 0', borderBottom: `1px solid ${OL.ink}` }}>
             <SectionLabel>Delivery Preferences</SectionLabel>
             {deliveryRows.map(({ key, label }) => {
@@ -284,7 +404,7 @@ export function SettingsPaper({
             })}
           </section>
 
-          {/* Section 4 — Cancel the Subscription */}
+          {/* Section 5 — Cancel the Subscription */}
           <section style={{ padding: '14px 0' }}>
             <SectionLabel>Cancel the Subscription</SectionLabel>
             <p style={{
