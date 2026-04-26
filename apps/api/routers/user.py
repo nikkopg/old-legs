@@ -60,6 +60,10 @@ async def save_onboarding(
     current_user.weekly_km_target = body.weekly_km_target
     current_user.days_available = body.days_available
     current_user.biggest_struggle = body.biggest_struggle
+    if body.resting_hr is not None:
+        current_user.resting_hr = body.resting_hr
+    if body.max_hr is not None:
+        current_user.max_hr = body.max_hr
     current_user.onboarding_completed = True
 
     db.commit()
@@ -123,6 +127,9 @@ async def get_me(
         weekly_km_target=current_user.weekly_km_target,
         days_available=current_user.days_available,
         biggest_struggle=current_user.biggest_struggle,
+        resting_hr=current_user.resting_hr,
+        max_hr=current_user.max_hr,
+        max_hr_observed=current_user.max_hr_observed,
         created_at=current_user.created_at,
         updated_at=current_user.updated_at,
         total_activities=total_activities,

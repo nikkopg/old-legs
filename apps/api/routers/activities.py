@@ -294,7 +294,15 @@ async def analyze_activity(
 
     # 4. Build the run context string (basic stats + HR zone classification, mismatch,
     #    and trend — all gated on average_hr being non-null inside the service).
-    run_context = build_analysis_context(activity, recent_activities)
+    #    Pass resting_hr and max_hr_observed from the user row so zone calc uses
+    #    actual values rather than population-average defaults.
+    run_context = build_analysis_context(
+        activity,
+        recent_activities,
+        resting_hr=current_user.resting_hr or 60,
+        max_hr_observed=current_user.max_hr_observed,
+        max_hr=current_user.max_hr,
+    )
 
     # 5. Build the hr_zone_context string for the prompt placeholder.
     #    When HR data is absent, the placeholder makes the absence explicit so

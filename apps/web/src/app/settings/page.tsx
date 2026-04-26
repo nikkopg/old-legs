@@ -93,6 +93,8 @@ export default function SettingsPage() {
     weeklyKmTarget: '',
     daysAvailable: '',
     biggestStruggle: '',
+    restingHr: '',
+    maxHr: '',
   })
   const [prefSeeded, setPrefSeeded] = useState(false)
   const [isSavingPreferences, setIsSavingPreferences] = useState(false)
@@ -119,6 +121,8 @@ export default function SettingsPage() {
         weeklyKmTarget: userProfile.weekly_km_target !== null ? String(userProfile.weekly_km_target) : '',
         daysAvailable: userProfile.days_available !== null ? String(userProfile.days_available) : '',
         biggestStruggle: userProfile.biggest_struggle ?? '',
+        restingHr: userProfile.resting_hr !== null && userProfile.resting_hr !== undefined ? String(userProfile.resting_hr) : '',
+        maxHr: userProfile.max_hr !== null && userProfile.max_hr !== undefined ? String(userProfile.max_hr) : '',
       })
       setPrefSeeded(true)
     }
@@ -153,7 +157,7 @@ export default function SettingsPage() {
 
   // Runner's Brief preference handlers
   const handlePreferenceChange = (
-    field: 'weeklyKmTarget' | 'daysAvailable' | 'biggestStruggle',
+    field: 'weeklyKmTarget' | 'daysAvailable' | 'biggestStruggle' | 'restingHr' | 'maxHr',
     value: string,
   ) => {
     setPreferencesSaved(false)
@@ -164,6 +168,10 @@ export default function SettingsPage() {
     const parsedKm = Number(preferences.weeklyKmTarget)
     const parsedDays = Number(preferences.daysAvailable)
     if (parsedDays < 1 || parsedDays > 7) return
+    const parsedRestingHr = preferences.restingHr !== '' ? Number(preferences.restingHr) : null
+    if (parsedRestingHr !== null && (parsedRestingHr < 30 || parsedRestingHr > 100)) return
+    const parsedMaxHr = preferences.maxHr !== '' ? Number(preferences.maxHr) : null
+    if (parsedMaxHr !== null && (parsedMaxHr < 100 || parsedMaxHr > 220)) return
     setIsSavingPreferences(true)
     setPreferencesError(null)
     setPreferencesSaved(false)
@@ -172,6 +180,8 @@ export default function SettingsPage() {
         weekly_km_target: parsedKm,
         days_available: parsedDays,
         biggest_struggle: preferences.biggestStruggle.trim(),
+        resting_hr: parsedRestingHr,
+        max_hr: parsedMaxHr,
       })
       setPreferencesSaved(true)
     } catch (err) {

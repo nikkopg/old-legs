@@ -429,6 +429,23 @@ async def sync_activities(user_id: int, access_token: str, db: Session) -> int:
             f"Sync complete for user {user_id}: "
             f"{new_count} new, {updated_count} updated"
         )
+
+        # Update max_hr_observed on the user row — cached so zone calc avoids
+        # re-scanning activity history on every analysis call.
+        from sqlalchemy import func as sa_func
+        new_max = (
+            db.query(sa_func.max(Activity.max_hr))
+            .filter(Activity.user_id == user_id)
+            .scalar()
+        )
+        if new_max is not None:
+            user_row = db.query(User).filter(User.id == user_id).first()
+            if user_row and (user_row.max_hr_observed is None or new_max > user_row.max_hr_observed):
+                user_row.max_hr_observed = new_max
+                db.commit()
+                logger.info(
+                    f"Updated max_hr_observed for user {user_id}: {new_max} bpm"
+                )
     else:
         logger.info(f"No activities to sync for user {user_id}")
 

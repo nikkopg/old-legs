@@ -77,11 +77,31 @@ _HR_TREND_MIN_RUNS: int = 3
 # Public helpers
 # ---------------------------------------------------------------------------
 
-def _derive_max_hr(current_activity: Activity, recent_activities: list[Activity]) -> int:
+def _derive_max_hr(
+    current_activity: Activity,
+    recent_activities: list[Activity],
+    max_hr_observed: int | None = None,
+) -> int:
     """
-    Derive the user's max HR from the highest max_hr recorded across all activities.
-    Falls back to _FALLBACK_MAX_HR if no max_hr data exists.
+    Derive the user's max HR.
+
+    When max_hr_observed is provided (cached from the User row), it is used
+    directly and activity history is not scanned — this avoids a full table
+    scan on every analysis call.
+
+    Falls back to scanning max_hr across the current and recent activities,
+    and ultimately to _FALLBACK_MAX_HR if no max_hr data exists anywhere.
+
+    Args:
+        current_activity: The activity being analyzed.
+        recent_activities: The user's other recent activities.
+        max_hr_observed: Cached max HR from the User row (preferred source).
+
+    Returns:
+        The best-available max HR estimate, in bpm.
     """
+    if max_hr_observed is not None:
+        return max_hr_observed
     candidates = [
         a.max_hr for a in [current_activity] + recent_activities
         if a.max_hr is not None
@@ -181,6 +201,8 @@ def build_analysis_context(
     activity: Activity,
     recent_activities: list[Activity],
     resting_hr: int = _DEFAULT_RHR,
+    max_hr_observed: int | None = None,
+    max_hr: int | None = None,
 ) -> str:
     """
     Build the full context string for Pak Har's post-run analysis prompt.
@@ -189,11 +211,21 @@ def build_analysis_context(
     flags (only when average_hr is not null), and an HR trend note (only
     when sufficient comparable runs exist and HR is rising).
 
+    MHR resolution priority:
+        1. max_hr — user-provided explicit value (most trusted)
+        2. max_hr_observed — auto-derived from activity history (cached on User row)
+        3. _derive_max_hr() — scans current + recent activities, falls back to
+           _FALLBACK_MAX_HR (185 bpm) when no max_hr data exists anywhere
+
     Args:
         activity: The Activity being analyzed.
         recent_activities: The user's other recent activities, ordered by
                            activity_date descending. Used for trend detection.
                            Should exclude the current activity.
+        resting_hr: The user's resting HR in bpm (default 60).
+        max_hr_observed: Cached max HR from the user row. Used when max_hr is
+                         not set — avoids a full table scan on every analysis call.
+        max_hr: User-provided max HR (highest-priority source for zone calc).
 
     Returns:
         A multi-line plain-text context string ready to be injected into the
@@ -216,10 +248,20 @@ def build_analysis_context(
 
     # --- HR section — only populated when data exists ---
     if activity.average_hr is not None:
-        derived_mhr = _derive_max_hr(activity, recent_activities)
-        mhr_source = "from activity history" if any(
-            a.max_hr is not None for a in [activity] + recent_activities
-        ) else "population average fallback"
+        # 3-tier MHR priority: user-provided > cached from history > derived from history
+        if max_hr is not None:
+            derived_mhr = max_hr
+            mhr_source = "user-provided"
+        elif max_hr_observed is not None:
+            derived_mhr = max_hr_observed
+            mhr_source = "cached from history"
+        else:
+            derived_mhr = _derive_max_hr(activity, recent_activities)
+            mhr_source = (
+                "from activity history" if any(
+                    a.max_hr is not None for a in [activity] + recent_activities
+                ) else "population average fallback"
+            )
         rhr_source = "user-provided" if resting_hr != _DEFAULT_RHR else "default"
         zone_num, zone_label = classify_hr_zone(activity.average_hr, derived_mhr, resting_hr)
         lines.append(

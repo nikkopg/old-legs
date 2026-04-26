@@ -24,6 +24,7 @@ class UserBase(BaseModel):
     weekly_km_target: float = 0.0
     days_available: int = 3
     biggest_struggle: str | None = None
+    resting_hr: int | None = None
 
 
 class UserCreate(UserBase):
@@ -46,6 +47,9 @@ class UserRead(UserBase):
     weekly_km_target: float
     days_available: int
     biggest_struggle: str | None
+    resting_hr: int | None = None
+    max_hr: int | None = None
+    max_hr_observed: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -64,6 +68,8 @@ class OnboardingRequest(BaseModel):
     weekly_km_target: float = Field(..., ge=0, description="Current weekly km target (>= 0)")
     days_available: int = Field(..., ge=1, le=7, description="Training days available per week (1–7)")
     biggest_struggle: str = Field(..., min_length=1, description="The runner's biggest struggle, free-text")
+    resting_hr: int | None = Field(None, ge=40, le=220, description="Resting HR in bpm (40–220, optional)")
+    max_hr: int | None = Field(None, ge=100, le=220, description="User-provided max HR in bpm (100–220, optional)")
 
 
 class UserProfile(UserRead):

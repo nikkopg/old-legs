@@ -7,7 +7,8 @@
 # Edge cases to consider:
 #   - User may not have strava_athlete_id until OAuth completes (nullable)
 #   - Token fields must never be logged (encrypt/decrypt only)
-#   - onboarding fields (weekly_km_target, days_available, biggest_struggle) nullable for first login
+#   - onboarding fields (weekly_km_target, days_available, biggest_struggle, resting_hr) nullable for first login
+#   - resting_hr, max_hr, and max_hr_observed are nullable cached values — never log or expose raw HR data
 #   - onboarding_completed defaults to False — set to True after POST /user/onboarding
 #   - unique constraint on strava_athlete_id once set prevents duplicate Strava accounts
 
@@ -48,6 +49,9 @@ class User(Base):
     weekly_km_target: Mapped[float] = mapped_column(Float, default=0.0)
     days_available: Mapped[int] = mapped_column(Integer, default=3)
     biggest_struggle: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resting_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    max_hr_observed: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))

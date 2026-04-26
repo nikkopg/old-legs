@@ -98,6 +98,8 @@ export interface UserProfile {
   weekly_km_target: number | null
   days_available: number | null
   biggest_struggle: string | null
+  resting_hr: number | null
+  max_hr: number | null
   total_activities: number
   total_distance_km: number
   weeks_on_plan: number
@@ -109,6 +111,8 @@ export interface OnboardingRequest {
   weekly_km_target: number
   days_available: number
   biggest_struggle: string
+  resting_hr?: number | null
+  max_hr?: number | null
 }
 
 export interface OnboardingResponse {

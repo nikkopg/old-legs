@@ -19,6 +19,20 @@ const T = {
 } as const
 
 // ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+const TOTAL_STEPS = 5
+
+interface FormState {
+  weeklyKm: string
+  daysPerWeek: string
+  biggestStruggle: string
+  restingHr: string
+  maxHr: string
+}
+
+// ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
@@ -31,31 +45,56 @@ interface OnboardingModalProps {
 // ---------------------------------------------------------------------------
 
 export function OnboardingModal({ onComplete }: OnboardingModalProps) {
-  const [step, setStep] = useState<1 | 2 | 3>(1)
-  const [weeklyKm, setWeeklyKm] = useState<string>('')
-  const [daysPerWeek, setDaysPerWeek] = useState<string>('')
-  const [biggestStruggle, setBiggestStruggle] = useState<string>('')
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1)
+  const [form, setForm] = useState<FormState>({
+    weeklyKm: '',
+    daysPerWeek: '',
+    biggestStruggle: '',
+    restingHr: '',
+    maxHr: '',
+  })
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
+  const isStepValid = (): boolean => {
+    if (step === 1) return true // weeklyKm — no required validation, 0 is acceptable
+    if (step === 2) return form.daysPerWeek !== ''
+    if (step === 3) return true // biggestStruggle — optional-ish, allow empty
+    if (step === 4) {
+      return form.restingHr === '' || (Number(form.restingHr) >= 30 && Number(form.restingHr) <= 100)
+    }
+    if (step === 5) {
+      return form.maxHr === '' || (Number(form.maxHr) >= 100 && Number(form.maxHr) <= 220)
+    }
+    return true
+  }
+
   const handleNext = () => {
+    if (!isStepValid()) return
     if (step === 1) setStep(2)
     else if (step === 2) setStep(3)
+    else if (step === 3) setStep(4)
+    else if (step === 4) setStep(5)
   }
 
   const handleBack = () => {
     if (step === 2) setStep(1)
     else if (step === 3) setStep(2)
+    else if (step === 4) setStep(3)
+    else if (step === 5) setStep(4)
   }
 
   const handleDone = async () => {
+    if (!isStepValid()) return
     setSaveError(null)
     setIsSaving(true)
     try {
       const body: OnboardingRequest = {
-        weekly_km_target: Number(weeklyKm) || 0,
-        days_available: Math.max(1, Math.min(7, Number(daysPerWeek) || 1)),
-        biggest_struggle: biggestStruggle.trim(),
+        weekly_km_target: Number(form.weeklyKm) || 0,
+        days_available: Math.max(1, Math.min(7, Number(form.daysPerWeek) || 1)),
+        biggest_struggle: form.biggestStruggle.trim(),
+        resting_hr: form.restingHr !== '' ? Number(form.restingHr) : null,
+        max_hr: form.maxHr !== '' ? Number(form.maxHr) : null,
       }
       await saveOnboarding(body)
       onComplete()
@@ -158,7 +197,7 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
   return (
     <div style={overlayStyle}>
       <div style={boxStyle}>
-        <span style={stepLabelStyle}>Step {step} of 3</span>
+        <span style={stepLabelStyle}>Step {step} of {TOTAL_STEPS}</span>
 
         {step === 1 && (
           <>
@@ -167,8 +206,8 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
               style={inputStyle}
               type="number"
               min={0}
-              value={weeklyKm}
-              onChange={(e) => setWeeklyKm(e.target.value)}
+              value={form.weeklyKm}
+              onChange={(e) => setForm((f) => ({ ...f, weeklyKm: e.target.value }))}
               placeholder="e.g. 30"
               autoFocus
             />
@@ -192,8 +231,8 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
               type="number"
               min={1}
               max={7}
-              value={daysPerWeek}
-              onChange={(e) => setDaysPerWeek(e.target.value)}
+              value={form.daysPerWeek}
+              onChange={(e) => setForm((f) => ({ ...f, daysPerWeek: e.target.value }))}
               placeholder="e.g. 4"
               autoFocus
             />
@@ -218,10 +257,94 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
             <input
               style={inputStyle}
               type="text"
-              value={biggestStruggle}
-              onChange={(e) => setBiggestStruggle(e.target.value)}
+              value={form.biggestStruggle}
+              onChange={(e) => setForm((f) => ({ ...f, biggestStruggle: e.target.value }))}
               placeholder="e.g. staying consistent"
               autoFocus
+            />
+            <div style={buttonRowStyle}>
+              <button style={ghostBtnStyle} onClick={handleBack} disabled={isSaving}>
+                Back
+              </button>
+              <button
+                style={primaryBtnStyle}
+                onClick={handleNext}
+                disabled={isSaving}
+              >
+                Next
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 4 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <p style={{ fontFamily: 'Lora, serif', fontSize: 14, lineHeight: 1.6, margin: 0, color: 'rgba(20,18,16,0.7)' }}>
+              Optional — but it makes HR zones more accurate.
+            </p>
+            <label style={{ fontFamily: 'Work Sans, sans-serif', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', opacity: 0.6 }} htmlFor="resting-hr">
+              Resting heart rate (bpm)
+            </label>
+            <input
+              id="resting-hr"
+              type="number"
+              min={30}
+              max={100}
+              placeholder="e.g. 52"
+              value={form.restingHr}
+              onChange={(e) => setForm((f) => ({ ...f, restingHr: e.target.value }))}
+              style={{
+                fontFamily: 'Space Mono, monospace',
+                fontSize: 14,
+                padding: '10px 14px',
+                border: '1px solid #141210',
+                background: 'transparent',
+                outline: 'none',
+                width: '100%',
+                boxSizing: 'border-box' as const,
+              }}
+            />
+            <div style={{ display: 'flex', gap: 12, marginTop: 12, justifyContent: 'space-between' }}>
+              <button style={ghostBtnStyle} onClick={handleBack} disabled={isSaving}>
+                Back
+              </button>
+              <button
+                style={primaryBtnStyle}
+                onClick={handleNext}
+                disabled={isSaving}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 5 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <p style={{ fontFamily: 'Lora, serif', fontSize: 14, lineHeight: 1.6, margin: 0, color: 'rgba(20,18,16,0.7)' }}>
+              Optional — skip if you don&apos;t know it. Pak Har will estimate from your activity history.
+            </p>
+            <label style={{ fontFamily: 'Work Sans, sans-serif', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', opacity: 0.6 }} htmlFor="max-hr">
+              Max heart rate (bpm)
+            </label>
+            <input
+              id="max-hr"
+              type="number"
+              min={100}
+              max={220}
+              placeholder="e.g. 182"
+              value={form.maxHr}
+              onChange={(e) => setForm((f) => ({ ...f, maxHr: e.target.value }))}
+              style={{
+                fontFamily: 'Space Mono, monospace',
+                fontSize: 14,
+                padding: '10px 14px',
+                border: '1px solid #141210',
+                background: 'transparent',
+                outline: 'none',
+                width: '100%',
+                boxSizing: 'border-box' as const,
+              }}
             />
             {saveError && (
               <div
@@ -229,13 +352,13 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
                   fontFamily: T.body,
                   fontSize: 13,
                   color: T.accent,
-                  marginTop: 12,
+                  marginTop: 4,
                 }}
               >
                 {saveError}
               </div>
             )}
-            <div style={buttonRowStyle}>
+            <div style={{ display: 'flex', gap: 12, marginTop: 12, justifyContent: 'space-between' }}>
               <button style={ghostBtnStyle} onClick={handleBack} disabled={isSaving}>
                 Back
               </button>
@@ -247,7 +370,7 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
                 {isSaving ? 'Saving...' : 'Done'}
               </button>
             </div>
-          </>
+          </div>
         )}
       </div>
     </div>

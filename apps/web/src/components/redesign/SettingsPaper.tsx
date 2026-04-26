@@ -73,8 +73,10 @@ interface SettingsPaperProps {
     weeklyKmTarget: string;
     daysAvailable: string;
     biggestStruggle: string;
+    restingHr: string;
+    maxHr: string;
   };
-  onPreferenceChange: (field: 'weeklyKmTarget' | 'daysAvailable' | 'biggestStruggle', value: string) => void;
+  onPreferenceChange: (field: 'weeklyKmTarget' | 'daysAvailable' | 'biggestStruggle' | 'restingHr' | 'maxHr', value: string) => void;
   onSavePreferences: () => void;
   isSavingPreferences: boolean;
   preferencesSaved: boolean;
@@ -207,6 +209,7 @@ export function SettingsPaper({
             <p style={{ fontFamily: OL.body, fontSize: 13, lineHeight: 1.6, color: OL.muted, maxWidth: 560, margin: '0 0 12px' }}>
               What Pak Har uses when building your plan and reading your week.
             </p>
+            {/* Row 1: 3-col */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 14 }}>
               {/* Weekly km target */}
               <div>
@@ -226,7 +229,7 @@ export function SettingsPaper({
                     border: `1px solid ${OL.ink}`,
                     background: 'transparent',
                     outline: 'none',
-                    boxSizing: 'border-box',
+                    boxSizing: 'border-box' as const,
                   }}
                 />
               </div>
@@ -249,7 +252,7 @@ export function SettingsPaper({
                     border: `1px solid ${OL.ink}`,
                     background: 'transparent',
                     outline: 'none',
-                    boxSizing: 'border-box',
+                    boxSizing: 'border-box' as const,
                   }}
                 />
               </div>
@@ -270,7 +273,58 @@ export function SettingsPaper({
                     border: `1px solid ${OL.ink}`,
                     background: 'transparent',
                     outline: 'none',
-                    boxSizing: 'border-box',
+                    boxSizing: 'border-box' as const,
+                  }}
+                />
+              </div>
+            </div>
+            {/* Row 2: 2-col (HR fields) */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, marginBottom: 14 }}>
+              {/* Resting HR */}
+              <div>
+                <Caps size={8} ls={2} opacity={0.6}>Resting HR (bpm)</Caps>
+                <input
+                  type="number"
+                  min={30}
+                  max={100}
+                  placeholder="e.g. 52"
+                  value={preferences.restingHr}
+                  onChange={e => onPreferenceChange('restingHr', e.target.value)}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    marginTop: 4,
+                    fontFamily: OL.mono,
+                    fontSize: 13,
+                    padding: '6px 8px',
+                    border: `1px solid ${OL.ink}`,
+                    background: 'transparent',
+                    outline: 'none',
+                    boxSizing: 'border-box' as const,
+                  }}
+                />
+              </div>
+              {/* Max HR */}
+              <div>
+                <Caps size={8} ls={2} opacity={0.6}>Max HR (bpm)</Caps>
+                <input
+                  type="number"
+                  min={100}
+                  max={220}
+                  placeholder="e.g. 182"
+                  value={preferences.maxHr}
+                  onChange={e => onPreferenceChange('maxHr', e.target.value)}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    marginTop: 4,
+                    fontFamily: OL.mono,
+                    fontSize: 13,
+                    padding: '6px 8px',
+                    border: `1px solid ${OL.ink}`,
+                    background: 'transparent',
+                    outline: 'none',
+                    boxSizing: 'border-box' as const,
                   }}
                 />
               </div>
