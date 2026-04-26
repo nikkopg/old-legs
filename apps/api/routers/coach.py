@@ -2,6 +2,8 @@
 # Feature: Pak Har chat endpoint — Ollama streaming integration (TASK-006)
 # What was built:
 #   - POST /coach/chat — streaming coach response via Server-Sent Events
+#   - DELETE /coach/history — wipe all chat messages for the current user
+#   - DELETE /coach/reset — wipe all AI-generated content for the current user (TASK-152)
 #   - In-memory rate limiter (20 req/min per user)
 #   - Strava context injection from last 4 weeks of activities
 #   - Chat history persistence (ChatMessage model, last 10 messages as context)
@@ -15,6 +17,9 @@
 #   - User not authenticated: 401 from get_current_user dependency
 #   - Long message history: only last 10 messages sent to Ollama (not full history)
 #   - Chat role mapping: "coach" stored in DB → "assistant" sent to Ollama
+#   - DELETE /coach/history with no messages: still returns 200 (idempotent)
+#   - DELETE /coach/reset with no data: still returns 200 (idempotent)
+#   - DELETE /coach/reset does NOT delete Activity rows — only nulls AI fields
 
 import logging
 
@@ -22,10 +27,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import delete
 
 from dependencies import get_current_user
+from models.activity import Activity
 from models.chat_message import ChatMessage
+from models.training_plan import TrainingPlan
 from models.user import User
+from models.weekly_review import WeeklyReview
 from services.database import get_db
 from services.ollama import build_strava_context, stream_chat
 from services.rate_limiter import check_rate_limit
@@ -156,3 +165,78 @@ async def coach_chat(
             "X-Accel-Buffering": "no",  # Disable Nginx buffering for SSE
         },
     )
+
+
+@router.delete("/history")
+def clear_chat_history(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    DELETE /coach/history — Wipe all chat messages for the current user.
+
+    Deletes every ChatMessage row belonging to the authenticated user.
+    Idempotent — if the user has no messages the call still returns 200.
+
+    Errors:
+        401 — Not authenticated (no valid session cookie)
+    """
+    db.execute(
+        delete(ChatMessage).where(ChatMessage.user_id == current_user.id)
+    )
+    db.commit()
+    logger.info("Chat history cleared for user_id=%d", current_user.id)
+    return {"message": "History cleared"}
+
+
+@router.delete("/reset")
+def reset_ai_context(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    DELETE /coach/reset — Wipe all AI-generated content for the current user.
+
+    Executes in a single transaction:
+      1. Deletes all ChatMessage rows for the user.
+      2. Deletes all TrainingPlan rows for the user.
+      3. Deletes all WeeklyReview rows for the user.
+      4. Nulls the AI fields on all Activity rows for the user:
+         analysis, analysis_generated_at, verdict_short, verdict_tag, tone.
+         Activity rows themselves are NOT deleted — only the AI-generated columns
+         are cleared so Strava data is preserved.
+
+    Idempotent — safe to call multiple times; returns 200 even when there is
+    nothing to delete.
+
+    Errors:
+        401 — Not authenticated (no valid session cookie)
+    """
+    # Delete all chat messages
+    db.execute(delete(ChatMessage).where(ChatMessage.user_id == current_user.id))
+
+    # Delete all training plans
+    db.execute(delete(TrainingPlan).where(TrainingPlan.user_id == current_user.id))
+
+    # Delete all weekly reviews
+    db.execute(delete(WeeklyReview).where(WeeklyReview.user_id == current_user.id))
+
+    # Null out AI fields on activity rows — preserve the activity records themselves
+    (
+        db.query(Activity)
+        .filter(Activity.user_id == current_user.id)
+        .update(
+            {
+                "analysis": None,
+                "analysis_generated_at": None,
+                "verdict_short": None,
+                "verdict_tag": None,
+                "tone": None,
+            },
+            synchronize_session=False,
+        )
+    )
+
+    db.commit()
+    logger.info("AI context reset for user_id=%d", current_user.id)
+    return {"message": "Context reset"}

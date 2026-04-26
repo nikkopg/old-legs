@@ -133,6 +133,18 @@ export async function getPlanVerdict(
 }
 
 // ---------------------------------------------------------------------------
+// Coach — history management
+// ---------------------------------------------------------------------------
+
+export async function deleteChatHistory(): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>('/coach/history', { method: 'DELETE' })
+}
+
+export async function resetPakHarContext(): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>('/coach/reset', { method: 'DELETE' })
+}
+
+// ---------------------------------------------------------------------------
 // Coach — SSE streaming
 // ---------------------------------------------------------------------------
 

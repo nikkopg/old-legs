@@ -40,6 +40,7 @@ export interface ChatPaperProps {
   isStreaming: boolean;
   onSend: (text: string) => void;
   onNav: (key: string) => void;
+  onClearSession?: () => void;
 }
 
 // ---------- helpers ----------
@@ -149,7 +150,7 @@ function TeletypeLine({ message, isStreamingThisLine }: TeletypeLineProps) {
 
 // ---------- ChatPaper ----------
 
-export function ChatPaper({ messages, isStreaming, onSend, onNav }: ChatPaperProps) {
+export function ChatPaper({ messages, isStreaming, onSend, onNav, onClearSession }: ChatPaperProps) {
   const [draft, setDraft] = useState('');
   const transcriptRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -224,6 +225,31 @@ export function ChatPaper({ messages, isStreaming, onSend, onNav }: ChatPaperPro
               {isStreaming ? '● ON THE LINE' : '● OPEN'}
             </span>
           </Caps>
+
+          {/* Clear session button — only rendered when handler is provided */}
+          {onClearSession && (
+            <button
+              onClick={onClearSession}
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                fontFamily: OL.sans,
+                fontSize: 10,
+                letterSpacing: 2,
+                textTransform: 'uppercase',
+                fontWeight: 600,
+                color: OL.ink,
+                opacity: 0.6,
+                transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.6'; }}
+            >
+              [ CLEAR SESSION ]
+            </button>
+          )}
 
           <Caps size={9} ls={2} opacity={0.7}>
             Jakarta · GMT+7

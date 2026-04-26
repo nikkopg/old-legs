@@ -1,10 +1,10 @@
 "use client";
 
 // READY FOR QA
-// Component: SettingsPaper (TASK-142)
+// Component: SettingsPaper (TASK-142 + TASK-152)
 // What was built: Full "The Desk" settings page in the tabloid newspaper layout.
 //   Renders subscriber record, editor's voice selector, delivery preferences toggles,
-//   cancel subscription section, sidebar stats, and colophon.
+//   cancel subscription section (with reset context button), sidebar stats, and colophon.
 // Edge cases to test:
 //   - stravaAthleteId=null renders '—' in subscriber record
 //   - voice='gentle'/'standard'/'unfiltered' shows correct active state (bold border + ✓ On)
@@ -13,6 +13,10 @@
 //   - toggle knob animates left↔right via marginLeft transition
 //   - onDisconnect fires on cancel button click
 //   - onNav fires with correct nav key
+//   - Reset Context: first click shows warning + confirm/cancel; second click fires onResetContext
+//   - Reset Context: during request shows disabled "Resetting..." state
+//   - Reset Context: cancel link restores initial button state
+//   - Reset Context: onResetContext prop omitted → button still renders (no-op on confirm)
 
 import React from 'react';
 import {
@@ -61,6 +65,10 @@ interface SettingsPaperProps {
   onToggleDelivery: (key: keyof DeliveryPreferences) => void;
   onDisconnect: () => void;
   onNav: (key: string) => void;
+  onResetContext?: () => void;
+  resetContextState?: 'idle' | 'confirming' | 'loading' | 'error';
+  onResetContextConfirm?: () => void;
+  onResetContextCancel?: () => void;
 }
 
 // ---------- component ----------
@@ -74,6 +82,10 @@ export function SettingsPaper({
   onToggleDelivery,
   onDisconnect,
   onNav,
+  onResetContext,
+  resetContextState = 'idle',
+  onResetContextConfirm,
+  onResetContextCancel,
 }: SettingsPaperProps) {
   const voiceOptions: Array<{ opt: VoiceLevel; label: string; description: string }> = [
     { opt: 'gentle', label: 'Gentle', description: 'Mentor. Still honest. Less bite.' },
@@ -284,23 +296,148 @@ export function SettingsPaper({
             }}>
               Disconnect Strava and delete your data. No farewell edition. No retention dance. You come back, you come back.
             </p>
-            <button
-              onClick={onDisconnect}
-              style={{
-                background: 'transparent',
-                color: OL.accent,
-                border: `1px solid ${OL.accent}`,
-                padding: '10px 20px',
-                fontFamily: OL.sans,
-                fontSize: 11,
-                letterSpacing: 3,
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                cursor: 'pointer',
-              }}
-            >
-              Cancel Subscription →
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'flex-start' }}>
+              <button
+                onClick={onDisconnect}
+                style={{
+                  background: 'transparent',
+                  color: OL.accent,
+                  border: `1px solid ${OL.accent}`,
+                  padding: '10px 20px',
+                  fontFamily: OL.sans,
+                  fontSize: 11,
+                  letterSpacing: 3,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel Subscription →
+              </button>
+
+              {/* Reset Context */}
+              <div>
+                {resetContextState === 'idle' && (
+                  <button
+                    onClick={onResetContext}
+                    style={{
+                      background: 'transparent',
+                      color: OL.accent,
+                      border: `1px solid ${OL.accent}`,
+                      padding: '10px 20px',
+                      fontFamily: OL.sans,
+                      fontSize: 11,
+                      letterSpacing: 3,
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Reset Pak Har&apos;s Context →
+                  </button>
+                )}
+
+                {resetContextState === 'confirming' && (
+                  <div>
+                    <p style={{
+                      fontFamily: OL.body,
+                      fontSize: 13,
+                      lineHeight: 1.6,
+                      margin: '0 0 10px',
+                      maxWidth: 480,
+                      color: OL.ink,
+                    }}>
+                      This wipes all of Pak Har&apos;s memory of your runs — chat history, training plans, weekly reviews, and all AI analysis. It cannot be undone.
+                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      <button
+                        onClick={onResetContextConfirm}
+                        style={{
+                          background: 'transparent',
+                          color: OL.accent,
+                          border: `1px solid ${OL.accent}`,
+                          padding: '10px 20px',
+                          fontFamily: OL.sans,
+                          fontSize: 11,
+                          letterSpacing: 3,
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Confirm Reset →
+                      </button>
+                      <button
+                        onClick={onResetContextCancel}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          fontFamily: OL.body,
+                          fontSize: 13,
+                          color: OL.muted,
+                          cursor: 'pointer',
+                          padding: 0,
+                          textDecoration: 'underline',
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {resetContextState === 'loading' && (
+                  <button
+                    disabled
+                    style={{
+                      background: 'transparent',
+                      color: OL.muted,
+                      border: `1px solid ${OL.muted}`,
+                      padding: '10px 20px',
+                      fontFamily: OL.sans,
+                      fontSize: 11,
+                      letterSpacing: 3,
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      cursor: 'not-allowed',
+                      opacity: 0.5,
+                    }}
+                  >
+                    Resetting...
+                  </button>
+                )}
+
+                {resetContextState === 'error' && (
+                  <div>
+                    <p style={{
+                      fontFamily: OL.body,
+                      fontSize: 13,
+                      color: OL.accent,
+                      margin: '0 0 10px',
+                    }}>
+                      Reset failed. Try again.
+                    </p>
+                    <button
+                      onClick={onResetContext}
+                      style={{
+                        background: 'transparent',
+                        color: OL.accent,
+                        border: `1px solid ${OL.accent}`,
+                        padding: '10px 20px',
+                        fontFamily: OL.sans,
+                        fontSize: 11,
+                        letterSpacing: 3,
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Reset Pak Har&apos;s Context →
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </section>
         </div>
 

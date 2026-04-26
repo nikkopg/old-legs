@@ -20,11 +20,11 @@
 import { useRouter } from 'next/navigation'
 import { ChatPaper } from '@/components/redesign/ChatPaper'
 import { useChatStore } from '@/store/chat'
-import { streamChat } from '@/lib/api'
+import { streamChat, deleteChatHistory } from '@/lib/api'
 import type { ApiError } from '@/types/api'
 
 export default function CoachPage() {
-  const { messages, isStreaming, addMessage, appendToLastAssistant, setStreaming } =
+  const { messages, isStreaming, addMessage, appendToLastAssistant, setStreaming, clear } =
     useChatStore()
 
   const router = useRouter()
@@ -58,6 +58,15 @@ export default function CoachPage() {
     }
   }
 
+  async function handleClearSession() {
+    try {
+      await deleteChatHistory()
+    } catch (err) {
+      console.error('Failed to clear chat history on server:', err)
+    }
+    clear()
+  }
+
   function onNav(key: string) {
     const routes: Record<string, string> = {
       dashboard: '/dashboard',
@@ -75,6 +84,7 @@ export default function CoachPage() {
       isStreaming={isStreaming}
       onSend={handleSend}
       onNav={onNav}
+      onClearSession={handleClearSession}
     />
   )
 }
