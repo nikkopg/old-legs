@@ -423,7 +423,7 @@ export function FrontPage({
 
         {/* Footer rail */}
         <div className="flex justify-between items-baseline mt-8 pt-3 border-t border-[#141210] font-sans text-[10px] uppercase tracking-widest opacity-70">
-          <span>Filed at Senayan · Jakarta</span>
+          <span>Filed at Braga · Bandung</span>
           <span>&#34;Besok pagi, lari lagi ya.&#34;</span>
           <span>— continued page 2: Plan for the week —</span>
         </div>

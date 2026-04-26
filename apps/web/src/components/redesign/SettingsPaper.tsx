@@ -647,7 +647,7 @@ export function SettingsPaper({
               color: OL.muted,
               margin: '6px 0 0',
             }}>
-              Old Legs Daily is typeset in Abril Fatface and Lora. Dispatches are printed by an editor named Pak Har. Built in Jakarta, 2026.
+              Old Legs Daily is typeset in Abril Fatface and Lora. Dispatches are printed by an editor named Pak Har. Built in Bandung, 2026.
             </p>
           </div>
         </aside>

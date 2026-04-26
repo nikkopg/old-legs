@@ -252,7 +252,7 @@ export function ChatPaper({ messages, isStreaming, onSend, onNav, onClearSession
           )}
 
           <Caps size={9} ls={2} opacity={0.7}>
-            Jakarta · GMT+7
+            Bandung · GMT+7
           </Caps>
         </div>
       </div>

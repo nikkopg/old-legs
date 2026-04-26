@@ -322,7 +322,7 @@ export function NewspaperChrome({
             <Caps size={10} ls={6} opacity={0.75}>
               {subtitle !== undefined
                 ? subtitle
-                : '· No Cheerleading Since 1976 · Jakarta Edition ·'}
+                : '· No Cheerleading Since 1976 · Bandung Edition ·'}
             </Caps>
           </div>
         )}

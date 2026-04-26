@@ -58,7 +58,7 @@ export function LandingPage({ onConnect, connectState = 'idle' }: LandingPagePro
       >
         <Caps size={10} ls={2} opacity={0.75}>Vol. I · Issue No. 1</Caps>
         <Caps size={10} ls={2} opacity={0.75}>The Runner&apos;s Paper</Caps>
-        <Caps size={10} ls={2} opacity={0.75}>Jakarta Edition</Caps>
+        <Caps size={10} ls={2} opacity={0.75}>Bandung Edition</Caps>
       </div>
 
       <Rule thick gap={12} />
@@ -213,7 +213,7 @@ export function LandingPage({ onConnect, connectState = 'idle' }: LandingPagePro
         }}
       >
         <Caps size={9} ls={2} opacity={0.6}>
-          Printed at Senayan · Jakarta
+          Printed at Braga · Bandung
         </Caps>
         <Caps size={9} ls={2} opacity={0.6}>
           — filed daily, rain or otherwise —

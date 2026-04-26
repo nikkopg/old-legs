@@ -922,7 +922,7 @@ export function DashboardPaper({
       </div>
 
       <FooterRail
-        left="Filed at Senayan · Jakarta"
+        left="Filed at Braga · Bandung"
         center="Page 1 · Front"
         right="— continued page 2: Plan for the week —"
       />
