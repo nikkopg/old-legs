@@ -50,6 +50,11 @@ Context about the runner (last 4 weeks of activity):
 Runner's stated preferences:
 {user_preferences}
 
+Planning rules — follow these exactly:
+- Days available: the runner has stated how many days per week they can run. Schedule exactly that many running days (type: easy, tempo, long, or cross). The remaining days must be rest (type: rest, duration_minutes: 0).
+- Weekly km target: distribute running days so the total planned distance across the week lands close to the runner's stated weekly km target. Adjust up or down by no more than 15% based on recent training load — if they've been undertraining, stay at the lower end; if they've been consistent, you may nudge toward the top.
+- Biggest struggle: read the runner's stated biggest struggle and directly address it in the plan structure. If consistency is the struggle, keep sessions short and achievable. If pace is the struggle, include one tempo session. If the struggle is injury or fatigue, load the rest days accordingly.
+
 Output ONLY valid JSON. No preamble, no explanation, no text before or after the JSON block.
 The JSON must have exactly this structure:
 
