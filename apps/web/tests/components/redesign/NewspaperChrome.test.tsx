@@ -15,8 +15,8 @@ describe('NewspaperChrome', () => {
   })
 
   it('renders the section prop string', () => {
-    render(<NewspaperChrome section="Front Page · Weekly Edition" />)
-    expect(screen.getByText(/Front Page · Weekly Edition/)).toBeDefined()
+    render(<NewspaperChrome section="Front Page · Weekly Edition" nav={nav} />)
+    expect(screen.getByText(/§ Front Page · Weekly Edition/)).toBeDefined()
   })
 
   it('renders nav items when nav prop is provided', () => {

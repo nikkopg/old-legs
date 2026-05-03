@@ -59,7 +59,7 @@ def test_list_activities_empty(authenticated_client: TestClient):
         response = authenticated_client.get("/activities")
 
     assert response.status_code == 200
-    assert response.json() == []
+    assert response.json()["items"] == []
 
 
 def test_list_activities_returns_existing(
@@ -74,8 +74,8 @@ def test_list_activities_returns_existing(
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["strava_activity_id"] == "strava_act_001"
+    assert data["total"] == 1
+    assert data["items"][0]["strava_activity_id"] == "strava_act_001"
 
 
 def test_list_activities_syncs_new_from_strava(
@@ -107,8 +107,8 @@ def test_list_activities_syncs_new_from_strava(
 
     assert response.status_code == 200
     data = response.json()
-    assert len(data) == 1
-    assert data[0]["distance_km"] == pytest.approx(5.0, abs=0.01)
+    assert data["total"] == 1
+    assert data["items"][0]["distance_km"] == pytest.approx(5.0, abs=0.01)
 
 
 # ---------------------------------------------------------------------------

@@ -31,6 +31,18 @@ from main import app
 
 
 # ---------------------------------------------------------------------------
+# Rate limiter reset
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    from services.rate_limiter import _request_log
+    _request_log.clear()
+    yield
+    _request_log.clear()
+
+
+# ---------------------------------------------------------------------------
 # Database fixtures
 # ---------------------------------------------------------------------------
 
