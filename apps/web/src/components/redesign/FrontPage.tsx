@@ -129,8 +129,8 @@ function timeAgo(isoString: string): string {
 function DoubleRule() {
   return (
     <div>
-      <div className="border-t-[3px] border-[#141210]" />
-      <div className="border-t border-[#141210] mt-[3px]" />
+      <div className="border-t-[3px] border-[var(--color-ink)]" />
+      <div className="border-t border-[var(--color-ink)] mt-[3px]" />
     </div>
   );
 }
@@ -177,7 +177,7 @@ export function FrontPage({
             </div>
           </div>
         ) : (
-          <div className="pb-[14px] mt-5 border-b-[3px] border-[#141210] cursor-pointer" onClick={() => onActivityClick(lead.id)}>
+          <div className="pb-[14px] mt-5 border-b-[3px] border-[var(--color-ink)] cursor-pointer" onClick={() => onActivityClick(lead.id)}>
             {/* Lead header row */}
             <div className="flex justify-between items-center mb-3">
               <span className="font-sans text-[10px] uppercase tracking-widest opacity-70">
@@ -201,14 +201,14 @@ export function FrontPage({
                 </div>
                 <div className="font-body text-[14px] leading-relaxed mb-3">
                   Pak Har&#39;s full dispatch is inside — splits, zones, the detail.{' '}
-                  <span className="text-[#8a2a12] font-sans text-[11px] font-bold uppercase tracking-[0.125rem]">
+                  <span className="text-[var(--color-accent)] font-sans text-[11px] font-bold uppercase tracking-[0.125rem]">
                     Read on →
                   </span>
                 </div>
               </div>
 
               {/* Right col — Scoreboard */}
-              <div className="border-[3px] border-[#141210] p-[14px_18px] bg-[rgba(20,18,16,0.02)]">
+              <div className="border-[3px] border-[var(--color-ink)] p-[14px_18px] bg-[var(--color-paper-soft)]">
                 <div className="font-sans text-[9px] uppercase tracking-[0.2em] opacity-60 mb-3">
                   The Scoreboard
                 </div>
@@ -275,7 +275,7 @@ export function FrontPage({
                   return (
                     <div
                       key={activity.id}
-                      className="grid grid-cols-[76px_1fr_260px] gap-[18px] py-3.5 border-b border-[#141210] last:border-b-0 cursor-pointer hover:bg-[rgba(20,18,16,0.02)] transition-colors"
+                      className="grid grid-cols-[76px_1fr_260px] gap-[18px] py-3.5 border-b border-[var(--color-ink)] last:border-b-0 cursor-pointer hover:bg-[var(--color-paper-soft)] transition-colors"
                       onClick={() => onActivityClick(activity.id)}
                     >
                       {/* Date gutter */}
@@ -310,7 +310,7 @@ export function FrontPage({
                       {/* Stats col */}
                       <div className="text-right" style={{ fontFamily: 'var(--font-mono-tabloid)', fontVariantNumeric: 'tabular-nums' }}>
                         {isMissed ? (
-                          <div className="font-display text-[32px] text-[#8a2a12]">—</div>
+                          <div className="font-display text-[32px] text-[var(--color-accent)]">—</div>
                         ) : (
                           <>
                             <div className="text-[20px] font-bold">
@@ -336,7 +336,7 @@ export function FrontPage({
           </div>
 
           {/* Sidebar */}
-          <aside className="w-[260px] shrink-0 border-l border-[#141210] pl-[18px]">
+          <aside className="w-[260px] shrink-0 border-l border-[var(--color-ink)] pl-[18px]">
             {/* The Standings */}
             <div className="font-sans text-[10px] uppercase tracking-[0.2em] font-bold">
               The Standings
@@ -356,12 +356,12 @@ export function FrontPage({
                 >
                   {entry.label}
                 </span>
-                <div className="h-[10px] bg-[rgba(20,18,16,0.08)] border border-[#141210] relative">
+                <div className="h-[10px] bg-[var(--color-paper-soft-3)] border border-[var(--color-ink)] relative">
                   <div
                     className="absolute inset-y-0 left-0"
                     style={{
                       width: `${Math.min((entry.km / 40) * 100, 100)}%`,
-                      backgroundColor: entry.current ? '#8a2a12' : '#141210',
+                      backgroundColor: entry.current ? 'var(--color-accent)' : 'var(--color-ink)',
                     }}
                   />
                 </div>
@@ -382,7 +382,7 @@ export function FrontPage({
             </div>
 
             {/* Hairline */}
-            <div className="border-t border-[rgba(20,18,16,0.3)] my-4" />
+            <div className="border-t border-[var(--color-hairline)] my-4" />
 
             {/* Notices */}
             <div className="font-sans text-[10px] uppercase tracking-[0.2em] font-bold mb-2">
@@ -394,7 +394,7 @@ export function FrontPage({
                 <button
                   onClick={isSyncing ? undefined : onRefreshSync}
                   disabled={isSyncing}
-                  className="font-sans text-[10px] uppercase tracking-widest underline decoration-[#141210] cursor-pointer disabled:opacity-40 disabled:cursor-default"
+                  className="font-sans text-[10px] uppercase tracking-widest underline decoration-[var(--color-ink)] cursor-pointer disabled:opacity-40 disabled:cursor-default"
                 >
                   {isSyncing ? 'Syncing_' : 'Tap Refresh for latest'}
                 </button>
@@ -406,7 +406,7 @@ export function FrontPage({
             </div>
 
             {/* Hairline */}
-            <div className="border-t border-[rgba(20,18,16,0.3)] my-4" />
+            <div className="border-t border-[var(--color-hairline)] my-4" />
 
             {/* Coach on Duty */}
             <div className="font-sans text-[10px] uppercase tracking-[0.2em] font-bold mb-1">
@@ -422,7 +422,7 @@ export function FrontPage({
         </div>
 
         {/* Footer rail */}
-        <div className="flex justify-between items-baseline mt-8 pt-3 border-t border-[#141210] font-sans text-[10px] uppercase tracking-widest opacity-70">
+        <div className="flex justify-between items-baseline mt-8 pt-3 border-t border-[var(--color-ink)] font-sans text-[10px] uppercase tracking-widest opacity-70">
           <span>Filed at Braga · Bandung</span>
           <span>&#34;Besok pagi, lari lagi ya.&#34;</span>
           <span>— continued page 2: Plan for the week —</span>

@@ -3,25 +3,38 @@
 @import "tailwindcss";
 
 @theme inline {
-  /* ---- Colors — dark theme (existing) ---- */
+  /* ---- Colors — legacy dark fitness-app palette (unused by tabloid pages, kept for back-compat) ---- */
   --color-background: #0f0f0f;
   --color-surface: #1a1a1a;
   --color-surface-raised: #242424;
   --color-text-primary: #f0f0f0;
   --color-text-muted: #888888;
-  --color-accent: #e06c2a;
   --color-error: #c0392b;
   --color-success: #27ae60;
   --color-border: #2a2a2a;
 
-  /* ---- Colors — tabloid palette (new) ---- */
-  --color-paper: #f4efe4;
-  --color-ink: #141210;
-  --color-accent-tabloid: #8a2a12;
-  --color-muted-tabloid: rgba(20, 18, 16, 0.55);
-  --color-hairline: rgba(20, 18, 16, 0.35);
-  --color-frame: #1a1612;
-  --color-data-fill-bg: rgba(20, 18, 16, 0.08);
+  /* ---- Colors — tabloid palette (light, default) ----
+     Dark counterparts live in the [data-theme="dark"] block below globals.
+     ANY component color used in tabloid pages MUST come from one of these
+     tokens — never hardcode hex/rgba in components, or it won't theme. */
+  --color-paper:           #f4efe4;
+  --color-paper-soft:      rgba(20, 18, 16, 0.02);   /* faint paper tint — lift on cards/inputs/today-row */
+  --color-paper-soft-2:    rgba(20, 18, 16, 0.04);   /* slightly stronger lift */
+  --color-paper-soft-3:    rgba(20, 18, 16, 0.08);   /* mini-bar dim track, skeleton block */
+  --color-ink:             #141210;
+  --color-ink-on-accent:   #ffffff;                  /* text/icon on accent fill */
+  --color-ink-on-ink:      #f4efe4;                  /* text/icon on ink fill */
+  --color-accent:          #8a2a12;
+  --color-accent-tabloid:  #8a2a12;                  /* legacy alias */
+  --color-accent-soft:     rgba(138, 42, 18, 0.04);
+  --color-accent-soft-2:   rgba(138, 42, 18, 0.06);
+  --color-muted:           rgba(20, 18, 16, 0.55);
+  --color-muted-tabloid:   rgba(20, 18, 16, 0.55);   /* legacy alias */
+  --color-muted-soft:      rgba(20, 18, 16, 0.40);
+  --color-hairline:        rgba(20, 18, 16, 0.30);
+  --color-hairline-strong: rgba(20, 18, 16, 0.35);
+  --color-frame:           #1a1612;
+  --color-data-fill-bg:    rgba(20, 18, 16, 0.08);   /* legacy alias of paper-soft-3 */
 
   /* ---- Typography — dark theme (existing) ---- */
   --font-sans: var(--font-inter);
@@ -50,10 +63,35 @@
   --shadow-raised: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
+/* ---- Dark theme — tobacco ----
+   Activated by [data-theme="dark"] on <html>. Default is light (no attr).
+   Persisted in localStorage.theme. SSR init script lives in app/layout.tsx
+   to avoid a flash of light on dark users. */
+[data-theme="dark"] {
+  --color-paper:           #1a1410;                  /* deep tobacco brown */
+  --color-paper-soft:      rgba(236, 226, 204, 0.03);
+  --color-paper-soft-2:    rgba(236, 226, 204, 0.06);
+  --color-paper-soft-3:    rgba(236, 226, 204, 0.10);
+  --color-ink:             #ece2cc;                  /* warm cream */
+  --color-ink-on-accent:   #1a1410;                  /* dark paper sits on accent fill */
+  --color-ink-on-ink:      #1a1410;                  /* dark paper sits on ink fill */
+  --color-accent:          #d97a4a;                  /* kindled orange — readable on dark */
+  --color-accent-tabloid:  #d97a4a;
+  --color-accent-soft:     rgba(217, 122, 74, 0.10);
+  --color-accent-soft-2:   rgba(217, 122, 74, 0.14);
+  --color-muted:           rgba(236, 226, 204, 0.55);
+  --color-muted-tabloid:   rgba(236, 226, 204, 0.55);
+  --color-muted-soft:      rgba(236, 226, 204, 0.40);
+  --color-hairline:        rgba(236, 226, 204, 0.25);
+  --color-hairline-strong: rgba(236, 226, 204, 0.35);
+  --color-frame:           #0a0805;                  /* darker than paper, sits behind it */
+  --color-data-fill-bg:    rgba(236, 226, 204, 0.10);
+}
+
 /* ---- Base styles ---- */
 body {
-  background-color: var(--color-background);
-  color: var(--color-text-primary);
+  background-color: var(--color-frame);
+  color: var(--color-ink);
   font-family: var(--font-sans), sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -70,15 +108,15 @@ body {
   padding-left: 1rem;
 }
 
-/* Scrollbar — dark, minimal */
+/* Scrollbar — themed to frame */
 ::-webkit-scrollbar {
   width: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: var(--color-surface);
+  background: var(--color-frame);
 }
 ::-webkit-scrollbar-thumb {
-  background: #333;
+  background: var(--color-muted-soft);
   border-radius: 3px;
 }
 
@@ -94,6 +132,39 @@ body {
 }
 .border-hairline {
   border-color: var(--color-hairline);
+}
+.border-hairline-strong {
+  border-color: var(--color-hairline-strong);
+}
+.bg-paper-soft {
+  background-color: var(--color-paper-soft);
+}
+.bg-paper-soft-2 {
+  background-color: var(--color-paper-soft-2);
+}
+.bg-paper-soft-3 {
+  background-color: var(--color-paper-soft-3);
+}
+.bg-accent-soft {
+  background-color: var(--color-accent-soft);
+}
+.bg-accent-soft-2 {
+  background-color: var(--color-accent-soft-2);
+}
+.text-accent {
+  color: var(--color-accent);
+}
+.text-muted {
+  color: var(--color-muted);
+}
+.bg-ink {
+  background-color: var(--color-ink);
+}
+.text-ink-on-accent {
+  color: var(--color-ink-on-accent);
+}
+.text-ink-on-ink {
+  color: var(--color-ink-on-ink);
 }
 .text-muted-tabloid {
   color: var(--color-muted-tabloid);

@@ -17,13 +17,26 @@
 import React from 'react';
 
 // ---------- design tokens ----------
+// All colors are CSS-var refs so they respond to [data-theme="dark"] on <html>.
+// Token defs live in apps/web/src/app/globals.css.
+// NEVER hardcode hex/rgba colors in tabloid components — add a token and reference it here.
 
 export const OL = {
-  paper: '#f4efe4',
-  ink: '#141210',
-  accent: '#8a2a12',
-  muted: 'rgba(20,18,16,0.55)',
-  hair: 'rgba(20,18,16,0.3)',
+  paper: 'var(--color-paper)',
+  paperSoft: 'var(--color-paper-soft)',
+  paperSoft2: 'var(--color-paper-soft-2)',
+  paperSoft3: 'var(--color-paper-soft-3)',
+  ink: 'var(--color-ink)',
+  inkOnAccent: 'var(--color-ink-on-accent)',
+  inkOnInk: 'var(--color-ink-on-ink)',
+  accent: 'var(--color-accent)',
+  accentSoft: 'var(--color-accent-soft)',
+  accentSoft2: 'var(--color-accent-soft-2)',
+  muted: 'var(--color-muted)',
+  mutedSoft: 'var(--color-muted-soft)',
+  hair: 'var(--color-hairline)',
+  hairStrong: 'var(--color-hairline-strong)',
+  frame: 'var(--color-frame)',
   display: '"Abril Fatface", "Playfair Display", Didot, serif',
   body: '"Lora", Georgia, serif',
   sans: '"Work Sans", "Inter", sans-serif',
@@ -152,18 +165,23 @@ interface MiniBarProps {
   pct: number;
   accent?: boolean;
   height?: number;
-  dim?: number;
+  /** Background tint key. 'soft' = paper-soft (very faint), 'soft-3' = paper-soft-3 (default, used in dispatches). */
+  dim?: 'soft' | 'soft-2' | 'soft-3';
 }
 
-export function MiniBar({ pct, accent, height = 10, dim = 0.08 }: MiniBarProps) {
+export function MiniBar({ pct, accent, height = 10, dim = 'soft-3' }: MiniBarProps) {
   const clampedPct = Math.max(0, Math.min(100, pct));
+  const dimToken =
+    dim === 'soft' ? OL.paperSoft :
+    dim === 'soft-2' ? OL.paperSoft2 :
+    OL.paperSoft3;
   return (
     <span
       style={{
         display: 'inline-block',
         width: '100%',
         height,
-        background: `rgba(20,18,16,${dim})`,
+        background: dimToken,
         border: `1px solid ${OL.ink}`,
         verticalAlign: 'middle',
       }}

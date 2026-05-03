@@ -114,7 +114,7 @@ export function LandingPage({ onConnect, connectState = 'idle' }: LandingPagePro
               onClick={onConnect}
               style={{
                 background: OL.accent,
-                color: '#fff',
+                color: 'var(--color-ink-on-ink)',
                 border: 'none',
                 padding: '16px 40px',
                 fontFamily: OL.sans,
@@ -150,7 +150,7 @@ export function LandingPage({ onConnect, connectState = 'idle' }: LandingPagePro
                 style={{
                   border: `1px solid ${OL.accent}`,
                   padding: '10px 14px',
-                  background: 'rgba(138,42,18,0.06)',
+                  background: 'var(--color-accent-soft-2)',
                   textAlign: 'left',
                 }}
               >
@@ -179,7 +179,7 @@ export function LandingPage({ onConnect, connectState = 'idle' }: LandingPagePro
                 style={{
                   marginTop: 10,
                   background: OL.ink,
-                  color: '#fff',
+                  color: 'var(--color-ink-on-ink)',
                   border: 'none',
                   padding: '14px 36px',
                   fontFamily: OL.sans,

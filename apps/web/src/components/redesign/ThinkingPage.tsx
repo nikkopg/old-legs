@@ -123,7 +123,7 @@ export function ThinkingPage({ context, onNav }: ThinkingPageProps) {
             style={{
               border: `1px solid ${OL.ink}`,
               padding: '14px 16px',
-              background: 'rgba(20,18,16,0.02)',
+              background: 'var(--color-paper-soft)',
             }}
           >
             {steps.map((step, i) => {
@@ -201,7 +201,7 @@ export function ThinkingPage({ context, onNav }: ThinkingPageProps) {
                   display: 'grid',
                   gridTemplateColumns: '14px 1fr',
                   gap: 6,
-                  borderBottom: `1px dotted rgba(20,18,16,0.3)`,
+                  borderBottom: `1px dotted var(--color-hairline)`,
                   padding: '4px 0',
                 }}
               >

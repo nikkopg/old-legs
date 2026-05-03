@@ -239,7 +239,7 @@ export function DashboardPaper({
               marginTop: 16,
               border: `3px solid ${OL.ink}`,
               padding: '14px 18px',
-              background: 'rgba(20,18,16,0.02)',
+              background: 'var(--color-paper-soft)',
               display: 'grid',
               gridTemplateColumns: 'repeat(4, 1fr)',
               gap: '10px 18px',
@@ -322,7 +322,7 @@ export function DashboardPaper({
                 border: `3px solid ${OL.ink}`,
                 padding: '12px 14px',
                 marginTop: 8,
-                background: 'rgba(138,42,18,0.04)',
+                background: 'var(--color-accent-soft)',
               }}
             >
               <div

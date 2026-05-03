@@ -253,7 +253,7 @@ export function PlanPaper({
               style={{
                 border: `3px solid ${OL.ink}`,
                 padding: '12px 14px',
-                background: 'rgba(20,18,16,0.02)',
+                background: 'var(--color-paper-soft)',
               }}
             >
               <Caps size={9} ls={3} opacity={0.7}>Week At A Glance</Caps>
@@ -331,9 +331,9 @@ export function PlanPaper({
                     alignItems: 'start',
                     borderBottom: isLast
                       ? `3px solid ${OL.ink}`
-                      : `1px dotted rgba(20,18,16,0.3)`,
+                      : `1px dotted var(--color-hairline)`,
                     borderLeft: isToday ? `3px solid ${OL.accent}` : '3px solid transparent',
-                    background: isToday ? 'rgba(138,42,18,0.04)' : 'transparent',
+                    background: isToday ? 'var(--color-accent-soft)' : 'transparent',
                     opacity: isRest ? 0.55 : 1,
                   }}
                 >
@@ -757,7 +757,7 @@ export function PlanPaper({
                 letterSpacing: 3,
                 textTransform: 'uppercase',
                 fontWeight: 600,
-                background: isGenerating ? 'rgba(20,18,16,0.4)' : OL.ink,
+                background: isGenerating ? 'var(--color-muted-soft)' : OL.ink,
                 border: 'none',
                 padding: '10px 20px',
                 cursor: isGenerating ? 'not-allowed' : 'pointer',

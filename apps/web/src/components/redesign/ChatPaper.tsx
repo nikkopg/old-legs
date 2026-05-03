@@ -112,7 +112,7 @@ function TeletypeLine({ message, isStreamingThisLine }: TeletypeLineProps) {
         <span
           style={{
             flex: 1,
-            borderBottom: `1px dotted rgba(20,18,16,0.3)`,
+            borderBottom: `1px dotted var(--color-hairline)`,
             transform: 'translateY(-4px)',
           }}
         />
@@ -204,7 +204,7 @@ export function ChatPaper({ messages, isStreaming, onSend, onNav, onClearSession
           style={{
             border: `1px solid ${OL.ink}`,
             padding: '10px 14px',
-            background: 'rgba(20,18,16,0.02)',
+            background: 'var(--color-paper-soft)',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
@@ -282,7 +282,7 @@ export function ChatPaper({ messages, isStreaming, onSend, onNav, onClearSession
             top: 12,
             bottom: 12,
             width: 6,
-            borderLeft: '1px dashed rgba(20,18,16,0.3)',
+            borderLeft: '1px dashed var(--color-hairline)',
           }}
         />
 
@@ -354,7 +354,7 @@ export function ChatPaper({ messages, isStreaming, onSend, onNav, onClearSession
           disabled={!isButtonActive}
           style={{
             background: isButtonActive ? OL.accent : 'transparent',
-            color: isButtonActive ? '#fff' : OL.ink,
+            color: isButtonActive ? 'var(--color-ink-on-ink)' : OL.ink,
             border: `1px solid ${isButtonActive ? OL.accent : OL.ink}`,
             fontFamily: OL.sans,
             fontSize: 10,
@@ -429,7 +429,7 @@ export function ChatPaper({ messages, isStreaming, onSend, onNav, onClearSession
                   display: 'grid',
                   gridTemplateColumns: '70px 1fr',
                   gap: 8,
-                  borderBottom: '1px dotted rgba(20,18,16,0.3)',
+                  borderBottom: '1px dotted var(--color-hairline)',
                   padding: '3px 0',
                 }}
               >

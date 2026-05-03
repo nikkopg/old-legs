@@ -14,9 +14,9 @@ interface ToneBadgeProps {
 }
 
 const toneClasses: Record<ToneBadgeProps['tone'], string> = {
-  critical: 'bg-[#8a2a12] text-white',
-  good: 'bg-[#141210] text-white',
-  neutral: 'bg-transparent border border-[#141210] text-[#141210]',
+  critical: 'bg-accent text-[var(--color-ink-on-accent)]',
+  good: 'bg-ink text-[var(--color-ink-on-ink)]',
+  neutral: 'bg-transparent border border-[var(--color-ink)] text-[var(--color-ink)]',
 };
 
 export function ToneBadge({ tone, children, className = '' }: ToneBadgeProps) {

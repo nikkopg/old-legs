@@ -49,6 +49,8 @@ interface UserStats {
 
 type VoiceLevel = 'gentle' | 'standard' | 'unfiltered';
 
+type Theme = 'light' | 'dark';
+
 interface DeliveryPreferences {
   dispatchAfterRun: boolean;
   weeklyPlanMonday: boolean;
@@ -61,8 +63,10 @@ interface SettingsPaperProps {
   stats: UserStats;
   voice: VoiceLevel;
   deliveryPrefs: DeliveryPreferences;
+  theme: Theme;
   onVoiceChange: (v: VoiceLevel) => void;
   onToggleDelivery: (key: keyof DeliveryPreferences) => void;
+  onThemeChange: (t: Theme) => void;
   onDisconnect: () => void;
   onNav: (key: string) => void;
   onResetContext?: () => void;
@@ -90,8 +94,10 @@ export function SettingsPaper({
   stats,
   voice,
   deliveryPrefs,
+  theme,
   onVoiceChange,
   onToggleDelivery,
+  onThemeChange,
   onDisconnect,
   onNav,
   onResetContext,
@@ -192,7 +198,7 @@ export function SettingsPaper({
                 <div
                   key={label}
                   style={{
-                    borderLeft: `1px solid rgba(20,18,16,0.3)`,
+                    borderLeft: `1px solid var(--color-hairline)`,
                     paddingLeft: 10,
                   }}
                 >
@@ -383,7 +389,7 @@ export function SettingsPaper({
                       border: `${active ? 3 : 1}px solid ${OL.ink}`,
                       padding: '10px 12px',
                       cursor: 'pointer',
-                      background: active ? 'rgba(20,18,16,0.03)' : 'transparent',
+                      background: active ? 'var(--color-paper-soft-2)' : 'transparent',
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -415,7 +421,66 @@ export function SettingsPaper({
             </div>
           </section>
 
-          {/* Section 4 — Delivery Preferences */}
+          {/* Section 4 — Reading Light (theme toggle) */}
+          <section style={{ padding: '14px 0', borderBottom: `1px solid ${OL.ink}` }}>
+            <SectionLabel right={theme === 'dark' ? 'off' : 'on'}>Reading Light</SectionLabel>
+            <p style={{
+              fontFamily: OL.body,
+              fontSize: 13,
+              lineHeight: 1.6,
+              color: OL.muted,
+              maxWidth: 560,
+              margin: '0 0 10px',
+            }}>
+              The lamp on the desk. Turn it off and the paper goes tobacco-brown for late editions.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+              {([
+                { opt: 'light', label: 'On', description: 'Cream paper, dark ink. The default.' },
+                { opt: 'dark',  label: 'Off', description: 'Tobacco paper, warm cream type. Easier after dark.' },
+              ] as Array<{ opt: Theme; label: string; description: string }>).map(({ opt, label, description }) => {
+                const active = theme === opt;
+                return (
+                  <div
+                    key={opt}
+                    onClick={() => onThemeChange(opt)}
+                    style={{
+                      border: `${active ? 3 : 1}px solid ${OL.ink}`,
+                      padding: '10px 12px',
+                      cursor: 'pointer',
+                      background: active ? OL.paperSoft2 : 'transparent',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Caps size={10} ls={2} weight={800}>{label}</Caps>
+                      {active && (
+                        <Caps
+                          size={9}
+                          ls={2}
+                          opacity={1}
+                          weight={800}
+                          style={{ color: OL.accent }}
+                        >
+                          ✓ {opt === 'light' ? 'Lit' : 'Out'}
+                        </Caps>
+                      )}
+                    </div>
+                    <p style={{
+                      fontFamily: OL.body,
+                      fontSize: 12,
+                      lineHeight: 1.5,
+                      color: OL.muted,
+                      margin: '6px 0 0',
+                    }}>
+                      {description}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* Section 5 — Delivery Preferences */}
           <section style={{ padding: '14px 0', borderBottom: `1px solid ${OL.ink}` }}>
             <SectionLabel>Delivery Preferences</SectionLabel>
             {deliveryRows.map(({ key, label }) => {
@@ -428,7 +493,7 @@ export function SettingsPaper({
                     justifyContent: 'space-between',
                     alignItems: 'center',
                     padding: '8px 0',
-                    borderBottom: `1px dotted rgba(20,18,16,0.3)`,
+                    borderBottom: `1px dotted var(--color-hairline)`,
                   }}
                 >
                   <span style={{ fontFamily: OL.body, fontSize: 13 }}>{label}</span>
@@ -627,7 +692,7 @@ export function SettingsPaper({
                 justifyContent: 'space-between',
                 alignItems: 'baseline',
                 padding: '6px 0',
-                borderBottom: `1px dotted rgba(20,18,16,0.3)`,
+                borderBottom: `1px dotted var(--color-hairline)`,
               }}
             >
               <span style={{ fontFamily: OL.mono, fontSize: 22, fontWeight: 700 }}>

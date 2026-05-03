@@ -39,6 +39,7 @@ import { getAuthStatus, disconnectStrava, resetPakHarContext, saveOnboarding } f
 import { useUser } from '@/hooks/useUser'
 import { useChatStore } from '@/store/chat'
 import type { ApiError } from '@/types/api'
+import { useTheme } from '@/hooks/useTheme'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -63,6 +64,7 @@ export default function SettingsPage() {
   const router = useRouter()
   const queryClient = useQueryClient()
   const clearChat = useChatStore((s) => s.clear)
+  const { theme, setTheme } = useTheme()
 
   // Auth status query
   const {
@@ -252,8 +254,10 @@ export default function SettingsPage() {
       stats={stats}
       voice={voice}
       deliveryPrefs={deliveryPrefs}
+      theme={theme}
       onVoiceChange={setVoice}
       onToggleDelivery={handleToggleDelivery}
+      onThemeChange={setTheme}
       onDisconnect={handleDisconnect}
       onNav={onNav}
       onResetContext={handleResetContext}

@@ -56,7 +56,7 @@ function LoadingState() {
 
 function ErrorState({ message }: { message: string }) {
   return (
-    <div style={{ minHeight: '100vh', background: '#f4efe4', color: '#141210' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--color-paper)', color: 'var(--color-ink)' }}>
       <div style={{ maxWidth: 760, margin: '0 auto' }} className="px-9 pt-7 pb-12">
         <p className="font-body italic text-[13px] opacity-60">{message}</p>
       </div>

@@ -81,7 +81,7 @@ export function OfflinePage({ kind, onRetry, onNav }: OfflinePageProps) {
           marginTop: 28,
           border: `3px solid ${OL.ink}`,
           padding: '28px 32px',
-          background: 'rgba(138,42,18,0.04)',
+          background: 'var(--color-accent-soft)',
         }}
       >
         <Caps
@@ -142,7 +142,7 @@ export function OfflinePage({ kind, onRetry, onNav }: OfflinePageProps) {
             onClick={onRetry}
             style={{
               background: OL.ink,
-              color: '#fff',
+              color: 'var(--color-ink-on-ink)',
               border: 'none',
               padding: '12px 22px',
               fontFamily: OL.sans,

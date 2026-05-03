@@ -108,7 +108,7 @@ function toSentenceCase(str: string): string {
 function getPullQuote(analysis: string): string {
   const sentences = analysis.split(/(?<=[.!?])\s+/);
   const second = sentences[1] ?? sentences[0] ?? '';
-  return `“${second.trim()}”`;
+  return `"${second.trim()}"`;
 }
 
 function getAnalysisParagraphs(analysis: string): string[] {
@@ -127,11 +127,11 @@ function parsePaceToSeconds(pace: string): number {
 // ---- Sub-components ----
 
 function ThickRule({ className = '' }: { className?: string }) {
-  return <div className={`border-t-[3px] border-[#141210] ${className}`} />;
+  return <div className={`border-t-[3px] border-[var(--color-ink)] ${className}`} />;
 }
 
 function Hairline({ className = '' }: { className?: string }) {
-  return <div className={`border-t border-[rgba(20,18,16,0.35)] ${className}`} />;
+  return <div className={`border-t border-[var(--color-hairline-strong)] ${className}`} />;
 }
 
 // ---- Main component ----
@@ -160,7 +160,7 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
   const [activeOverlay, setActiveOverlay] = useState<OverlayKey | null>(null);
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f4efe4', color: '#141210' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--color-paper)', color: 'var(--color-ink)' }}>
       <div style={{ maxWidth: 760, margin: '0 auto' }} className="px-9 pt-7 pb-12">
 
         <NewspaperChrome
@@ -193,7 +193,7 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
                 BY PAK HAR · SENIOR COACH · FILED {dateInfo.time} WIB
               </div>
             </div>
-            <div className="border-l border-[rgba(20,18,16,0.4)] pl-4">
+            <div className="border-l border-[var(--color-hairline-strong)] pl-4">
               <div className="font-sans text-[10px] uppercase tracking-widest opacity-70 mb-2">
                 AT A GLANCE
               </div>
@@ -250,9 +250,9 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
           {/* Pace chart */}
           <div
             style={{
-              border: '1px solid #141210',
+              border: '1px solid var(--color-ink)',
               padding: '12px 16px',
-              background: 'rgba(20,18,16,0.015)',
+              background: 'var(--color-paper-soft)',
               margin: '20px 0',
             }}
           >
@@ -417,7 +417,7 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
                         style={{
                           height: 2,
                           width: 16,
-                          background: '#141210',
+                          background: 'var(--color-ink)',
                         }}
                       />
                       <span
@@ -426,7 +426,7 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
                           fontSize: 9,
                           textTransform: 'uppercase' as const,
                           letterSpacing: '0.05em',
-                          color: '#141210',
+                          color: 'var(--color-ink)',
                         }}
                       >
                         PACE
@@ -436,13 +436,13 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
                     {/* Active overlay legend item */}
                     {activeOverlay && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <svg width="16" height="2">
+                        <svg width="16" height="6" style={{ overflow: 'visible' }}>
                           <line
                             x1="0"
-                            y1="1"
+                            y1="3"
                             x2="16"
-                            y2="1"
-                            stroke="#8a2a12"
+                            y2="3"
+                            stroke="var(--color-accent)"
                             strokeWidth="1.5"
                             strokeDasharray="4 3"
                           />
@@ -453,7 +453,7 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
                             fontSize: 9,
                             textTransform: 'uppercase' as const,
                             letterSpacing: '0.05em',
-                            color: '#8a2a12',
+                            color: 'var(--color-accent)',
                           }}
                         >
                           {overlayLabelMap[activeOverlay]}
@@ -476,7 +476,7 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
                       y1={avgY}
                       x2={chartX1}
                       y2={avgY}
-                      stroke="#141210"
+                      stroke="var(--color-ink)"
                       strokeWidth="1"
                       strokeDasharray="4 3"
                       opacity="0.3"
@@ -487,7 +487,7 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
                       <polyline
                         key={idx}
                         points={pts}
-                        stroke="#8a2a12"
+                        stroke="var(--color-accent)"
                         strokeWidth="1.5"
                         strokeDasharray="4 3"
                         fill="none"
@@ -502,14 +502,14 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
                         cx={dot.x}
                         cy={dot.y}
                         r="2.5"
-                        fill="#8a2a12"
+                        fill="var(--color-accent)"
                       />
                     ))}
 
                     {/* Pace polyline */}
                     <polyline
                       points={pacePoints}
-                      stroke="#141210"
+                      stroke="var(--color-ink)"
                       strokeWidth="2"
                       fill="none"
                       strokeLinejoin="round"
@@ -522,7 +522,7 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
                         cx={xPos(i)}
                         cy={yPace(parsePaceToSeconds(s.pace))}
                         r="3"
-                        fill="#141210"
+                        fill="var(--color-ink)"
                       />
                     ))}
 
@@ -531,11 +531,11 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
                       <text
                         key={s.km}
                         x={xPos(i)}
-                        y="130"
+                        y={H - 6}
                         textAnchor="middle"
                         fontFamily="var(--font-mono-tabloid)"
                         fontSize="9"
-                        fill="#141210"
+                        fill="var(--color-ink)"
                         opacity="0.6"
                       >
                         {s.km}
@@ -552,24 +552,23 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
                       let buttonStyle: React.CSSProperties;
                       if (isDisabled) {
                         buttonStyle = {
-                          border: '1px solid rgba(20,18,16,0.2)',
+                          border: '1px solid var(--color-paper-soft-3)',
                           background: 'transparent',
-                          color: 'rgba(20,18,16,0.3)',
+                          color: 'var(--color-hairline)',
                           cursor: 'not-allowed',
-                          pointerEvents: 'none',
                         };
                       } else if (isActive) {
                         buttonStyle = {
-                          border: '1px solid #141210',
-                          background: '#141210',
-                          color: '#f4efe4',
+                          border: '1px solid var(--color-ink)',
+                          background: 'var(--color-ink)',
+                          color: 'var(--color-ink-on-ink)',
                           cursor: 'pointer',
                         };
                       } else {
                         buttonStyle = {
-                          border: '1px solid rgba(20,18,16,0.35)',
+                          border: '1px solid var(--color-hairline-strong)',
                           background: 'transparent',
-                          color: 'rgba(20,18,16,0.55)',
+                          color: 'var(--color-muted)',
                           cursor: 'pointer',
                         };
                       }
@@ -624,9 +623,9 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
                       disabled={isAnalyzing}
                       style={{
                         marginTop: 12,
-                        background: isAnalyzing ? 'transparent' : 'var(--color-ink, #141210)',
-                        color: isAnalyzing ? 'var(--color-ink, #141210)' : '#fff',
-                        border: '1px solid var(--color-ink, #141210)',
+                        background: isAnalyzing ? 'transparent' : 'var(--color-ink)',
+                        color: isAnalyzing ? 'var(--color-ink)' : 'var(--color-ink-on-ink)',
+                        border: '1px solid var(--color-ink)',
                         padding: '10px 24px',
                         fontFamily: 'var(--font-sans)',
                         fontSize: 11,
@@ -660,7 +659,7 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
 
                   {/* Pull-quote after 2nd paragraph */}
                   {pullQuote !== null && (
-                    <div className="border-y-2 border-[#8a2a12] py-[10px] my-4 font-display text-[20px] italic text-center text-[#8a2a12]">
+                    <div className="border-y-2 border-[var(--color-accent)] py-[10px] my-4 font-display text-[20px] italic text-center text-[var(--color-accent)]">
                       {pullQuote}
                     </div>
                   )}
@@ -677,9 +676,9 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
                         onClick={onAnalyze}
                         disabled={isAnalyzing}
                         style={{
-                          background: isAnalyzing ? 'transparent' : 'var(--color-ink, #141210)',
-                          color: isAnalyzing ? 'var(--color-ink, #141210)' : '#fff',
-                          border: '1px solid var(--color-ink, #141210)',
+                          background: isAnalyzing ? 'transparent' : 'var(--color-ink)',
+                          color: isAnalyzing ? 'var(--color-ink)' : 'var(--color-ink-on-ink)',
+                          border: '1px solid var(--color-ink)',
                           padding: '10px 24px',
                           fontFamily: 'var(--font-sans)',
                           fontSize: 11,
@@ -716,7 +715,7 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
                   style={{ fontFamily: 'var(--font-mono-tabloid)', fontVariantNumeric: 'tabular-nums' }}
                 >
                   <thead>
-                    <tr className="border-b border-[#141210]">
+                    <tr className="border-b border-[var(--color-ink)]">
                       {['KM', 'PACE', 'HR', 'CAD', 'Δ ELEV'].map((h) => (
                         <th
                           key={h}
@@ -735,11 +734,11 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
                       return (
                         <tr
                           key={split.km}
-                          className="border-b border-dotted border-[rgba(20,18,16,0.3)]"
+                          className="border-b border-dotted border-[var(--color-hairline)]"
                         >
                           <td className="text-right py-[2px] px-[6px]">{split.km}</td>
                           <td
-                            className={`text-right py-[2px] px-[6px] ${paceAccent ? 'text-[#8a2a12] font-bold' : ''}`}
+                            className={`text-right py-[2px] px-[6px] ${paceAccent ? 'text-[var(--color-accent)] font-bold' : ''}`}
                           >
                             {split.pace}
                           </td>
@@ -783,12 +782,12 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
                   >
                     {entry.label}
                   </div>
-                  <div className="h-[10px] bg-[rgba(20,18,16,0.08)] border border-[rgba(20,18,16,0.3)] relative">
+                  <div className="h-[10px] bg-[var(--color-paper-soft-3)] border border-[var(--color-hairline)] relative">
                     <div
                       className="absolute inset-y-0 left-0"
                       style={{
                         width: `${Math.min((entry.km / 40) * 100, 100)}%`,
-                        backgroundColor: entry.current ? '#8a2a12' : '#141210',
+                        backgroundColor: entry.current ? 'var(--color-accent)' : 'var(--color-ink)',
                       }}
                     />
                   </div>

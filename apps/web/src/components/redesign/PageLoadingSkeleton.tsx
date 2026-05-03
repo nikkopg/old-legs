@@ -1,9 +1,9 @@
-const BLOCK = 'bg-[rgba(20,18,16,0.08)] rounded animate-pulse'
+const BLOCK = 'bg-[var(--color-paper-soft-3)] rounded animate-pulse'
 
 export function PageLoadingSkeleton() {
   return (
-    <div className="min-h-screen bg-[#1a1612] flex justify-center items-start py-10 px-5">
-      <div className="bg-[#f4efe4] w-[980px] max-w-full px-9 pt-7 pb-10">
+    <div className="min-h-screen bg-[var(--color-frame)] flex justify-center items-start py-10 px-5">
+      <div className="bg-[var(--color-paper)] w-[980px] max-w-full px-9 pt-7 pb-10">
 
         {/* Top rail */}
         <div className={`h-2.5 w-full mb-4 ${BLOCK}`} />
