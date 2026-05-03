@@ -36,6 +36,15 @@ export interface Activity {
   verdict_short?: string | null
   verdict_tag?: string | null
   tone?: 'critical' | 'good' | 'neutral' | null
+  splits: Array<{
+    km: number
+    moving_time: number
+    distance: number
+    avg_speed_ms: number
+    hr: number | null
+    cad: number | null
+    elev: number | null
+  }> | null
 }
 
 export interface PlanDay {

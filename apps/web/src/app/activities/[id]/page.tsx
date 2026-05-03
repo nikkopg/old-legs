@@ -25,8 +25,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Dispatch } from '@/components/redesign';
+import type { DispatchSplit } from '@/components/redesign/Dispatch';
 import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton';
 import { getActivity, getActivities, analyzeActivity } from '@/lib/api';
+import { formatPace } from '@/lib/formatters';
 import { computeWeeklyKm } from '@/lib/weeklyKm';
 import type { Activity, ApiError } from '@/types/api';
 
@@ -158,11 +160,21 @@ export default function ActivityDetailPage() {
 
   const weeklyKm = computeWeeklyKm(activities ?? []);
 
+  const splits: DispatchSplit[] | undefined = activity.splits
+    ? activity.splits.map((s) => ({
+        km: s.km,
+        pace: formatPace(1000 / (s.avg_speed_ms * 60)),
+        hr: s.hr !== null ? Math.round(s.hr) : null,
+        cad: s.cad !== null ? Math.round(s.cad * 2) : null,
+        elev: s.elev !== null ? Math.round(s.elev) : null,
+      }))
+    : undefined;
+
   return (
     <Dispatch
       activity={activity}
       weeklyKm={weeklyKm}
-      splits={undefined}
+      splits={splits}
       onBack={() => router.push('/activities')}
       onAnalyze={handleAnalyze}
       isAnalyzing={isAnalyzing}

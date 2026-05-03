@@ -10,10 +10,12 @@
 #   - average_pace_min_per_km is stored as float (e.g. 5.5 = 5:30 min/km) for easier calculations
 #   - verdict_short / verdict_tag / tone are all nullable — populated only after analysis runs
 #     the structured extraction second Ollama call; remain null if extraction fails or is skipped
+#   - splits: nullable JSON array of per-km split dicts — populated by a second-pass detail fetch
+#     during sync (Strava GET /activities/{id}). Null until that fetch runs; never re-fetched once set.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import String, DateTime, Boolean, Float, Integer, Text, ForeignKey
+from sqlalchemy import String, DateTime, Boolean, Float, Integer, Text, ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import Base
@@ -58,6 +60,11 @@ class Activity(Base):
     verdict_short: Mapped[str | None] = mapped_column(String(120), nullable=True)
     verdict_tag: Mapped[str | None] = mapped_column(String(40), nullable=True)
     tone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    # Per-km split data fetched from Strava detail endpoint during sync.
+    # Null until the second-pass split fetch runs. Never overwritten once populated.
+    # Each element: {km, moving_time, distance, avg_speed_ms, hr, cad, elev}
+    splits: Mapped[list | None] = mapped_column(JSON, nullable=True, default=None)
 
     # Sync lifecycle
     sync_status: Mapped[str] = mapped_column(

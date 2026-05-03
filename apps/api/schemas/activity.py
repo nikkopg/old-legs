@@ -1,5 +1,5 @@
 # READY FOR QA
-# Feature: Activity Pydantic schemas
+# Feature: Activity Pydantic schemas (updated TASK-163)
 # What was built: ActivityCreate, ActivityRead, ActivityUpdate, ActivityWithAnalysis
 # Edge cases to consider:
 #   - HR fields nullable for activities without a HR monitor
@@ -9,6 +9,9 @@
 #   - verdict_short, verdict_tag, tone: all Optional[str], default None
 #     Populated only after /analyze is called and structured extraction succeeds.
 #     If extraction fails or Ollama returns malformed JSON, all three remain None.
+#   - splits: Optional list of per-km split dicts, null until second-pass Strava detail fetch runs.
+#     Each dict shape: {km, moving_time, distance, avg_speed_ms, hr, cad, elev}
+#     hr / cad / elev are nullable within each split (device-dependent).
 
 from datetime import datetime
 from typing import Optional
@@ -54,6 +57,11 @@ class ActivityRead(ActivityBase):
     verdict_short: Optional[str] = None
     verdict_tag: Optional[str] = None
     tone: Optional[str] = None
+
+    # Per-km split data — null until Strava detail fetch runs during sync.
+    # Each dict: {km: int, moving_time: int, distance: float, avg_speed_ms: float,
+    #             hr: float|None, cad: float|None, elev: float|None}
+    splits: Optional[list[dict]] = None
 
 
 class ActivityUpdate(BaseModel):

@@ -1,11 +1,16 @@
 # READY FOR QA
-# Feature: Strava OAuth service
-# What was built: OAuth flow with token exchange, athlete profile fetch, and token encryption
+# Feature: Strava OAuth service + activity sync with per-km splits (TASK-161–163)
+# What was built: OAuth flow with token exchange, athlete profile fetch, and token encryption.
+#   sync_activities() now includes a second pass that fetches per-km split data from
+#   GET /activities/{strava_id} for any activity in the current sync batch where splits IS NULL.
 # Edge cases to consider:
 #   - Strava API may return errors (invalid code, expired token, revoked access)
 #   - Token expiration handling — refresh token needed when access_token expires
 #   - Multiple users may connect same Strava account (rare, but handle with unique constraint)
 #   - Network failures to Strava API — retry with exponential backoff
+#   - Split fetch errors are logged as warnings and skipped — they never fail the sync
+#   - Only activities in the current sync batch with splits IS NULL are detail-fetched
+#   - Activities already carrying splits data are never re-fetched
 
 """
 Strava OAuth integration service.
@@ -363,6 +368,67 @@ def normalize_activity(raw: dict) -> dict:
     }
 
 
+async def _fetch_splits_for_activity(
+    strava_activity_id: str, access_token: str
+) -> list[dict] | None:
+    """
+    Fetch per-km split data from the Strava activity detail endpoint.
+
+    Returns a list of cleaned split dicts, or None on any error.  Errors are
+    logged as warnings — callers must never raise based on this return value.
+
+    Args:
+        strava_activity_id: Strava's numeric activity ID (stored as str).
+        access_token: Valid plaintext Strava access token.
+
+    Returns:
+        List of split dicts or None.
+    """
+    url = f"https://www.strava.com/api/v3/activities/{strava_activity_id}"
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            detail = response.json()
+    except Exception as exc:
+        logger.warning(
+            f"Failed to fetch Strava detail for activity {strava_activity_id}: {exc}"
+        )
+        return None
+
+    raw_splits = detail.get("splits_metric")
+    if not raw_splits or not isinstance(raw_splits, list):
+        logger.warning(
+            f"No splits_metric in Strava detail for activity {strava_activity_id}"
+        )
+        return None
+
+    cleaned: list[dict] = []
+    for split in raw_splits:
+        try:
+            cleaned.append({
+                "km": split["split"],
+                "moving_time": split["moving_time"],
+                "distance": split["distance"],
+                "avg_speed_ms": split["average_speed"],
+                "hr": split.get("average_heartrate"),
+                "cad": split.get("average_cadence"),
+                "elev": split.get("elevation_difference"),
+            })
+        except (KeyError, TypeError) as exc:
+            logger.warning(
+                f"Skipping malformed split entry for activity {strava_activity_id}: {exc}"
+            )
+            continue
+
+    if not cleaned:
+        return None
+
+    return cleaned
+
+
 async def sync_activities(user_id: int, access_token: str, db: Session) -> int:
     """
     Fetch, normalize, and upsert Strava running activities for a user.
@@ -371,6 +437,11 @@ async def sync_activities(user_id: int, access_token: str, db: Session) -> int:
     (name, date, distance, pace, HR, elevation) are updated in place.  App-owned
     fields (analysis, analysis_generated_at, verdict_short, verdict_tag, tone,
     sync_status) are never overwritten on existing rows.
+
+    After the main upsert loop, a second pass fetches per-km split data from the
+    Strava detail endpoint (GET /activities/{id}) for activities in this sync batch
+    that still have splits IS NULL.  Split fetch failures are silently skipped —
+    they never cause the overall sync to fail.
 
     Returns count of *newly inserted* activities only; updates are not counted.
 
@@ -385,6 +456,10 @@ async def sync_activities(user_id: int, access_token: str, db: Session) -> int:
     raw_activities = await fetch_activities(access_token)
     new_count = 0
     updated_count = 0
+
+    # Track strava_activity_ids touched in this sync pass so the split-fetch
+    # second pass is bounded to the current batch (not the entire history).
+    touched_strava_ids: set[str] = set()
 
     for raw in raw_activities:
         normalized = normalize_activity(raw)
@@ -413,6 +488,7 @@ async def sync_activities(user_id: int, access_token: str, db: Session) -> int:
             existing.elevation_gain_m = normalized["elevation_gain_m"]
             db.add(existing)
             updated_count += 1
+            touched_strava_ids.add(strava_id)
             continue
 
         activity = Activity(
@@ -422,6 +498,7 @@ async def sync_activities(user_id: int, access_token: str, db: Session) -> int:
         )
         db.add(activity)
         new_count += 1
+        touched_strava_ids.add(strava_id)
 
     if new_count > 0 or updated_count > 0:
         db.commit()
@@ -448,5 +525,39 @@ async def sync_activities(user_id: int, access_token: str, db: Session) -> int:
                 )
     else:
         logger.info(f"No activities to sync for user {user_id}")
+
+    # --- Second pass: fetch per-km splits for touched activities missing them ---
+    # Capped at 10 per sync (newest first) to stay well inside Strava's 100 req/15 min
+    # rate limit and avoid HTTP timeouts on large sync batches. Historical activities
+    # without splits are backfilled gradually across subsequent syncs.
+    _MAX_SPLITS_PER_SYNC = 10
+    if touched_strava_ids:
+        activities_needing_splits = (
+            db.query(Activity)
+            .filter(
+                Activity.user_id == user_id,
+                Activity.strava_activity_id.in_(touched_strava_ids),
+                Activity.splits.is_(None),
+            )
+            .order_by(Activity.activity_date.desc())
+            .limit(_MAX_SPLITS_PER_SYNC)
+            .all()
+        )
+
+        splits_fetched = 0
+        for activity in activities_needing_splits:
+            splits = await _fetch_splits_for_activity(
+                activity.strava_activity_id, access_token
+            )
+            if splits is not None:
+                activity.splits = splits
+                db.add(activity)
+                splits_fetched += 1
+
+        if splits_fetched > 0:
+            db.commit()
+            logger.info(
+                f"Splits fetched for {splits_fetched} activities (user {user_id})"
+            )
 
     return new_count
