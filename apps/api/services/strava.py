@@ -1,16 +1,21 @@
 # READY FOR QA
-# Feature: Strava OAuth service + activity sync with per-km splits (TASK-161–163)
+# Feature: Strava OAuth service + activity sync with per-km splits and high-res streams (TASK-161–163, TASK-166)
 # What was built: OAuth flow with token exchange, athlete profile fetch, and token encryption.
-#   sync_activities() now includes a second pass that fetches per-km split data from
-#   GET /activities/{strava_id} for any activity in the current sync batch where splits IS NULL.
+#   sync_activities() now includes a second pass that fetches high-resolution stream data from
+#   GET /activities/{strava_id}/streams for any activity in the current sync batch where streams IS NULL.
+#   Streams data is downsampled to ≤500 points (uniform stride) and stored as a compact dict.
+#   Per-km splits are derived from the streams data for backwards compatibility; if stream fetch
+#   fails, a fallback to the splits_metric detail endpoint (_fetch_splits_metric_fallback) is used.
 # Edge cases to consider:
 #   - Strava API may return errors (invalid code, expired token, revoked access)
 #   - Token expiration handling — refresh token needed when access_token expires
 #   - Multiple users may connect same Strava account (rare, but handle with unique constraint)
 #   - Network failures to Strava API — retry with exponential backoff
-#   - Split fetch errors are logged as warnings and skipped — they never fail the sync
-#   - Only activities in the current sync batch with splits IS NULL are detail-fetched
-#   - Activities already carrying splits data are never re-fetched
+#   - Stream/split fetch errors are logged as warnings and skipped — they never fail the sync
+#   - Only activities in the current sync batch with streams IS NULL are detail-fetched
+#   - Activities already carrying streams data are never re-fetched
+#   - If velocity_smooth stream is absent, vel is derived from dist/time deltas
+#   - If time or distance arrays are missing/empty in streams, fallback to splits_metric
 
 """
 Strava OAuth integration service.
@@ -23,6 +28,7 @@ Handles the Authorization Code flow:
 """
 
 import logging
+import math
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -368,12 +374,13 @@ def normalize_activity(raw: dict) -> dict:
     }
 
 
-async def _fetch_splits_for_activity(
+async def _fetch_splits_metric_fallback(
     strava_activity_id: str, access_token: str
 ) -> list[dict] | None:
     """
     Fetch per-km split data from the Strava activity detail endpoint.
 
+    Used as a fallback when the streams fetch fails or returns unusable data.
     Returns a list of cleaned split dicts, or None on any error.  Errors are
     logged as warnings — callers must never raise based on this return value.
 
@@ -427,6 +434,198 @@ async def _fetch_splits_for_activity(
         return None
 
     return cleaned
+
+
+async def _fetch_streams_for_activity(
+    strava_activity_id: str, access_token: str
+) -> dict | None:
+    """
+    Fetch high-resolution stream data from the Strava streams endpoint.
+
+    Requests all available stream types (time, distance, altitude,
+    velocity_smooth, heartrate, cadence, latlng, grade_smooth, moving) and
+    returns a compact downsampled dict with ≤500 data points per stream.
+
+    On any HTTP or parse error the function logs a warning and returns None —
+    callers must never raise based on this return value.
+
+    Args:
+        strava_activity_id: Strava's numeric activity ID (stored as str).
+        access_token: Valid plaintext Strava access token.
+
+    Returns:
+        Compact streams dict or None.
+    """
+    url = (
+        f"https://www.strava.com/api/v3/activities/{strava_activity_id}/streams"
+        "?keys=time,distance,altitude,velocity_smooth,heartrate,cadence,"
+        "latlng,grade_smooth,moving&key_by_type=true"
+    )
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0)) as client:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            raw = response.json()
+    except Exception as exc:
+        logger.warning(
+            f"Failed to fetch Strava streams for activity {strava_activity_id}: {exc}"
+        )
+        return None
+
+    # Parse: each key maps to {"type": "...", "data": [...]} — extract data arrays.
+    def _extract(key: str) -> list | None:
+        entry = raw.get(key)
+        if entry is None:
+            return None
+        data = entry.get("data") if isinstance(entry, dict) else None
+        return data if isinstance(data, list) and len(data) > 0 else None
+
+    time_data = _extract("time")
+    dist_data = _extract("distance")
+
+    if not time_data or not dist_data:
+        logger.warning(
+            f"Streams response for activity {strava_activity_id} missing time or distance arrays"
+        )
+        return None
+
+    n = len(time_data)
+    stride = max(1, math.ceil(n / 500))
+
+    def _downsample(arr: list | None) -> list | None:
+        if arr is None:
+            return None
+        return arr[::stride]
+
+    downsampled_time = time_data[::stride]
+    downsampled_dist = dist_data[::stride]
+
+    vel_raw = _extract("velocity_smooth")
+    if vel_raw is not None:
+        downsampled_vel = vel_raw[::stride]
+    else:
+        # Derive vel from consecutive dist/time deltas.
+        derived_vel: list[float] = []
+        for i in range(n):
+            if i == 0:
+                derived_vel.append(0.0)
+            else:
+                dt = time_data[i] - time_data[i - 1]
+                dd = dist_data[i] - dist_data[i - 1]
+                derived_vel.append(dd / dt if dt != 0 else 0.0)
+        downsampled_vel = derived_vel[::stride]
+
+    hr_raw = _extract("heartrate")
+    cad_raw = _extract("cadence")
+    alt_raw = _extract("altitude")
+    grade_raw = _extract("grade_smooth")
+    latlng_raw = _extract("latlng")
+
+    return {
+        "n": len(downsampled_time),
+        "time": downsampled_time,
+        "dist": downsampled_dist,
+        "vel": downsampled_vel,
+        "hr": _downsample(hr_raw),
+        "cad": _downsample(cad_raw),
+        "alt": _downsample(alt_raw),
+        "grade": _downsample(grade_raw),
+        "latlng": _downsample(latlng_raw),
+    }
+
+
+def _derive_splits_from_streams(streams: dict) -> list[dict] | None:
+    """
+    Derive per-km split data from a downsampled streams dict.
+
+    Uses the dist and time arrays to locate km-boundary crossings, then
+    computes per-segment metrics (moving_time, distance, avg_speed_ms, hr,
+    cad, elev) for each km segment.
+
+    Args:
+        streams: Compact streams dict as returned by _fetch_streams_for_activity.
+
+    Returns:
+        List of split dicts with shape {km, moving_time, distance, avg_speed_ms,
+        hr, cad, elev}, or None if derivation fails for any reason.
+    """
+    try:
+        dist_arr = streams.get("dist")
+        time_arr = streams.get("time")
+
+        if not dist_arr or not time_arr or len(dist_arr) < 2:
+            return None
+
+        n = len(dist_arr)
+        hr_arr = streams.get("hr")
+        cad_arr = streams.get("cad")
+        alt_arr = streams.get("alt")
+
+        total_dist_m = dist_arr[-1]
+        num_km = max(1, int(total_dist_m // 1000))
+
+        splits: list[dict] = []
+
+        for km_idx in range(1, num_km + 1):
+            km_start_m = (km_idx - 1) * 1000.0
+            km_end_m = km_idx * 1000.0
+
+            # Find the index range covering this km segment.
+            # start_idx: last index where dist <= km_start_m
+            # end_idx:   first index where dist >= km_end_m
+            start_idx = 0
+            for i in range(n):
+                if dist_arr[i] <= km_start_m:
+                    start_idx = i
+                else:
+                    break
+
+            end_idx = n - 1
+            for i in range(n):
+                if dist_arr[i] >= km_end_m:
+                    end_idx = i
+                    break
+
+            if end_idx <= start_idx:
+                continue
+
+            seg_time = time_arr[end_idx] - time_arr[start_idx]
+            seg_dist = dist_arr[end_idx] - dist_arr[start_idx]
+            avg_speed = seg_dist / seg_time if seg_time > 0 else 0.0
+
+            seg_hr: int | None = None
+            if hr_arr and end_idx < len(hr_arr):
+                seg_hr_vals = hr_arr[start_idx : end_idx + 1]
+                if seg_hr_vals:
+                    seg_hr = round(sum(seg_hr_vals) / len(seg_hr_vals))
+
+            seg_cad: float | None = None
+            if cad_arr and end_idx < len(cad_arr):
+                seg_cad_vals = cad_arr[start_idx : end_idx + 1]
+                if seg_cad_vals:
+                    seg_cad = sum(seg_cad_vals) / len(seg_cad_vals)
+
+            seg_elev: float | None = None
+            if alt_arr and end_idx < len(alt_arr):
+                seg_elev = alt_arr[end_idx] - alt_arr[start_idx]
+
+            splits.append({
+                "km": km_idx,
+                "moving_time": seg_time,
+                "distance": seg_dist,
+                "avg_speed_ms": avg_speed,
+                "hr": seg_hr,
+                "cad": seg_cad,
+                "elev": seg_elev,
+            })
+
+        return splits if splits else None
+
+    except Exception as exc:
+        logger.warning(f"Failed to derive splits from streams: {exc}")
+        return None
 
 
 async def sync_activities(user_id: int, access_token: str, db: Session) -> int:
@@ -526,38 +725,59 @@ async def sync_activities(user_id: int, access_token: str, db: Session) -> int:
     else:
         logger.info(f"No activities to sync for user {user_id}")
 
-    # --- Second pass: fetch per-km splits for touched activities missing them ---
+    # --- Second pass: fetch high-res streams for touched activities missing them ---
     # Capped at 10 per sync (newest first) to stay well inside Strava's 100 req/15 min
     # rate limit and avoid HTTP timeouts on large sync batches. Historical activities
-    # without splits are backfilled gradually across subsequent syncs.
-    _MAX_SPLITS_PER_SYNC = 10
+    # without streams are backfilled gradually across subsequent syncs.
+    # Per-km splits are derived from streams for backwards compatibility; if the
+    # stream fetch fails, a fallback to the splits_metric detail endpoint is used.
+    _MAX_STREAMS_PER_SYNC = 10
     if touched_strava_ids:
-        activities_needing_splits = (
+        activities_needing_streams = (
             db.query(Activity)
             .filter(
                 Activity.user_id == user_id,
                 Activity.strava_activity_id.in_(touched_strava_ids),
-                Activity.splits.is_(None),
+                Activity.streams.is_(None),
             )
             .order_by(Activity.activity_date.desc())
-            .limit(_MAX_SPLITS_PER_SYNC)
+            .limit(_MAX_STREAMS_PER_SYNC)
             .all()
         )
 
-        splits_fetched = 0
-        for activity in activities_needing_splits:
-            splits = await _fetch_splits_for_activity(
+        streams_fetched = 0
+        splits_from_fallback = 0
+        for activity in activities_needing_streams:
+            streams_data = await _fetch_streams_for_activity(
                 activity.strava_activity_id, access_token
             )
-            if splits is not None:
-                activity.splits = splits
+            if streams_data is not None:
+                activity.streams = streams_data
+                # Derive splits from streams for backwards compatibility
+                derived = _derive_splits_from_streams(streams_data)
+                if derived is not None and activity.splits is None:
+                    activity.splits = derived
                 db.add(activity)
-                splits_fetched += 1
+                streams_fetched += 1
+            else:
+                # Fallback: fetch splits_metric from activity detail endpoint
+                splits = await _fetch_splits_metric_fallback(
+                    activity.strava_activity_id, access_token
+                )
+                if splits is not None and activity.splits is None:
+                    activity.splits = splits
+                    db.add(activity)
+                    splits_from_fallback += 1
+                    # Sentinel: mark streams as exhausted so this activity is not retried
+                    if activity.streams is None:
+                        activity.streams = {}
+                        db.add(activity)
 
-        if splits_fetched > 0:
+        if streams_fetched > 0 or splits_from_fallback > 0:
             db.commit()
             logger.info(
-                f"Splits fetched for {splits_fetched} activities (user {user_id})"
+                f"Streams fetched for {streams_fetched} activities, "
+                f"splits fallback for {splits_from_fallback} activities (user {user_id})"
             )
 
     return new_count
