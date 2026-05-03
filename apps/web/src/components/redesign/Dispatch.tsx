@@ -15,6 +15,8 @@
 
 'use client';
 
+import { useState } from 'react';
+import type React from 'react';
 import type { Activity } from '@/types/api';
 import type { WeeklyKmEntry } from './FrontPage';
 import { NewspaperChrome } from './NewspaperChrome';
@@ -114,6 +116,14 @@ function getAnalysisParagraphs(analysis: string): string[] {
   return rawParas;
 }
 
+function parsePaceToSeconds(pace: string): number {
+  const parts = pace.split(':');
+  if (parts.length !== 2) return 0;
+  const minutes = parseInt(parts[0], 10);
+  const seconds = parseInt(parts[1], 10);
+  return minutes * 60 + seconds;
+}
+
 // ---- Sub-components ----
 
 function ThickRule({ className = '' }: { className?: string }) {
@@ -145,6 +155,9 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
   const currentWeek = weeklyKm.find((w) => w.current);
 
   const hasSplits = splits !== undefined && splits.length > 0;
+
+  type OverlayKey = 'hr' | 'elev' | 'cad';
+  const [activeOverlay, setActiveOverlay] = useState<OverlayKey | null>(null);
 
   return (
     <div style={{ minHeight: '100vh', background: '#f4efe4', color: '#141210' }}>
@@ -234,14 +247,360 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
             ))}
           </div>
 
-          {/* Pace chart placeholder */}
-          <div className="border border-[#141210] p-3 bg-[rgba(20,18,16,0.015)] my-5">
-            <div className="font-sans text-[10px] uppercase tracking-widest opacity-70 mb-2">
+          {/* Pace chart */}
+          <div
+            style={{
+              border: '1px solid #141210',
+              padding: '12px 16px',
+              background: 'rgba(20,18,16,0.015)',
+              margin: '20px 0',
+            }}
+          >
+            <div
+              style={{
+                fontFamily: 'var(--font-sans)',
+                fontSize: 10,
+                textTransform: 'uppercase',
+                letterSpacing: '0.1em',
+                opacity: 0.7,
+                marginBottom: 8,
+              }}
+            >
               PACE PER KILOMETRE
             </div>
-            <div className="font-body text-[12px] italic opacity-55">
-              Lap data unavailable — splits sync coming in a future update.
-            </div>
+
+            {!hasSplits ? (
+              <div className="font-body text-[12px] italic opacity-55">
+                Lap data unavailable — splits sync coming in a future update.
+              </div>
+            ) : (() => {
+              // ---- Chart calculations ----
+              const splitData = splits!;
+
+              // Parse pace values
+              const paceSeconds = splitData.map((s) => parsePaceToSeconds(s.pace));
+              const minPace = Math.min(...paceSeconds);
+              const maxPace = Math.max(...paceSeconds);
+              const paceRange = maxPace - minPace;
+
+              // Chart viewport constants
+              const W = 600;
+              const H = 140;
+              const padTop = 10;
+              const padRight = 10;
+              const padBottom = 24;
+              const padLeft = 10;
+              const chartX0 = padLeft;
+              const chartX1 = W - padRight;
+              const chartY0 = padTop;
+              const chartY1 = H - padBottom;
+
+              const n = splitData.length;
+
+              // X position for each split (evenly spaced)
+              const xPos = (i: number): number => {
+                if (n === 1) return (chartX0 + chartX1) / 2;
+                return chartX0 + (i / (n - 1)) * (chartX1 - chartX0);
+              };
+
+              // Y position for pace (inverted: faster = higher = smaller y)
+              const yPace = (sec: number): number => {
+                if (paceRange === 0) return (chartY0 + chartY1) / 2;
+                return chartY0 + ((sec - minPace) / paceRange) * (chartY1 - chartY0);
+              };
+
+              // Pace polyline points
+              const pacePoints = splitData
+                .map((s, i) => `${xPos(i)},${yPace(parsePaceToSeconds(s.pace))}`)
+                .join(' ');
+
+              // Average pace reference line
+              const avgPaceSec = paceSeconds.reduce((a, b) => a + b, 0) / n;
+              const avgY = yPace(avgPaceSec);
+
+              // Overlay values
+              const overlayValues: Record<OverlayKey, (number | null)[]> = {
+                hr: splitData.map((s) => s.hr),
+                elev: splitData.map((s) => s.elev),
+                cad: splitData.map((s) => s.cad),
+              };
+
+              // Check which overlays are entirely null (disabled)
+              const overlayDisabled: Record<OverlayKey, boolean> = {
+                hr: overlayValues.hr.every((v) => v === null),
+                elev: overlayValues.elev.every((v) => v === null),
+                cad: overlayValues.cad.every((v) => v === null),
+              };
+
+              // Build overlay polyline segments (break at nulls)
+              const buildOverlaySegments = (key: OverlayKey): string[] => {
+                const vals = overlayValues[key];
+                const nonNull = vals.filter((v): v is number => v !== null);
+                if (nonNull.length === 0) return [];
+                const minVal = Math.min(...nonNull);
+                const maxVal = Math.max(...nonNull);
+                const range = maxVal - minVal;
+
+                const yOverlay = (v: number): number => {
+                  if (range === 0) return (chartY0 + chartY1) / 2;
+                  return chartY1 - ((v - minVal) / range) * (chartY1 - chartY0);
+                };
+
+                const segments: string[] = [];
+                let currentSegment: string[] = [];
+
+                for (let i = 0; i < n; i++) {
+                  const v = vals[i];
+                  if (v === null) {
+                    if (currentSegment.length > 0) {
+                      segments.push(currentSegment.join(' '));
+                      currentSegment = [];
+                    }
+                  } else {
+                    currentSegment.push(`${xPos(i)},${yOverlay(v)}`);
+                  }
+                }
+                if (currentSegment.length > 0) {
+                  segments.push(currentSegment.join(' '));
+                }
+                return segments;
+              };
+
+              // Overlay dot positions
+              const buildOverlayDots = (key: OverlayKey): { x: number; y: number }[] => {
+                const vals = overlayValues[key];
+                const nonNull = vals.filter((v): v is number => v !== null);
+                if (nonNull.length === 0) return [];
+                const minVal = Math.min(...nonNull);
+                const maxVal = Math.max(...nonNull);
+                const range = maxVal - minVal;
+
+                const yOverlay = (v: number): number => {
+                  if (range === 0) return (chartY0 + chartY1) / 2;
+                  return chartY1 - ((v - minVal) / range) * (chartY1 - chartY0);
+                };
+
+                return vals
+                  .map((v, i) => (v !== null ? { x: xPos(i), y: yOverlay(v) } : null))
+                  .filter((d): d is { x: number; y: number } => d !== null);
+              };
+
+              const overlaySegments = activeOverlay ? buildOverlaySegments(activeOverlay) : [];
+              const overlayDots = activeOverlay ? buildOverlayDots(activeOverlay) : [];
+
+              const overlayLabelMap: Record<OverlayKey, string> = {
+                hr: 'HR · BPM',
+                elev: 'ELEV · Δm',
+                cad: 'CAD · SPM',
+              };
+
+              const overlayButtonLabels: Record<OverlayKey, string> = {
+                hr: 'HR',
+                elev: 'ELEVATION',
+                cad: 'CADENCE',
+              };
+
+              return (
+                <>
+                  {/* Legend */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 16,
+                      marginBottom: 6,
+                      alignItems: 'center',
+                    }}
+                  >
+                    {/* Pace legend item */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div
+                        style={{
+                          height: 2,
+                          width: 16,
+                          background: '#141210',
+                        }}
+                      />
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono-tabloid)',
+                          fontSize: 9,
+                          textTransform: 'uppercase' as const,
+                          letterSpacing: '0.05em',
+                          color: '#141210',
+                        }}
+                      >
+                        PACE
+                      </span>
+                    </div>
+
+                    {/* Active overlay legend item */}
+                    {activeOverlay && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <svg width="16" height="2">
+                          <line
+                            x1="0"
+                            y1="1"
+                            x2="16"
+                            y2="1"
+                            stroke="#8a2a12"
+                            strokeWidth="1.5"
+                            strokeDasharray="4 3"
+                          />
+                        </svg>
+                        <span
+                          style={{
+                            fontFamily: 'var(--font-mono-tabloid)',
+                            fontSize: 9,
+                            textTransform: 'uppercase' as const,
+                            letterSpacing: '0.05em',
+                            color: '#8a2a12',
+                          }}
+                        >
+                          {overlayLabelMap[activeOverlay]}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SVG chart */}
+                  <svg
+                    width="100%"
+                    height={H}
+                    viewBox={`0 0 ${W} ${H}`}
+                    preserveAspectRatio="none"
+                    style={{ display: 'block' }}
+                  >
+                    {/* Average pace reference line */}
+                    <line
+                      x1={chartX0}
+                      y1={avgY}
+                      x2={chartX1}
+                      y2={avgY}
+                      stroke="#141210"
+                      strokeWidth="1"
+                      strokeDasharray="4 3"
+                      opacity="0.3"
+                    />
+
+                    {/* Overlay polylines */}
+                    {overlaySegments.map((pts, idx) => (
+                      <polyline
+                        key={idx}
+                        points={pts}
+                        stroke="#8a2a12"
+                        strokeWidth="1.5"
+                        strokeDasharray="4 3"
+                        fill="none"
+                        strokeLinejoin="round"
+                      />
+                    ))}
+
+                    {/* Overlay dots */}
+                    {overlayDots.map((dot, idx) => (
+                      <circle
+                        key={idx}
+                        cx={dot.x}
+                        cy={dot.y}
+                        r="2.5"
+                        fill="#8a2a12"
+                      />
+                    ))}
+
+                    {/* Pace polyline */}
+                    <polyline
+                      points={pacePoints}
+                      stroke="#141210"
+                      strokeWidth="2"
+                      fill="none"
+                      strokeLinejoin="round"
+                    />
+
+                    {/* Pace dots */}
+                    {splitData.map((s, i) => (
+                      <circle
+                        key={s.km}
+                        cx={xPos(i)}
+                        cy={yPace(parsePaceToSeconds(s.pace))}
+                        r="3"
+                        fill="#141210"
+                      />
+                    ))}
+
+                    {/* X-axis labels */}
+                    {splitData.map((s, i) => (
+                      <text
+                        key={s.km}
+                        x={xPos(i)}
+                        y="130"
+                        textAnchor="middle"
+                        fontFamily="var(--font-mono-tabloid)"
+                        fontSize="9"
+                        fill="#141210"
+                        opacity="0.6"
+                      >
+                        {s.km}
+                      </text>
+                    ))}
+                  </svg>
+
+                  {/* Toggle buttons */}
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    {(['hr', 'elev', 'cad'] as OverlayKey[]).map((key) => {
+                      const isActive = activeOverlay === key;
+                      const isDisabled = overlayDisabled[key];
+
+                      let buttonStyle: React.CSSProperties;
+                      if (isDisabled) {
+                        buttonStyle = {
+                          border: '1px solid rgba(20,18,16,0.2)',
+                          background: 'transparent',
+                          color: 'rgba(20,18,16,0.3)',
+                          cursor: 'not-allowed',
+                          pointerEvents: 'none',
+                        };
+                      } else if (isActive) {
+                        buttonStyle = {
+                          border: '1px solid #141210',
+                          background: '#141210',
+                          color: '#f4efe4',
+                          cursor: 'pointer',
+                        };
+                      } else {
+                        buttonStyle = {
+                          border: '1px solid rgba(20,18,16,0.35)',
+                          background: 'transparent',
+                          color: 'rgba(20,18,16,0.55)',
+                          cursor: 'pointer',
+                        };
+                      }
+
+                      return (
+                        <button
+                          key={key}
+                          disabled={isDisabled}
+                          onClick={() => {
+                            if (!isDisabled) {
+                              setActiveOverlay(isActive ? null : key);
+                            }
+                          }}
+                          style={{
+                            fontFamily: 'var(--font-sans)',
+                            fontSize: 9,
+                            letterSpacing: '0.1em',
+                            fontWeight: 700,
+                            textTransform: 'uppercase',
+                            padding: '5px 10px',
+                            ...buttonStyle,
+                          }}
+                        >
+                          {overlayButtonLabels[key]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()}
           </div>
 
           {/* Two-column body */}
