@@ -63,6 +63,11 @@ class ActivityRead(ActivityBase):
     #             hr: float|None, cad: float|None, elev: float|None}
     splits: Optional[list[dict]] = None
 
+    # High-resolution streams data — null until explicitly fetched (TASK-166).
+    # Keys: n (int), time, dist, vel, hr|null, cad|null, alt|null, grade|null, latlng|null
+    # Populated by the streams fetch pass in sync_activities(); never overwritten once set.
+    streams: Optional[dict] = None
+
 
 class ActivityUpdate(BaseModel):
     """Fields updatable after initial sync (e.g. analysis fields)."""

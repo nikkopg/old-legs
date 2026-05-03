@@ -12,6 +12,8 @@
 #     the structured extraction second Ollama call; remain null if extraction fails or is skipped
 #   - splits: nullable JSON array of per-km split dicts — populated by a second-pass detail fetch
 #     during sync (Strava GET /activities/{id}). Null until that fetch runs; never re-fetched once set.
+#   - streams: nullable JSON dict of high-resolution Strava streams data (per-second arrays).
+#     Keys: n, time, dist, vel, hr, cad, alt, grade, latlng. Null until explicitly fetched.
 
 from datetime import datetime, timezone
 
@@ -65,6 +67,11 @@ class Activity(Base):
     # Null until the second-pass split fetch runs. Never overwritten once populated.
     # Each element: {km, moving_time, distance, avg_speed_ms, hr, cad, elev}
     splits: Mapped[list | None] = mapped_column(JSON, nullable=True, default=None)
+
+    # High-resolution Strava streams data (per-second arrays, downsampled to ≤500 points).
+    # Keys: n, time, dist, vel, hr, cad, alt, grade, latlng (absent streams stored as null).
+    # Null until explicitly fetched; never re-fetched once populated.
+    streams: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=None)
 
     # Sync lifecycle
     sync_status: Mapped[str] = mapped_column(
