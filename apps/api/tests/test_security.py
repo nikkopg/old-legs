@@ -8,7 +8,7 @@ Coverage:
 - Token encryption: stored access_token is not plaintext Strava token
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, date, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
@@ -17,6 +17,9 @@ from sqlalchemy.orm import Session
 
 from models.user import User
 from models.activity import Activity
+from models.chat_message import ChatMessage
+from models.training_plan import TrainingPlan
+from models.weekly_review import WeeklyReview
 from services.encryption import encrypt_token, decrypt_token
 
 
@@ -53,6 +56,38 @@ class TestUnauthenticatedAccess:
         response = test_app.get("/auth/strava/status")
         assert response.status_code == 200
         assert response.json()["connected"] is False
+
+    def test_post_user_onboarding_requires_auth(self, test_app: TestClient):
+        response = test_app.post("/user/onboarding", json={})
+        assert response.status_code == 401
+
+    def test_get_user_me_requires_auth(self, test_app: TestClient):
+        response = test_app.get("/user/me")
+        assert response.status_code == 401
+
+    def test_post_review_generate_requires_auth(self, test_app: TestClient):
+        response = test_app.post("/review/generate")
+        assert response.status_code == 401
+
+    def test_get_review_current_requires_auth(self, test_app: TestClient):
+        response = test_app.get("/review/current")
+        assert response.status_code == 401
+
+    def test_get_insights_requires_auth(self, test_app: TestClient):
+        response = test_app.get("/insights")
+        assert response.status_code == 401
+
+    def test_delete_coach_history_requires_auth(self, test_app: TestClient):
+        response = test_app.delete("/coach/history")
+        assert response.status_code == 401
+
+    def test_delete_coach_reset_requires_auth(self, test_app: TestClient):
+        response = test_app.delete("/coach/reset")
+        assert response.status_code == 401
+
+    def test_post_plan_verdict_requires_auth(self, test_app: TestClient):
+        response = test_app.post("/activities/1/plan-verdict", json={})
+        assert response.status_code == 401
 
 
 class TestRateLimiting:
@@ -126,6 +161,138 @@ class TestUserIsolation:
     ):
         response = authenticated_client.post(f"/activities/{user_b_activity.id}/analyze")
         assert response.status_code in (404, 403)
+
+    def test_user_me_returns_only_own_profile(
+        self,
+        authenticated_client: TestClient,
+        test_user: User,
+        user_b: User,
+    ):
+        # authenticated_client is logged in as test_user (User A)
+        response = authenticated_client.get("/user/me")
+        assert response.status_code == 200
+        body = response.json()
+        # Must return User A's identity, not User B's
+        assert body["id"] == test_user.id
+        assert body["id"] != user_b.id
+        assert body["name"] == test_user.name
+
+    def test_delete_coach_history_only_affects_own_messages(
+        self,
+        authenticated_client: TestClient,
+        test_user: User,
+        user_b: User,
+        db_session: Session,
+    ):
+        # Seed one message for User A and one for User B
+        msg_a = ChatMessage(user_id=test_user.id, role="user", content="User A message")
+        msg_b = ChatMessage(user_id=user_b.id, role="user", content="User B message")
+        db_session.add_all([msg_a, msg_b])
+        db_session.commit()
+
+        # User A deletes their history
+        response = authenticated_client.delete("/coach/history")
+        assert response.status_code == 200
+
+        # User B's message must still exist
+        remaining = (
+            db_session.query(ChatMessage)
+            .filter(ChatMessage.user_id == user_b.id)
+            .count()
+        )
+        assert remaining == 1, "DELETE /coach/history deleted User B's messages"
+
+        # User A's message must be gone
+        user_a_remaining = (
+            db_session.query(ChatMessage)
+            .filter(ChatMessage.user_id == test_user.id)
+            .count()
+        )
+        assert user_a_remaining == 0
+
+    def test_delete_reset_only_affects_own_data(
+        self,
+        authenticated_client: TestClient,
+        test_user: User,
+        user_b: User,
+        db_session: Session,
+    ):
+        # Seed a ChatMessage, TrainingPlan, and WeeklyReview for both users
+        msg_a = ChatMessage(user_id=test_user.id, role="user", content="A msg")
+        msg_b = ChatMessage(user_id=user_b.id, role="user", content="B msg")
+
+        plan_a = TrainingPlan(
+            user_id=test_user.id,
+            week_start_date=date.today(),
+            plan_data={"days": []},
+            pak_har_notes={},
+        )
+        plan_b = TrainingPlan(
+            user_id=user_b.id,
+            week_start_date=date.today(),
+            plan_data={"days": []},
+            pak_har_notes={},
+        )
+
+        review_b = WeeklyReview(
+            user_id=user_b.id,
+            week_start_date=date.today(),
+            planned_runs=3,
+            actual_runs=2,
+            review_text="User B review",
+        )
+
+        db_session.add_all([msg_a, msg_b, plan_a, plan_b, review_b])
+        db_session.commit()
+
+        # User A resets their AI context
+        response = authenticated_client.delete("/coach/reset")
+        assert response.status_code == 200
+
+        # User B's data must be untouched
+        b_messages = (
+            db_session.query(ChatMessage)
+            .filter(ChatMessage.user_id == user_b.id)
+            .count()
+        )
+        assert b_messages == 1, "DELETE /coach/reset deleted User B's chat messages"
+
+        b_plans = (
+            db_session.query(TrainingPlan)
+            .filter(TrainingPlan.user_id == user_b.id)
+            .count()
+        )
+        assert b_plans == 1, "DELETE /coach/reset deleted User B's training plans"
+
+        b_reviews = (
+            db_session.query(WeeklyReview)
+            .filter(WeeklyReview.user_id == user_b.id)
+            .count()
+        )
+        assert b_reviews == 1, "DELETE /coach/reset deleted User B's weekly reviews"
+
+    def test_review_current_returns_only_own_review(
+        self,
+        authenticated_client: TestClient,
+        test_user: User,
+        user_b: User,
+        db_session: Session,
+    ):
+        # Only User B has a review — User A has none
+        review_b = WeeklyReview(
+            user_id=user_b.id,
+            week_start_date=date.today(),
+            planned_runs=4,
+            actual_runs=3,
+            review_text="User B's review text",
+        )
+        db_session.add(review_b)
+        db_session.commit()
+
+        # authenticated_client is logged in as User A
+        response = authenticated_client.get("/review/current")
+        # User A has no review — must not return User B's data
+        assert response.status_code == 404
 
 
 class TestTokenEncryption:

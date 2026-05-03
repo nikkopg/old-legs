@@ -25,7 +25,7 @@
 
 'use client'
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { FrontPage } from '@/components/redesign/FrontPage'
@@ -188,6 +188,8 @@ function ActivitiesPageError() {
 export default function ActivitiesPage() {
   const router = useRouter()
 
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
+
   const {
     data: activities,
     isLoading,
@@ -202,6 +204,7 @@ export default function ActivitiesPage() {
       if (isUnauthorized(err)) return false
       return failureCount < 2
     },
+    refetchOnWindowFocus: false,
   })
 
   // Redirect to login on 401
@@ -221,7 +224,9 @@ export default function ActivitiesPage() {
   // GET /activities triggers a Strava sync on every call (per api-spec-v2.md).
   // Using refetch() directly gives us isFetching feedback while the request is in-flight.
   const handleRefreshSync = useCallback(() => {
-    void refetch()
+    void refetch().then(() => {
+      setLastSyncedAt(new Date().toISOString())
+    })
   }, [refetch])
 
   if (isLoading) {
@@ -239,7 +244,7 @@ export default function ActivitiesPage() {
     <FrontPage
       activities={items}
       weeklyKm={weeklyKm}
-      lastSyncedAt={null}
+      lastSyncedAt={lastSyncedAt}
       onActivityClick={handleActivityClick}
       onRefreshSync={handleRefreshSync}
       isSyncing={isFetching}
