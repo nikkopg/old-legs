@@ -27,6 +27,7 @@ export interface DispatchSplit {
   hr: number | null;
   cad: number | null;
   elev: number | null;
+  movingTime?: number;
 }
 
 export interface DispatchProps {
@@ -35,6 +36,7 @@ export interface DispatchProps {
   };
   weeklyKm: WeeklyKmEntry[];
   splits?: DispatchSplit[];
+  userMaxHr?: number | null;
   onBack: () => void;
   onNav?: (key: string) => void;
   onAnalyze?: () => void;
@@ -134,9 +136,49 @@ function Hairline({ className = '' }: { className?: string }) {
   return <div className={`border-t border-[var(--color-hairline-strong)] ${className}`} />;
 }
 
+// ---- HR Zone helpers ----
+
+const HR_ZONE_THRESHOLDS = [0, 0.6, 0.7, 0.8, 0.9, 1.0] as const;
+const HR_ZONE_LABELS = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5'] as const;
+
+interface HrZoneResult {
+  label: string;
+  seconds: number;
+  pct: number;
+}
+
+function computeHrZones(splits: DispatchSplit[], maxHr: number): HrZoneResult[] {
+  const totals = [0, 0, 0, 0, 0];
+  let total = 0;
+  for (const s of splits) {
+    if (s.hr === null || s.movingTime === undefined) continue;
+    const pct = s.hr / maxHr;
+    let zone = 0;
+    if (pct >= 0.9) zone = 4;
+    else if (pct >= 0.8) zone = 3;
+    else if (pct >= 0.7) zone = 2;
+    else if (pct >= 0.6) zone = 1;
+    totals[zone] += s.movingTime;
+    total += s.movingTime;
+  }
+  return HR_ZONE_LABELS.map((label, i) => ({
+    label,
+    seconds: totals[i],
+    pct: total > 0 ? totals[i] / total : 0,
+  }));
+}
+
+function formatZoneTime(seconds: number): string {
+  if (seconds === 0) return '—';
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (m === 0) return `${s}s`;
+  return `${m}m${s > 0 ? ` ${s}s` : ''}`;
+}
+
 // ---- Main component ----
 
-export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze, isAnalyzing }: DispatchProps) {
+export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav, onAnalyze, isAnalyzing }: DispatchProps) {
   const dateInfo = formatActivityDate(activity.activity_date);
   const headline = getVerdictHeadline(activity);
   const paragraphs = activity.analysis ? getAnalysisParagraphs(activity.analysis) : [];
@@ -763,9 +805,48 @@ export function Dispatch({ activity, weeklyKm, splits, onBack, onNav, onAnalyze,
                 HEART RATE ZONES
               </div>
               <Hairline className="my-[6px]" />
-              <p className="font-body italic text-[12px] opacity-55">
-                HR zones unavailable — no splits data.
-              </p>
+              {!hasSplits ? (
+                <p className="font-body italic text-[12px] opacity-55">
+                  HR zones unavailable — no splits data.
+                </p>
+              ) : userMaxHr == null ? (
+                <p className="font-body italic text-[12px] opacity-55">
+                  Set your max HR in Settings to see HR zones.
+                </p>
+              ) : (() => {
+                const zones = computeHrZones(splits, userMaxHr);
+                const hasAnyHrData = zones.some((z) => z.seconds > 0);
+                if (!hasAnyHrData) {
+                  return (
+                    <p className="font-body italic text-[12px] opacity-55">
+                      HR zones unavailable — no HR data in splits.
+                    </p>
+                  );
+                }
+                return (
+                  <div className="space-y-[5px]" style={{ fontFamily: 'var(--font-mono-tabloid)', fontVariantNumeric: 'tabular-nums' }}>
+                    {zones.map((zone, i) => (
+                      <div key={zone.label} className="grid grid-cols-[24px_1fr_52px] items-center gap-2">
+                        <div className="font-sans text-[9px] uppercase tracking-widest font-semibold opacity-70">
+                          {zone.label}
+                        </div>
+                        <div className="h-[8px] bg-[var(--color-paper-soft-3)] border border-[var(--color-hairline)] relative">
+                          <div
+                            className="absolute inset-y-0 left-0"
+                            style={{
+                              width: `${zone.pct * 100}%`,
+                              backgroundColor: i >= 3 ? 'var(--color-accent)' : 'var(--color-ink)',
+                            }}
+                          />
+                        </div>
+                        <div className="text-right text-[10px]">
+                          {formatZoneTime(zone.seconds)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
 
               {/* Weekly km rail */}
               <div className="font-sans text-[9px] uppercase tracking-widest opacity-70 mt-4">

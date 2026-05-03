@@ -20,12 +20,12 @@ describe('ToneBadge', () => {
 
   it('applies critical tone accent background class', () => {
     const { container } = render(<ToneBadge tone="critical">CRITICAL</ToneBadge>)
-    expect(container.querySelector('span')?.className).toContain('bg-[#8a2a12]')
+    expect(container.querySelector('span')?.className).toContain('bg-accent')
   })
 
   it('applies good tone ink background class', () => {
     const { container } = render(<ToneBadge tone="good">GOOD</ToneBadge>)
-    expect(container.querySelector('span')?.className).toContain('bg-[#141210]')
+    expect(container.querySelector('span')?.className).toContain('bg-ink')
   })
 
   it('applies neutral tone transparent background with border', () => {
@@ -41,7 +41,7 @@ describe('ToneBadge', () => {
     )
     const span = container.querySelector('span')
     expect(span?.className).toContain('mt-2')
-    expect(span?.className).toContain('bg-[#141210]')
+    expect(span?.className).toContain('bg-ink')
   })
 
   it('renders long verdict tag text without crashing', () => {

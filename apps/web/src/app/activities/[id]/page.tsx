@@ -30,6 +30,7 @@ import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton';
 import { getActivity, getActivities, analyzeActivity } from '@/lib/api';
 import { formatPace } from '@/lib/formatters';
 import { computeWeeklyKm } from '@/lib/weeklyKm';
+import { useUser } from '@/hooks/useUser';
 import type { Activity, ApiError } from '@/types/api';
 
 // ---------------------------------------------------------------------------
@@ -74,6 +75,7 @@ export default function ActivityDetailPage() {
   const id = Number(params.id);
   const queryClient = useQueryClient();
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const { user } = useUser();
 
   async function handleAnalyze(): Promise<void> {
     setIsAnalyzing(true);
@@ -167,6 +169,7 @@ export default function ActivityDetailPage() {
         hr: s.hr !== null ? Math.round(s.hr) : null,
         cad: s.cad !== null ? Math.round(s.cad * 2) : null,
         elev: s.elev !== null ? Math.round(s.elev) : null,
+        movingTime: s.moving_time,
       }))
     : undefined;
 
@@ -175,6 +178,7 @@ export default function ActivityDetailPage() {
       activity={activity}
       weeklyKm={weeklyKm}
       splits={splits}
+      userMaxHr={user?.max_hr ?? null}
       onBack={() => router.push('/activities')}
       onAnalyze={handleAnalyze}
       isAnalyzing={isAnalyzing}
