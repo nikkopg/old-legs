@@ -261,10 +261,6 @@ async def generate_insights(user: User, db: Session) -> InsightsRead:
         biggest_struggle=user.biggest_struggle,
     )
 
-    # System prompt — Pak Har's full persona (reuse SYSTEM_PROMPT with no
-    # strava context slot needed; the prompt_text carries all the data).
-    from prompts.pak_har import SYSTEM_PROMPT
-
     system_content = (
         "You are Pak Har. You are 70 years old. You have been running since before GPS existed. "
         "You are blunt, specific, and never give vague advice. No emojis. No hollow affirmations. "

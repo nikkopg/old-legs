@@ -49,6 +49,7 @@ from models.user import User
 from schemas.insights import InsightsRead
 from services.database import get_db
 from services.insights import generate_insights
+from services.rate_limiter import check_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,12 @@ async def get_insights(
     - 503: Ollama is not running or unreachable
     - 504: Ollama did not respond within the timeout
     """
+    if not check_rate_limit(current_user.id):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests. Wait a moment before requesting new insights.",
+        )
+
     try:
         insights = await generate_insights(user=current_user, db=db)
     except ValueError as exc:
