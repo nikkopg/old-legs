@@ -138,7 +138,6 @@ function Hairline({ className = '' }: { className?: string }) {
 
 // ---- HR Zone helpers ----
 
-const HR_ZONE_THRESHOLDS = [0, 0.6, 0.7, 0.8, 0.9, 1.0] as const;
 const HR_ZONE_LABELS = ['Z1', 'Z2', 'Z3', 'Z4', 'Z5'] as const;
 
 interface HrZoneResult {
@@ -148,6 +147,7 @@ interface HrZoneResult {
 }
 
 function computeHrZones(splits: DispatchSplit[], maxHr: number): HrZoneResult[] {
+  if (maxHr <= 0) return HR_ZONE_LABELS.map((label) => ({ label, seconds: 0, pct: 0 }));
   const totals = [0, 0, 0, 0, 0];
   let total = 0;
   for (const s of splits) {
