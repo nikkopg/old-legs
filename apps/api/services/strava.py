@@ -628,6 +628,48 @@ def _derive_splits_from_streams(streams: dict) -> list[dict] | None:
         return None
 
 
+def _backfill_splits_from_streams(db: Session) -> int:
+    """
+    Re-derive per-km splits for activities that already have streams stored but
+    whose splits were written before cadence data was included.
+
+    Queries all activities where streams IS NOT NULL and streams != '{}' (the
+    sentinel value written by the fallback path), then overwrites their splits
+    using _derive_splits_from_streams so every stored split row gains cadence.
+
+    Args:
+        db: Database session.
+
+    Returns:
+        Number of activities whose splits were updated.
+    """
+    from sqlalchemy import cast
+    from sqlalchemy import String as SAString
+
+    candidates = (
+        db.query(Activity)
+        .filter(
+            Activity.streams.isnot(None),
+            cast(Activity.streams, SAString) != "{}",
+        )
+        .all()
+    )
+
+    updated = 0
+    for activity in candidates:
+        derived = _derive_splits_from_streams(activity.streams)
+        if derived is not None:
+            activity.splits = derived
+            db.add(activity)
+            updated += 1
+
+    if updated > 0:
+        db.commit()
+        logger.info(f"Backfilled splits from streams for {updated} activities")
+
+    return updated
+
+
 async def sync_activities(user_id: int, access_token: str, db: Session) -> int:
     """
     Fetch, normalize, and upsert Strava running activities for a user.
@@ -652,6 +694,11 @@ async def sync_activities(user_id: int, access_token: str, db: Session) -> int:
     Returns:
         Number of newly synced (inserted) activities.
     """
+    # Backfill splits for activities that already have streams but stale splits
+    # (e.g. splits written before cadence data was captured).  Runs once per
+    # sync trigger; harmless when there is nothing to backfill.
+    _backfill_splits_from_streams(db)
+
     raw_activities = await fetch_activities(access_token)
     new_count = 0
     updated_count = 0
@@ -755,7 +802,7 @@ async def sync_activities(user_id: int, access_token: str, db: Session) -> int:
                 activity.streams = streams_data
                 # Derive splits from streams for backwards compatibility
                 derived = _derive_splits_from_streams(streams_data)
-                if derived is not None and activity.splits is None:
+                if derived is not None:
                     activity.splits = derived
                 db.add(activity)
                 streams_fetched += 1

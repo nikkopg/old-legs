@@ -281,6 +281,23 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
 
   const hasSplits = splits !== undefined && splits.length > 0;
 
+  // Compute average cadence — streams first (×2 to convert half-cadence), splits fallback
+  let avgCad: number | null = null;
+  if (hasValidStreams(activity.streams) && activity.streams.cad !== null) {
+    const cadArr = activity.streams.cad as number[];
+    const nonNull = cadArr.filter((v): v is number => v !== null && v !== undefined);
+    if (nonNull.length > 0) {
+      avgCad = Math.round((nonNull.reduce((a, b) => a + b, 0) / nonNull.length) * 2);
+    }
+  } else if (hasSplits) {
+    const cadValues = splits!
+      .map((s) => s.cad)
+      .filter((v): v is number => v !== null);
+    if (cadValues.length > 0) {
+      avgCad = Math.round(cadValues.reduce((a, b) => a + b, 0) / cadValues.length);
+    }
+  }
+
   type OverlayKey = 'hr' | 'elev' | 'cad';
   const [activeOverlay, setActiveOverlay] = useState<OverlayKey | null>(null);
 
@@ -348,8 +365,8 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
               },
               {
                 label: 'CADENCE',
-                value: '—',
-                unit: '',
+                value: avgCad !== null ? String(avgCad) : '—',
+                unit: avgCad !== null ? 'spm' : '',
               },
               { label: 'ELEV', value: `+${activity.elevation_gain_m}`, unit: 'm' },
             ].map(({ label, value, unit }) => (
