@@ -52,6 +52,17 @@ export function useTheme(): { theme: Theme; setTheme: (t: Theme) => void; toggle
     } catch {
       // localStorage unavailable (private mode, etc) — DOM change still applies for the session
     }
+    // Mirror to cookie so the server can read it on first render and pre-set
+    // data-theme on <html>, eliminating the React 19 hydration mismatch.
+    try {
+      if (next === 'dark') {
+        document.cookie = 'theme=dark; path=/; max-age=31536000; SameSite=Lax'
+      } else {
+        document.cookie = 'theme=; path=/; max-age=0'
+      }
+    } catch {
+      // cookie write failed (unlikely) — localStorage + DOM state are still correct
+    }
   }
 
   const toggle = () => setTheme(theme === 'dark' ? 'light' : 'dark')

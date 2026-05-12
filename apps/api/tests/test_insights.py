@@ -292,12 +292,21 @@ class TestInsightsWithRealDB:
         moving_time_seconds: int = 2880,
         distance_km: float = 8.0,
     ) -> list[Activity]:
-        """Seed activities across distinct ISO weeks within the 42-day window."""
-        base = datetime.now(timezone.utc) - timedelta(days=7)
+        """Seed activities across distinct ISO weeks within the 42-day window.
+
+        Dates are anchored to Monday of the previous ISO week so that activities
+        in the same week_idx always share the same ISO week regardless of today's
+        weekday.  day_offset (0..activities_per_week-1) advances within Mon–Fri,
+        never crossing an ISO week boundary (assumes activities_per_week <= 7).
+        """
+        today = datetime.now(timezone.utc)
+        # Start from the Monday of last week so all activities are in the past
+        # and comfortably within the 42-day window.
+        monday_last_week = today - timedelta(days=today.weekday() + 7)
         acts: list[Activity] = []
         for week_idx in range(num_weeks):
             for day_offset in range(activities_per_week):
-                dt = base - timedelta(weeks=week_idx, days=day_offset)
+                dt = monday_last_week - timedelta(weeks=week_idx) + timedelta(days=day_offset)
                 act = _make_activity(
                     db_session, user,
                     strava_id=f"rdb_{week_idx}_{day_offset}",
@@ -415,9 +424,16 @@ class TestComputeInsightsStats:
         moving_time_seconds: int,
         day_offset: int = 0,
     ) -> SimpleNamespace:
-        """Create a lightweight activity namespace for unit testing pure stat logic."""
-        base = datetime.now(timezone.utc) - timedelta(days=7)
-        dt = base - timedelta(weeks=week_offset, days=day_offset)
+        """Create a lightweight activity namespace for unit testing pure stat logic.
+
+        Dates are anchored to Monday of the current ISO week so that activities
+        with the same week_offset always land in the same ISO week regardless of
+        what day of the week today is.  day_offset (0–4) advances within that week
+        (Mon → Fri) and never crosses an ISO week boundary.
+        """
+        today = datetime.now(timezone.utc)
+        monday_this_week = today - timedelta(days=today.weekday())
+        dt = monday_this_week - timedelta(weeks=week_offset) + timedelta(days=day_offset)
         return SimpleNamespace(
             activity_date=dt,
             distance_km=distance_km,

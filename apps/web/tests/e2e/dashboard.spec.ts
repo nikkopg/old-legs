@@ -27,6 +27,8 @@ const MOCK_ACTIVITY: Activity = {
   sync_status: 'synced',
   created_at: '2026-04-15T07:00:00',
   updated_at: '2026-04-15T07:00:00',
+  splits: null,
+  streams: null,
 }
 
 const MOCK_ACTIVITY_NO_HR: Activity = {

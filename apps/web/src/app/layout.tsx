@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import { cookies } from "next/headers";
 import { Providers } from "@/lib/providers";
 import "./globals.css";
 
@@ -24,13 +25,19 @@ export const metadata: Metadata = {
 // prefers-color-scheme. Toggle lives in Settings ("The Desk → Reading Light").
 const themeInitScript = `(function(){try{var t=localStorage.getItem('theme');if(t==='dark'){document.documentElement.setAttribute('data-theme','dark');}}catch(e){}})();`;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Read the theme cookie set by useTheme so the server can pre-render the
+  // correct data-theme attribute on <html>, eliminating the React 19
+  // hydration mismatch. Falls back to undefined (light) if not set.
+  const themeCookie = (await cookies()).get('theme')?.value
+  const serverTheme = themeCookie === 'dark' ? 'dark' : undefined
+
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable} h-full`}>
+    <html lang="en" suppressHydrationWarning data-theme={serverTheme} className={`${inter.variable} ${jetbrainsMono.variable} h-full`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />

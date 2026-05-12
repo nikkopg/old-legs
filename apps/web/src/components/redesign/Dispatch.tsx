@@ -17,7 +17,7 @@
 
 import { useState } from 'react';
 import type React from 'react';
-import type { Activity } from '@/types/api';
+import type { Activity, ActivityStreams } from '@/types/api';
 import type { WeeklyKmEntry } from './FrontPage';
 import { NewspaperChrome } from './NewspaperChrome';
 
@@ -41,6 +41,40 @@ export interface DispatchProps {
   onNav?: (key: string) => void;
   onAnalyze?: () => void;
   isAnalyzing?: boolean;
+}
+
+// ---- Streams chart helpers ----
+
+interface StreamChartPoint {
+  /** cumulative distance in metres from start */
+  distM: number;
+  /** pace in min/km */
+  paceMinPerKm: number;
+  hr: number | null;
+  cad: number | null;
+  alt: number | null;
+}
+
+function streamsToChartPoints(streams: ActivityStreams): StreamChartPoint[] {
+  const points: StreamChartPoint[] = [];
+  for (let i = 0; i < streams.n; i++) {
+    const vel = streams.vel[i];
+    // Guard against zero / near-zero velocity (stopped or GPS artefact)
+    const paceMinPerKm = vel > 0.1 ? 1000 / (vel * 60) : 0;
+    points.push({
+      distM: streams.dist[i],
+      paceMinPerKm,
+      hr: streams.hr ? streams.hr[i] : null,
+      cad: streams.cad ? streams.cad[i] * 2 : null,
+      alt: streams.alt ? streams.alt[i] : null,
+    });
+  }
+  return points;
+}
+
+/** Returns true when streams data is present (not null, not the {} sentinel) */
+function hasValidStreams(streams: Activity['streams']): streams is ActivityStreams {
+  return streams !== null && Object.keys(streams).length > 0;
 }
 
 // ---- Helper functions ----
@@ -126,6 +160,123 @@ function parsePaceToSeconds(pace: string): number {
   return minutes * 60 + seconds;
 }
 
+// ---- Elevation profile helpers ----
+
+interface ElevationStats {
+  gainM: number;
+  lossM: number;
+}
+
+function computeElevationStats(alt: number[]): ElevationStats {
+  let gainM = 0;
+  let lossM = 0;
+  for (let i = 1; i < alt.length; i++) {
+    const diff = alt[i] - alt[i - 1];
+    if (diff > 0) gainM += diff;
+    else lossM += Math.abs(diff);
+  }
+  return { gainM: Math.round(gainM), lossM: Math.round(lossM) };
+}
+
+interface ElevationProfileChartProps {
+  alt: number[];
+  dist: number[];
+}
+
+function ElevationProfileChart({ alt, dist }: ElevationProfileChartProps) {
+  if (alt.length === 0 || dist.length === 0) return null;
+
+  const { gainM, lossM } = computeElevationStats(alt);
+
+  const W = 600;
+  const H = 60;
+  const padTop = 5;
+  const padBottom = 5;
+
+  const n = Math.min(alt.length, dist.length);
+
+  const xMin = dist[0];
+  const xMax = dist[n - 1];
+  const xRange = xMax - xMin;
+
+  const altMin = Math.min(...alt.slice(0, n));
+  const altMax = Math.max(...alt.slice(0, n));
+  const altRange = altMax - altMin;
+
+  const xSvg = (d: number): number => {
+    if (xRange === 0) return W / 2;
+    return ((d - xMin) / xRange) * W;
+  };
+
+  const ySvg = (a: number): number => {
+    if (altRange === 0) return (padTop + (H - padBottom)) / 2;
+    // higher altitude = smaller y (top of chart)
+    return padTop + (1 - (a - altMin) / altRange) * (H - padTop - padBottom);
+  };
+
+  const baselineY = H - padBottom;
+  const startX = xSvg(dist[0]);
+  const endX = xSvg(dist[n - 1]);
+
+  const linePoints = Array.from({ length: n }, (_, i) => `${xSvg(dist[i])},${ySvg(alt[i])}`);
+
+  const areaPath = `M ${startX},${baselineY} L ${linePoints.join(' L ')} L ${endX},${baselineY} Z`;
+  const linePath = `M ${linePoints.join(' L ')}`;
+
+  return (
+    <div>
+      {/* Hairline divider above */}
+      <div style={{ borderTop: '1px solid var(--color-hairline-strong)', opacity: 0.3, margin: '0 0 8px 0' }} />
+
+      {/* Label row */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          marginBottom: 6,
+          fontFamily: 'var(--font-sans)',
+          fontSize: 9,
+          textTransform: 'uppercase' as const,
+          letterSpacing: '0.1em',
+          opacity: 0.7,
+        }}
+      >
+        <span>ELEVATION PROFILE</span>
+        <span>&#x2191;{gainM}m&nbsp;&nbsp;&#x2193;{lossM}m</span>
+      </div>
+
+      {/* SVG sparkline */}
+      <svg
+        width="100%"
+        height={H}
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        style={{ display: 'block' }}
+      >
+        {/* Filled area */}
+        <path
+          d={areaPath}
+          fill="rgba(138, 42, 18, 0.15)"
+          stroke="none"
+        />
+        {/* Stroke line */}
+        <path
+          d={linePath}
+          fill="none"
+          stroke="#8a2a12"
+          strokeWidth="2"
+          strokeLinejoin="miter"
+          strokeLinecap="square"
+        />
+      </svg>
+
+      {/* Hairline divider below */}
+      <div style={{ borderTop: '1px solid var(--color-hairline-strong)', opacity: 0.3, margin: '8px 0 0 0' }} />
+    </div>
+  );
+}
+
 // ---- Sub-components ----
 
 function ThickRule({ className = '' }: { className?: string }) {
@@ -166,6 +317,55 @@ function computeHrZones(splits: DispatchSplit[], maxHr: number): HrZoneResult[] 
     seconds: totals[i],
     pct: total > 0 ? totals[i] / total : 0,
   }));
+}
+
+/**
+ * Compute HR zones from per-second (downsampled) streams data.
+ * Uses `streams.time` to derive exact duration per point.
+ * Zones: Z1 <60%, Z2 60–70%, Z3 70–80%, Z4 80–90%, Z5 ≥90% of maxHr.
+ */
+function computeHrZonesFromStreams(streams: ActivityStreams, maxHr: number): HrZoneResult[] {
+  if (maxHr <= 0) return HR_ZONE_LABELS.map((label) => ({ label, seconds: 0, pct: 0 }));
+  // streams.hr is guaranteed non-null by the caller's type guard
+  const hrArr = streams.hr as number[];
+  const timeArr = streams.time;
+  // Average stride duration — used as fallback for the last point
+  const avgStride = streams.n > 1 ? timeArr[streams.n - 1] / (streams.n - 1) : 1;
+
+  const totals = [0, 0, 0, 0, 0];
+  let total = 0;
+
+  for (let i = 0; i < streams.n; i++) {
+    const hr = hrArr[i];
+    if (hr === null || hr === undefined) continue;
+    // Duration this sample represents (seconds)
+    const duration = i < streams.n - 1 ? timeArr[i + 1] - timeArr[i] : avgStride;
+    if (duration <= 0) continue;
+
+    const pct = hr / maxHr;
+    let zone = 0;
+    if (pct >= 0.9) zone = 4;
+    else if (pct >= 0.8) zone = 3;
+    else if (pct >= 0.7) zone = 2;
+    else if (pct >= 0.6) zone = 1;
+    totals[zone] += duration;
+    total += duration;
+  }
+
+  return HR_ZONE_LABELS.map((label, i) => ({
+    label,
+    seconds: Math.round(totals[i]),
+    pct: total > 0 ? totals[i] / total : 0,
+  }));
+}
+
+/** Returns true when streams data has valid HR array (not null, not empty sentinel) */
+function hasValidStreamsHr(streams: Activity['streams']): streams is ActivityStreams & { hr: number[] } {
+  return (
+    streams !== null &&
+    Object.keys(streams).length > 0 &&
+    (streams as ActivityStreams).hr !== null
+  );
 }
 
 function formatZoneTime(seconds: number): string {
@@ -311,21 +511,70 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
               PACE PER KILOMETRE
             </div>
 
-            {!hasSplits ? (
-              <div className="font-body text-[12px] italic opacity-55">
-                Lap data unavailable — splits sync coming in a future update.
-              </div>
-            ) : (() => {
-              // ---- Chart calculations ----
-              const splitData = splits!;
+            {(() => {
+              // ---- Determine data source: streams (hi-res) or splits (fallback) ----
+              const useStreams = hasValidStreams(activity.streams);
 
-              // Parse pace values
-              const paceSeconds = splitData.map((s) => parsePaceToSeconds(s.pace));
-              const minPace = Math.min(...paceSeconds);
-              const maxPace = Math.max(...paceSeconds);
-              const paceRange = maxPace - minPace;
+              // When neither streams nor splits are available, show placeholder
+              if (!useStreams && !hasSplits) {
+                return (
+                  <div className="font-body text-[12px] italic opacity-55">
+                    Lap data unavailable — splits sync coming in a future update.
+                  </div>
+                );
+              }
 
-              // Chart viewport constants
+              // ---- Build unified chart points ----
+              // Each point: { x (SVG domain value), paceMinPerKm, hr, cad, alt }
+              // For streams: x = distM (metres).  For splits: x = km index (0-based integer).
+
+              interface UnifiedPoint {
+                x: number;            // domain x value
+                paceMinPerKm: number;
+                hr: number | null;
+                cad: number | null;
+                alt: number | null;
+              }
+
+              let chartPoints: UnifiedPoint[];
+              let xAxisLabels: { x: number; label: string }[];
+              let showPaceDots: boolean;
+
+              if (useStreams) {
+                const streamPts = streamsToChartPoints(activity.streams as ActivityStreams);
+                // Filter out stopped/zero-pace points to keep the pace line clean
+                const validPts = streamPts.filter((p) => p.paceMinPerKm > 0 && p.paceMinPerKm < 30);
+                chartPoints = validPts.map((p) => ({
+                  x: p.distM,
+                  paceMinPerKm: p.paceMinPerKm,
+                  hr: p.hr,
+                  cad: p.cad,
+                  alt: p.alt,
+                }));
+
+                // X-axis: km markers every step metres
+                const totalDistM = chartPoints.length > 0 ? chartPoints[chartPoints.length - 1].x : 0;
+                const step = Math.max(1, Math.ceil(totalDistM / 5000)) * 1000;
+                const kmMarkers: { x: number; label: string }[] = [];
+                for (let m = step; m <= totalDistM; m += step) {
+                  kmMarkers.push({ x: m, label: String(Math.round(m / 1000)) });
+                }
+                xAxisLabels = kmMarkers;
+                showPaceDots = false; // too many points at hi-res
+              } else {
+                const splitData = splits!;
+                chartPoints = splitData.map((s, i) => ({
+                  x: i,
+                  paceMinPerKm: parsePaceToSeconds(s.pace) / 60,
+                  hr: s.hr,
+                  cad: s.cad,
+                  alt: s.elev,
+                }));
+                xAxisLabels = splitData.map((s, i) => ({ x: i, label: String(s.km) }));
+                showPaceDots = true;
+              }
+
+              // ---- Chart viewport constants ----
               const W = 600;
               const H = 140;
               const padTop = 10;
@@ -337,34 +586,45 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
               const chartY0 = padTop;
               const chartY1 = H - padBottom;
 
-              const n = splitData.length;
+              const n = chartPoints.length;
 
-              // X position for each split (evenly spaced)
-              const xPos = (i: number): number => {
-                if (n === 1) return (chartX0 + chartX1) / 2;
-                return chartX0 + (i / (n - 1)) * (chartX1 - chartX0);
+              // Domain extents for x
+              const xMin = chartPoints.length > 0 ? chartPoints[0].x : 0;
+              const xMax = chartPoints.length > 0 ? chartPoints[n - 1].x : 1;
+              const xRange = xMax - xMin;
+
+              // SVG x coordinate from domain value
+              const xSvg = (domainX: number): number => {
+                if (xRange === 0) return (chartX0 + chartX1) / 2;
+                return chartX0 + ((domainX - xMin) / xRange) * (chartX1 - chartX0);
               };
 
-              // Y position for pace (inverted: faster = higher = smaller y)
+              // Pace range (in seconds for consistency with parsePaceToSeconds)
+              const paceSecs = chartPoints.map((p) => p.paceMinPerKm * 60);
+              const minPace = Math.min(...paceSecs);
+              const maxPace = Math.max(...paceSecs);
+              const paceRange = maxPace - minPace;
+
+              // SVG y coordinate for pace (inverted: faster = higher = smaller y)
               const yPace = (sec: number): number => {
                 if (paceRange === 0) return (chartY0 + chartY1) / 2;
                 return chartY0 + ((sec - minPace) / paceRange) * (chartY1 - chartY0);
               };
 
               // Pace polyline points
-              const pacePoints = splitData
-                .map((s, i) => `${xPos(i)},${yPace(parsePaceToSeconds(s.pace))}`)
+              const pacePoints = chartPoints
+                .map((p) => `${xSvg(p.x)},${yPace(p.paceMinPerKm * 60)}`)
                 .join(' ');
 
               // Average pace reference line
-              const avgPaceSec = paceSeconds.reduce((a, b) => a + b, 0) / n;
+              const avgPaceSec = paceSecs.reduce((a, b) => a + b, 0) / n;
               const avgY = yPace(avgPaceSec);
 
               // Overlay values
               const overlayValues: Record<OverlayKey, (number | null)[]> = {
-                hr: splitData.map((s) => s.hr),
-                elev: splitData.map((s) => s.elev),
-                cad: splitData.map((s) => s.cad),
+                hr: chartPoints.map((p) => p.hr),
+                elev: chartPoints.map((p) => p.alt),
+                cad: chartPoints.map((p) => p.cad),
               };
 
               // Check which overlays are entirely null (disabled)
@@ -399,7 +659,7 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
                       currentSegment = [];
                     }
                   } else {
-                    currentSegment.push(`${xPos(i)},${yOverlay(v)}`);
+                    currentSegment.push(`${xSvg(chartPoints[i].x)},${yOverlay(v)}`);
                   }
                 }
                 if (currentSegment.length > 0) {
@@ -408,8 +668,9 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
                 return segments;
               };
 
-              // Overlay dot positions
+              // Overlay dot positions (only rendered for low-res splits)
               const buildOverlayDots = (key: OverlayKey): { x: number; y: number }[] => {
+                if (!showPaceDots) return [];
                 const vals = overlayValues[key];
                 const nonNull = vals.filter((v): v is number => v !== null);
                 if (nonNull.length === 0) return [];
@@ -423,7 +684,7 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
                 };
 
                 return vals
-                  .map((v, i) => (v !== null ? { x: xPos(i), y: yOverlay(v) } : null))
+                  .map((v, i) => (v !== null ? { x: xSvg(chartPoints[i].x), y: yOverlay(v) } : null))
                   .filter((d): d is { x: number; y: number } => d !== null);
               };
 
@@ -432,7 +693,7 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
 
               const overlayLabelMap: Record<OverlayKey, string> = {
                 hr: 'HR · BPM',
-                elev: 'ELEV · Δm',
+                elev: 'ELEV · m',
                 cad: 'CAD · SPM',
               };
 
@@ -537,7 +798,7 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
                       />
                     ))}
 
-                    {/* Overlay dots */}
+                    {/* Overlay dots (splits mode only) */}
                     {overlayDots.map((dot, idx) => (
                       <circle
                         key={idx}
@@ -557,22 +818,22 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
                       strokeLinejoin="round"
                     />
 
-                    {/* Pace dots */}
-                    {splitData.map((s, i) => (
+                    {/* Pace dots (splits mode only — too many to render at hi-res) */}
+                    {showPaceDots && chartPoints.map((p, i) => (
                       <circle
-                        key={s.km}
-                        cx={xPos(i)}
-                        cy={yPace(parsePaceToSeconds(s.pace))}
+                        key={i}
+                        cx={xSvg(p.x)}
+                        cy={yPace(p.paceMinPerKm * 60)}
                         r="3"
                         fill="var(--color-ink)"
                       />
                     ))}
 
                     {/* X-axis labels */}
-                    {splitData.map((s, i) => (
+                    {xAxisLabels.map((lbl) => (
                       <text
-                        key={s.km}
-                        x={xPos(i)}
+                        key={lbl.label}
+                        x={xSvg(lbl.x)}
                         y={H - 6}
                         textAnchor="middle"
                         fontFamily="var(--font-mono-tabloid)"
@@ -580,7 +841,7 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
                         fill="var(--color-ink)"
                         opacity="0.6"
                       >
-                        {s.km}
+                        {lbl.label}
                       </text>
                     ))}
                   </svg>
@@ -643,6 +904,23 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
               );
             })()}
           </div>
+
+          {/* Elevation profile — only when streams alt data is available */}
+          {hasValidStreams(activity.streams) && activity.streams.alt !== null && (
+            <div
+              style={{
+                border: '1px solid var(--color-ink)',
+                padding: '12px 16px',
+                background: 'var(--color-paper-soft)',
+                margin: '0 0 20px 0',
+              }}
+            >
+              <ElevationProfileChart
+                alt={activity.streams.alt}
+                dist={activity.streams.dist}
+              />
+            </div>
+          )}
 
           {/* Two-column body */}
           <div className="grid grid-cols-[1.15fr_1fr] gap-7 mt-5">
@@ -805,7 +1083,7 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
                 HEART RATE ZONES
               </div>
               <Hairline className="my-[6px]" />
-              {!hasSplits ? (
+              {!hasSplits && !hasValidStreamsHr(activity.streams) ? (
                 <p className="font-body italic text-[12px] opacity-55">
                   HR zones unavailable — no splits data.
                 </p>
@@ -814,7 +1092,9 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
                   Set your max HR in Settings to see HR zones.
                 </p>
               ) : (() => {
-                const zones = computeHrZones(splits, userMaxHr);
+                const zones = hasValidStreamsHr(activity.streams)
+                  ? computeHrZonesFromStreams(activity.streams, userMaxHr)
+                  : computeHrZones(splits ?? [], userMaxHr);
                 const hasAnyHrData = zones.some((z) => z.seconds > 0);
                 if (!hasAnyHrData) {
                   return (

@@ -16,6 +16,18 @@ export interface User {
   updated_at: string
 }
 
+export interface ActivityStreams {
+  n: number
+  time: number[]
+  dist: number[]
+  vel: number[]
+  hr: number[] | null
+  cad: number[] | null
+  alt: number[] | null
+  grade: number[] | null
+  latlng: [number, number][] | null
+}
+
 export interface Activity {
   id: number
   user_id: number
@@ -45,6 +57,7 @@ export interface Activity {
     cad: number | null
     elev: number | null
   }> | null
+  streams: ActivityStreams | Record<string, never> | null
 }
 
 export interface PlanDay {

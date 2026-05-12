@@ -23,6 +23,8 @@ const baseActivity: Activity = {
   sync_status: 'synced',
   created_at: '2026-04-15T08:00:00Z',
   updated_at: '2026-04-15T08:00:00Z',
+  splits: null,
+  streams: null,
 }
 
 describe('ActivityCard', () => {

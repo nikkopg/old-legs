@@ -32,6 +32,7 @@ function makeActivity(overrides: Partial<Activity> = {}): Activity {
     verdict_tag: 'SOLID',
     tone: 'good',
     splits: null,
+    streams: null,
     ...overrides,
   }
 }
