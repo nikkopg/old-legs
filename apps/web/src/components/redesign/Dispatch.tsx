@@ -516,8 +516,11 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
                 .map((p) => `${xSvg(p.x)},${yPace(p.paceMinPerKm * 60)}`)
                 .join(' ');
 
-              // Average pace reference line
-              const avgPaceSec = paceSecs.reduce((a, b) => a + b, 0) / n;
+              // Average pace reference line — use authoritative Strava value so the
+              // dashed line and left Y-axis "avg" label match the stats strip exactly.
+              // A simple mean over downsampled stream points would be wrong because each
+              // point covers a different actual duration.
+              const avgPaceSec = activity.average_pace_min_per_km * 60;
               const avgY = yPace(avgPaceSec);
 
               // Overlay values
@@ -789,7 +792,16 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
                       const minVal = Math.min(...nonNull);
                       const maxVal = Math.max(...nonNull);
                       const range = maxVal - minVal;
-                      const midVal = (minVal + maxVal) / 2;
+                      // Use the activity's authoritative average where available so the
+                      // mid label reflects the true mean, not a geometric midpoint.
+                      let midVal: number;
+                      if (activeOverlay === 'hr' && activity.average_hr !== null && activity.average_hr !== undefined) {
+                        midVal = activity.average_hr;
+                      } else if (activeOverlay === 'cad' && avgCad !== null) {
+                        midVal = avgCad;
+                      } else {
+                        midVal = (minVal + maxVal) / 2; // fallback for elevation or when averages unavailable
+                      }
 
                       const yOverlayAxis = (v: number): number => {
                         if (range === 0) return (chartY0 + chartY1) / 2;
