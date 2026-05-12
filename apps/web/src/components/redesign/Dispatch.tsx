@@ -478,9 +478,9 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
               const W = 600;
               const H = 140;
               const padTop = 10;
-              const padRight = 10;
+              const padRight = 42;
               const padBottom = 24;
-              const padLeft = 10;
+              const padLeft = 38;
               const chartX0 = padLeft;
               const chartX1 = W - padRight;
               const chartY0 = padTop;
@@ -671,6 +671,7 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
                     height={H}
                     viewBox={`0 0 ${W} ${H}`}
                     preserveAspectRatio="none"
+                    overflow="visible"
                     style={{ display: 'block' }}
                   >
                     {/* Average pace reference line */}
@@ -744,6 +745,252 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
                         {lbl.label}
                       </text>
                     ))}
+
+                    {/* Left Y-axis — pace labels (min, avg, max) */}
+                    {(() => {
+                      const leftLabels: { y: number; label: string; opacity: number }[] = [
+                        { y: yPace(minPace), label: formatPace(minPace / 60), opacity: 0.65 },
+                        { y: avgY,           label: formatPace(avgPaceSec / 60), opacity: 0.45 },
+                        { y: yPace(maxPace), label: formatPace(maxPace / 60), opacity: 0.65 },
+                      ];
+                      return leftLabels.map(({ y, label, opacity }, idx) => (
+                        <g key={idx}>
+                          <line
+                            x1={chartX0 - 2}
+                            y1={y}
+                            x2={chartX0}
+                            y2={y}
+                            stroke="var(--color-ink)"
+                            strokeWidth="1"
+                            opacity="0.4"
+                          />
+                          <text
+                            x={chartX0 - 4}
+                            y={y}
+                            textAnchor="end"
+                            dominantBaseline="middle"
+                            fontFamily="var(--font-mono-tabloid)"
+                            fontSize="8"
+                            fill="var(--color-ink)"
+                            opacity={opacity}
+                          >
+                            {label}
+                          </text>
+                        </g>
+                      ));
+                    })()}
+
+                    {/* Right Y-axis — overlay labels (min, mid, max) — only when overlay active */}
+                    {(() => {
+                      if (!activeOverlay || overlayDisabled[activeOverlay]) return null;
+                      const vals = overlayValues[activeOverlay];
+                      const nonNull = vals.filter((v): v is number => v !== null);
+                      if (nonNull.length === 0) return null;
+                      const minVal = Math.min(...nonNull);
+                      const maxVal = Math.max(...nonNull);
+                      const range = maxVal - minVal;
+                      const midVal = (minVal + maxVal) / 2;
+
+                      const yOverlayAxis = (v: number): number => {
+                        if (range === 0) return (chartY0 + chartY1) / 2;
+                        return chartY1 - ((v - minVal) / range) * (chartY1 - chartY0);
+                      };
+
+                      const fmtOverlayLabel = (v: number): string => {
+                        if (activeOverlay === 'elev') {
+                          return v >= 0 ? `+${Math.round(v)}` : String(Math.round(v));
+                        }
+                        return String(Math.round(v));
+                      };
+
+                      const rightLabels: { y: number; label: string; opacity: number }[] = [
+                        { y: yOverlayAxis(maxVal), label: fmtOverlayLabel(maxVal), opacity: 0.65 },
+                        { y: yOverlayAxis(midVal), label: fmtOverlayLabel(midVal), opacity: 0.45 },
+                        { y: yOverlayAxis(minVal), label: fmtOverlayLabel(minVal), opacity: 0.65 },
+                      ];
+
+                      return rightLabels.map(({ y, label, opacity }, idx) => (
+                        <g key={idx}>
+                          <line
+                            x1={chartX1}
+                            y1={y}
+                            x2={chartX1 + 2}
+                            y2={y}
+                            stroke="var(--color-accent)"
+                            strokeWidth="1"
+                            opacity="0.4"
+                          />
+                          <text
+                            x={chartX1 + 4}
+                            y={y}
+                            textAnchor="start"
+                            dominantBaseline="middle"
+                            fontFamily="var(--font-mono-tabloid)"
+                            fontSize="8"
+                            fill="var(--color-accent)"
+                            opacity={opacity}
+                          >
+                            {label}
+                          </text>
+                        </g>
+                      ));
+                    })()}
+
+                    {/* Min/max markers on pace line */}
+                    {(() => {
+                      if (n < 3) return null;
+                      const skipCount = Math.max(1, Math.floor(n * 0.03));
+                      const searchSlice = paceSecs.slice(skipCount, n - skipCount);
+                      if (searchSlice.length === 0) return null;
+
+                      let minIdx = skipCount;
+                      let maxIdx = skipCount;
+                      for (let i = skipCount + 1; i < n - skipCount; i++) {
+                        if (paceSecs[i] < paceSecs[minIdx]) minIdx = i;
+                        if (paceSecs[i] > paceSecs[maxIdx]) maxIdx = i;
+                      }
+
+                      // minPaceIdx = fastest (low seconds) → near top of chart (low cy)
+                      // maxPaceIdx = slowest (high seconds) → near bottom of chart (high cy)
+                      const markers: { idx: number; label: string; isMin: boolean }[] = [];
+                      markers.push({ idx: minIdx, label: formatPace(paceSecs[minIdx] / 60), isMin: true });
+                      if (maxIdx !== minIdx) {
+                        markers.push({ idx: maxIdx, label: formatPace(paceSecs[maxIdx] / 60), isMin: false });
+                      }
+
+                      return markers.map(({ idx, label, isMin }, mi) => {
+                        const cx = xSvg(chartPoints[idx].x);
+                        const cy = yPace(paceSecs[idx]);
+                        const clampedX = Math.max(chartX0 + 4, Math.min(chartX1 - 4, cx));
+                        // isMin = fastest pace = near top → leader goes UP; leader end at y=3, label at y=2
+                        // !isMin = slowest pace = near bottom → leader goes DOWN; leader end at chartY1+3, label at chartY1+11
+                        const leaderEndY = isMin ? 3 : chartY1 + 3;
+                        const labelY = isMin ? 2 : chartY1 + 11;
+                        // Leader starts from circle edge toward label
+                        const leaderStartY = isMin ? cy - 3 : cy + 3;
+                        // Dynamic text anchor to prevent clipping near edges
+                        const leftThreshold = chartX0 + (chartX1 - chartX0) * 0.25;
+                        const rightThreshold = chartX0 + (chartX1 - chartX0) * 0.75;
+                        const paceAnchor = clampedX < leftThreshold ? 'start' : clampedX > rightThreshold ? 'end' : 'middle';
+                        return (
+                          <g key={mi}>
+                            {/* Leader line */}
+                            <line
+                              x1={clampedX}
+                              y1={leaderStartY}
+                              x2={clampedX}
+                              y2={leaderEndY}
+                              stroke="var(--color-ink)"
+                              strokeWidth="0.75"
+                              strokeDasharray="2 2"
+                              opacity="0.5"
+                            />
+                            {/* Circle marker stays on the data point */}
+                            <circle cx={cx} cy={cy} r="3" fill="var(--color-ink)" />
+                            <text
+                              x={clampedX}
+                              y={labelY}
+                              textAnchor={paceAnchor}
+                              dominantBaseline="auto"
+                              fontFamily="var(--font-mono-tabloid)"
+                              fontSize="8"
+                              fill="var(--color-ink)"
+                              opacity="0.9"
+                            >
+                              {label}
+                            </text>
+                          </g>
+                        );
+                      });
+                    })()}
+
+                    {/* Min/max markers on overlay line */}
+                    {(() => {
+                      if (!activeOverlay || overlayDisabled[activeOverlay]) return null;
+                      if (n < 3) return null;
+                      const skipCount = Math.max(1, Math.floor(n * 0.03));
+                      const vals = overlayValues[activeOverlay];
+                      const nonNull = vals.filter((v): v is number => v !== null);
+                      if (nonNull.length === 0) return null;
+
+                      const oMinVal = Math.min(...nonNull);
+                      const oMaxVal = Math.max(...nonNull);
+                      const oRange = oMaxVal - oMinVal;
+
+                      const yOverlayMark = (v: number): number => {
+                        if (oRange === 0) return (chartY0 + chartY1) / 2;
+                        return chartY1 - ((v - oMinVal) / oRange) * (chartY1 - chartY0);
+                      };
+
+                      const fmtOverlayMark = (v: number): string => {
+                        if (activeOverlay === 'elev') {
+                          return v >= 0 ? `+${Math.round(v)}` : String(Math.round(v));
+                        }
+                        return String(Math.round(v));
+                      };
+
+                      let oMinIdx = -1;
+                      let oMaxIdx = -1;
+                      for (let i = skipCount; i < n - skipCount; i++) {
+                        const v = vals[i];
+                        if (v === null) continue;
+                        if (oMinIdx === -1 || v < (vals[oMinIdx] as number)) oMinIdx = i;
+                        if (oMaxIdx === -1 || v > (vals[oMaxIdx] as number)) oMaxIdx = i;
+                      }
+
+                      if (oMinIdx === -1) return null;
+
+                      const overlayMarkers: { idx: number; label: string }[] = [];
+                      overlayMarkers.push({ idx: oMinIdx, label: fmtOverlayMark(vals[oMinIdx] as number) });
+                      if (oMaxIdx !== oMinIdx) {
+                        overlayMarkers.push({ idx: oMaxIdx, label: fmtOverlayMark(vals[oMaxIdx] as number) });
+                      }
+
+                      return overlayMarkers.map(({ idx, label }, mi) => {
+                        const cx = xSvg(chartPoints[idx].x);
+                        const cy = yOverlayMark(vals[idx] as number);
+                        const clampedX = Math.max(chartX0 + 4, Math.min(chartX1 - 4, cx));
+                        // oMaxIdx = highest overlay value = near top of chart (low cy) → leader UP
+                        // oMinIdx = lowest overlay value = near bottom of chart (high cy) → leader DOWN
+                        const isMax = idx === oMaxIdx;
+                        const leaderEndY = isMax ? 3 : chartY1 + 3;
+                        const labelY = isMax ? 2 : chartY1 + 11;
+                        const leaderStartY = isMax ? cy - 3 : cy + 3;
+                        // Dynamic text anchor to prevent clipping near edges
+                        const leftThreshold = chartX0 + (chartX1 - chartX0) * 0.25;
+                        const rightThreshold = chartX0 + (chartX1 - chartX0) * 0.75;
+                        const overlayAnchor = clampedX < leftThreshold ? 'start' : clampedX > rightThreshold ? 'end' : 'middle';
+                        return (
+                          <g key={mi}>
+                            {/* Leader line */}
+                            <line
+                              x1={clampedX}
+                              y1={leaderStartY}
+                              x2={clampedX}
+                              y2={leaderEndY}
+                              stroke="var(--color-accent)"
+                              strokeWidth="0.75"
+                              strokeDasharray="2 2"
+                              opacity="0.5"
+                            />
+                            {/* Circle marker stays on the data point */}
+                            <circle cx={cx} cy={cy} r="3" fill="var(--color-accent)" />
+                            <text
+                              x={clampedX}
+                              y={labelY}
+                              textAnchor={overlayAnchor}
+                              dominantBaseline="auto"
+                              fontFamily="var(--font-mono-tabloid)"
+                              fontSize="8"
+                              fill="var(--color-accent)"
+                              opacity="0.9"
+                            >
+                              {label}
+                            </text>
+                          </g>
+                        );
+                      });
+                    })()}
                   </svg>
 
                   {/* Toggle buttons */}
