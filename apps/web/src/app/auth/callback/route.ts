@@ -15,11 +15,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL('/?error=missing_code', request.url))
   }
 
+  const state = searchParams.get('state')
+  const oauthState = request.cookies.get('oauth_state')?.value
+
   try {
-    const res = await fetch(
-      `${API_URL}/auth/strava/callback?code=${encodeURIComponent(code)}`,
-      { method: 'GET', cache: 'no-store' }
-    )
+    const backendUrl = new URL(`${API_URL}/auth/strava/callback`)
+    backendUrl.searchParams.set('code', encodeURIComponent(code))
+    if (state) backendUrl.searchParams.set('state', state)
+
+    const fetchHeaders: Record<string, string> = {}
+    if (oauthState) fetchHeaders['Cookie'] = `oauth_state=${oauthState}`
+
+    const res = await fetch(backendUrl.toString(), {
+      method: 'GET',
+      cache: 'no-store',
+      headers: fetchHeaders,
+    })
 
     if (!res.ok) {
       return NextResponse.redirect(new URL('/?error=auth_failed', request.url))

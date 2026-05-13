@@ -27,6 +27,11 @@ import os
 import secrets
 from typing import Optional
 
+# Allow plain-HTTP dev environments to receive cookies.
+# In production, keep secure=True (the default).
+# Set COOKIE_SECURE=false in .env (or docker-compose) to disable for local dev.
+_COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "true").lower() != "false"
+
 from fastapi import APIRouter, Body, Cookie, Depends, HTTPException, BackgroundTasks, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -149,7 +154,7 @@ async def initiate_strava_oauth(
         value=csrf_state,
         httponly=True,
         samesite="lax",
-        secure=True,
+        secure=_COOKIE_SECURE,
         max_age=600,  # 10 minutes — enough for the user to complete the OAuth redirect
     )
 
@@ -246,7 +251,7 @@ async def strava_oauth_callback(
             value=str(user.id),
             httponly=True,
             samesite="lax",
-            secure=True,
+            secure=_COOKIE_SECURE,
             max_age=60 * 60 * 24 * 30,  # 30 days — matches Next.js frontend maxAge
         )
         return response
