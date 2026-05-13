@@ -41,10 +41,13 @@ Create `apps/api/.env` and fill in your Strava credentials:
 ```env
 STRAVA_CLIENT_ID=your_client_id
 STRAVA_CLIENT_SECRET=your_client_secret
-STRAVA_REDIRECT_URI=http://localhost:8000/auth/strava/callback
+STRAVA_REDIRECT_URI=http://localhost:3000/auth/callback
 FRONTEND_URL=http://localhost:3000
 SECRET_KEY=change-this-to-a-random-string
+COOKIE_SECURE=false
 ```
+
+> **`COOKIE_SECURE=false`** is required for local development over plain HTTP. Remove this line (or set it to `true`) when running behind HTTPS in production.
 
 ### 2. Start
 
