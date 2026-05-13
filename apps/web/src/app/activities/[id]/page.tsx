@@ -178,7 +178,7 @@ export default function ActivityDetailPage() {
       activity={activity}
       weeklyKm={weeklyKm}
       splits={splits}
-      userMaxHr={user?.max_hr ?? null}
+      userMaxHr={user?.max_hr ?? user?.max_hr_observed ?? null}
       onBack={() => router.push('/activities')}
       onAnalyze={handleAnalyze}
       isAnalyzing={isAnalyzing}

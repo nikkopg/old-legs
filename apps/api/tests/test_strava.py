@@ -682,8 +682,6 @@ async def test_sync_activities_fallback_sets_sentinel_and_splits(
     """
     from services.strava import sync_activities
 
-    strava_id = "fallback_test_77"
-
     raw_strava_activity = {
         "id": 77,
         "name": "Fallback Run",

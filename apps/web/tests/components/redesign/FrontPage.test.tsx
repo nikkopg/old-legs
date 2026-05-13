@@ -29,7 +29,7 @@ function makeActivity(overrides: Partial<Activity> = {}): Activity {
     created_at: '2026-04-28T07:00:00Z',
     updated_at: '2026-04-28T07:00:00Z',
     verdict_short: 'Kept the pace honest.',
-    verdict_tag: 'SOLID',
+    verdict_tag: 'STEADY',
     tone: 'good',
     splits: null,
     streams: null,

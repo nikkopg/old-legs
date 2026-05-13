@@ -122,6 +122,7 @@ export interface UserProfile {
   biggest_struggle: string | null
   resting_hr: number | null
   max_hr: number | null
+  max_hr_observed: number | null
   total_activities: number
   total_distance_km: number
   weeks_on_plan: number

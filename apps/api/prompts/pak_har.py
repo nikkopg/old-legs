@@ -235,7 +235,5 @@ Context about the runner (injected at runtime — use this in your response):
 Runner's stated preferences:
 {user_preferences}
 
-Runner's message: "{user_message}"
-
 Respond as Pak Har.
 """

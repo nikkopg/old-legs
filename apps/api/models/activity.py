@@ -17,7 +17,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import String, DateTime, Boolean, Float, Integer, Text, ForeignKey, JSON
+from sqlalchemy import String, DateTime, Boolean, Float, Integer, Text, ForeignKey, JSON, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import Base
@@ -30,6 +30,10 @@ class Activity(Base):
     Stores normalized values (km, min/km) for easier AI prompt construction.
     """
     __tablename__ = "activities"
+
+    __table_args__ = (
+        Index("ix_activity_user_date", "user_id", "activity_date"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)

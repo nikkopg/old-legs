@@ -103,7 +103,15 @@ def test_oauth_callback_success(test_app: TestClient, db_session: Session, monke
     monkeypatch.setattr("services.strava.exchange_code_for_tokens", mock_exchange_code)
     monkeypatch.setattr("services.strava.fetch_athlete_profile", mock_fetch_athlete)
 
-    response = test_app.get("/auth/strava/callback", params={"code": "valid_code"})
+    # BUG-014: Callback now validates the CSRF state.  Set the oauth_state cookie
+    # to match the state query parameter so the hmac.compare_digest check passes.
+    csrf_state = "test-csrf-state-value"
+    test_app.cookies.set("oauth_state", csrf_state)
+    response = test_app.get(
+        "/auth/strava/callback",
+        params={"code": "valid_code", "state": csrf_state},
+    )
+    test_app.cookies.delete("oauth_state")
 
     assert response.status_code == 200
     data = response.json()
@@ -129,11 +137,19 @@ def test_oauth_callback_strava_api_error(test_app: TestClient):
     strava_service._settings.client_secret = "test_client_secret"
     strava_service._settings.redirect_uri = "http://localhost:8000/auth/strava/callback"
 
+    # BUG-014: Supply matching state cookie so the CSRF check passes before
+    # the Strava token exchange call is made.
+    csrf_state = "test-csrf-state-error"
+    test_app.cookies.set("oauth_state", csrf_state)
     with respx.mock as mock:
         mock.post("https://www.strava.com/oauth/token").mock(
             return_value=Response(400, json={"message": "Bad Request", "errors": []})
         )
-        response = test_app.get("/auth/strava/callback", params={"code": "bad_code"})
+        response = test_app.get(
+            "/auth/strava/callback",
+            params={"code": "bad_code", "state": csrf_state},
+        )
+    test_app.cookies.delete("oauth_state")
 
     assert response.status_code in (400, 500)
 

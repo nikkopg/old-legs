@@ -61,14 +61,14 @@ class User(Base):
 
     # Relationships
     activities: Mapped[list["Activity"]] = relationship(
-        "Activity", back_populates="user", lazy="selectin"
+        "Activity", back_populates="user", lazy="raise"
     )
     training_plans: Mapped[list["TrainingPlan"]] = relationship(
-        "TrainingPlan", back_populates="user", lazy="selectin"
+        "TrainingPlan", back_populates="user", lazy="raise"
     )
     chat_messages: Mapped[list["ChatMessage"]] = relationship(
-        "ChatMessage", back_populates="user", lazy="selectin"
+        "ChatMessage", back_populates="user", lazy="raise"
     )
     weekly_reviews: Mapped[list["WeeklyReview"]] = relationship(
-        "WeeklyReview", back_populates="user", lazy="selectin"
+        "WeeklyReview", back_populates="user", lazy="raise"
     )

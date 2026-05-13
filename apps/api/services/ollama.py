@@ -91,7 +91,7 @@ def build_strava_context(user: User, db: Session) -> str:
     avg_pace_float = sum(a.average_pace_min_per_km for a in activities) / len(activities)
 
     most_recent = activities[0]
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     last_run_date = most_recent.activity_date.date()
     days_since = (today - last_run_date).days
 
@@ -173,7 +173,6 @@ async def stream_chat(
     """
     system_content = SYSTEM_PROMPT.format(
         strava_context=strava_context,
-        user_message=user_message,
         user_preferences=user_preferences,
     )
 

@@ -21,8 +21,10 @@ Endpoints:
 - GET /auth/strava/callback — Handle Strava OAuth callback, exchange code, store tokens
 """
 
+import hmac
 import logging
 import os
+import secrets
 from typing import Optional
 
 from fastapi import APIRouter, Body, Cookie, Depends, HTTPException, BackgroundTasks, Response
@@ -91,12 +93,20 @@ class DisconnectResponse(BaseModel):
 
 
 @router.post("/strava")
-async def initiate_strava_oauth(request: OAuthInitiateRequest = Body(default=OAuthInitiateRequest())):
+async def initiate_strava_oauth(
+    response: Response,
+    request: OAuthInitiateRequest = Body(default=OAuthInitiateRequest()),
+):
     """
     Initiate Strava OAuth flow.
 
     Generates the Strava OAuth authorization URL and returns it to the frontend.
     The frontend should redirect the user's browser to this URL.
+
+    A cryptographically random CSRF state token is generated here, embedded in
+    the OAuth URL sent to Strava, and stored as a short-lived ``oauth_state``
+    httpOnly cookie (10 minutes).  The callback handler reads both values and
+    rejects the request if they do not match.
 
     **Request (JSON body):**
     ```json
@@ -127,8 +137,21 @@ async def initiate_strava_oauth(request: OAuthInitiateRequest = Body(default=OAu
             detail="Strava redirect URI not configured. Set STRAVA_REDIRECT_URI environment variable."
         )
 
-    # Generate OAuth URL
-    oauth_url = get_redirect_url(state=request.state if request.state else None)
+    # Generate a cryptographically random state token for CSRF protection.
+    # Stored in a short-lived httpOnly cookie so the callback can verify it.
+    csrf_state = secrets.token_urlsafe(32)
+
+    # Generate OAuth URL — always use our server-generated state for CSRF safety.
+    oauth_url = get_redirect_url(state=csrf_state)
+
+    response.set_cookie(
+        key="oauth_state",
+        value=csrf_state,
+        httponly=True,
+        samesite="lax",
+        secure=True,
+        max_age=600,  # 10 minutes — enough for the user to complete the OAuth redirect
+    )
 
     return OAuthInitiateResponse(oauth_url=oauth_url)
 
@@ -136,8 +159,11 @@ async def initiate_strava_oauth(request: OAuthInitiateRequest = Body(default=OAu
 @router.get("/strava/callback")
 async def strava_oauth_callback(
     code: str,
+    response: Response,
+    state: Optional[str] = None,
+    oauth_state: Optional[str] = Cookie(default=None),
     db: Session = Depends(get_db),
-    background_tasks: BackgroundTasks = None
+    background_tasks: BackgroundTasks = None,
 ):
     """
     Handle Strava OAuth callback.
@@ -145,21 +171,43 @@ async def strava_oauth_callback(
     Exchanges the authorization code for access/refresh tokens,
     fetches athlete profile, and creates or updates the user in the database.
 
+    CSRF protection: the ``state`` query param returned by Strava must match
+    the ``oauth_state`` cookie set during initiation.  Both values are compared
+    with ``hmac.compare_digest`` to resist timing attacks.  The cookie is
+    cleared immediately after the check regardless of outcome.
+
     Query params:
         code: Authorization code from Strava
-        state: Optional CSRF token (currently not validated)
+        state: CSRF state token echoed back by Strava
 
     Returns:
         JSON response with success status and user data
 
     Raises:
-        400: Missing code parameter or invalid OAuth flow
+        400: Missing code, state mismatch, or invalid OAuth flow
         500: Strava API errors or database issues
     """
     if not code:
         raise HTTPException(
             status_code=400,
             detail="Missing authorization code. 'code' query parameter required."
+        )
+
+    # --- CSRF state validation (BUG-014) ---
+    # Clear the oauth_state cookie unconditionally so it cannot be replayed.
+    response.delete_cookie(key="oauth_state")
+
+    if not state or not oauth_state:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing CSRF state parameter. Restart the OAuth flow.",
+        )
+
+    # Use hmac.compare_digest to avoid timing-based attacks on string comparison.
+    if not hmac.compare_digest(state, oauth_state):
+        raise HTTPException(
+            status_code=400,
+            detail="CSRF state mismatch. OAuth flow may have been tampered with.",
         )
 
     # Validate environment
@@ -198,6 +246,8 @@ async def strava_oauth_callback(
             value=str(user.id),
             httponly=True,
             samesite="lax",
+            secure=True,
+            max_age=60 * 60 * 24 * 30,  # 30 days — matches Next.js frontend maxAge
         )
         return response
 
