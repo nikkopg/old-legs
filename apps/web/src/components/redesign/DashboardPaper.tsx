@@ -13,13 +13,10 @@
 // Previous edge cases (TASK-136) still apply:
 //   - todayPlan=null shows "No plan filed yet." fallback
 //   - lastRun=null shows "No run dispatched yet." fallback
-//   - insights=null shows "No column yet." fallback
 //   - weeklyStats.totalKm < targetKm*0.5 → headline "Week is thin. Pick it up." (null review only)
 //   - weeklyStats.totalKm >= targetKm → headline "Target met. Don't stop now." (null review only)
 //   - lastRun.avgHr=null shows "—" in Box Score
-//   - insights.weeklyKmTrend with fewer than 6 items renders without crashing
-//   - insights.avgHr=null and loadChangePct=null show "—" in key numbers
-//   - onOpenRun, onOpenPlan, onOpenCoach, onNav callbacks fire correctly
+//   - onOpenRun, onOpenPlan, onNav callbacks fire correctly
 
 import React from 'react';
 import {
@@ -68,18 +65,10 @@ interface LastRun {
   analysisSnippet: string | null;
 }
 
-interface InsightsData {
-  commentary: string;
-  weeklyKmTrend: number[];
-  avgHr: number | null;
-  loadChangePct: number | null;
-}
-
 interface DashboardPaperProps {
   weeklyStats: WeeklyStats;
   todayPlan: TodayPlan | null;
   lastRun: LastRun | null;
-  insights: InsightsData | null;
   lastSyncedAt: string | null;
   weeklyReview: WeeklyReview | null;
   onGenerateReview: () => void;
@@ -87,7 +76,6 @@ interface DashboardPaperProps {
   reviewError: string | null;
   onOpenRun: (id: number) => void;
   onOpenPlan: () => void;
-  onOpenCoach: () => void;
   onNav: (key: string) => void;
 }
 
@@ -147,19 +135,12 @@ function fmtWeekOf(dateStr: string): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-function opEdHeadline(commentary: string): string {
-  const firstLine = commentary.split('\n\n')[0].split('.')[0].trim();
-  if (firstLine.length > 0 && firstLine.length < 80) return firstLine + '.';
-  return 'The arc tells a story.';
-}
-
 // ---------- component ----------
 
 export function DashboardPaper({
   weeklyStats,
   todayPlan,
   lastRun,
-  insights,
   lastSyncedAt,
   weeklyReview,
   onGenerateReview,
@@ -167,7 +148,6 @@ export function DashboardPaper({
   reviewError,
   onOpenRun,
   onOpenPlan,
-  onOpenCoach,
   onNav,
 }: DashboardPaperProps) {
   const { totalKm, totalRuns, totalTimeSec, targetKm } = weeklyStats;
@@ -178,21 +158,6 @@ export function DashboardPaper({
   const lastRunDow = lastRunParts[0] ?? '';
   const lastRunDay = lastRunParts[1] ?? '';
   const lastRunMonth = lastRunParts[2] ?? '';
-
-  // Op-ed paragraphs
-  const opEdParagraphs = insights ? insights.commentary.split('\n\n').filter(Boolean) : [];
-  const pullQuote = opEdParagraphs.length >= 2 ? opEdParagraphs[1] : null;
-
-  // Bar chart for insights
-  const trend = insights ? insights.weeklyKmTrend : [];
-  const maxTrend = trend.length > 0 ? Math.max(...trend, 1) : 40;
-  const chartLabels = ['W-5', 'W-4', 'W-3', 'W-2', 'W-1', 'This'];
-  // Align trend values to last N slots of chartLabels (up to 6)
-  const chartSlots = 6;
-  const chartData: (number | null)[] = Array(chartSlots).fill(null);
-  for (let i = 0; i < Math.min(trend.length, chartSlots); i++) {
-    chartData[chartSlots - Math.min(trend.length, chartSlots) + i] = trend[i];
-  }
 
   return (
     <Paper width={980} screenLabel="02 Dashboard">
@@ -788,273 +753,6 @@ export function DashboardPaper({
             }}
           >
             No run dispatched yet.
-          </p>
-        )}
-      </div>
-
-      {/* OP-ED — 6-week insights */}
-      <div style={{ marginTop: 28 }}>
-        <Rule thick />
-        <SectionLabel right="columnist · weekly">Opinion · The Arc</SectionLabel>
-        <Hairline />
-
-        {insights ? (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1.15fr 1fr',
-              gap: 28,
-              marginTop: 14,
-              alignItems: 'start',
-            }}
-          >
-            {/* Column prose */}
-            <div>
-              <Caps size={9} ls={3} opacity={0.7}>
-                by Pak Har — 6-Week Column
-              </Caps>
-              <h2
-                style={{
-                  fontFamily: OL.display,
-                  fontSize: 36,
-                  fontWeight: 400,
-                  lineHeight: 1.05,
-                  letterSpacing: -0.4,
-                  margin: '6px 0 10px',
-                  fontStyle: 'italic',
-                }}
-              >
-                {opEdHeadline(insights.commentary)}
-              </h2>
-              {opEdParagraphs.map((para, i) => (
-                <p
-                  key={i}
-                  style={{
-                    fontFamily: OL.body,
-                    fontSize: 13.5,
-                    lineHeight: 1.65,
-                    margin: i < opEdParagraphs.length - 1 ? '0 0 10px' : 0,
-                    textAlign: 'justify',
-                    hyphens: 'auto',
-                  }}
-                >
-                  {para}
-                </p>
-              ))}
-              {pullQuote && (
-                <div
-                  style={{
-                    borderTop: `2px solid ${OL.accent}`,
-                    borderBottom: `2px solid ${OL.accent}`,
-                    padding: '10px 0',
-                    margin: '14px 0',
-                  }}
-                >
-                  <p
-                    style={{
-                      margin: 0,
-                      fontFamily: OL.display,
-                      fontSize: 22,
-                      lineHeight: 1.1,
-                      letterSpacing: -0.2,
-                      textAlign: 'center',
-                      fontStyle: 'italic',
-                      color: OL.accent,
-                    }}
-                  >
-                    &ldquo;{pullQuote.length > 120 ? pullQuote.slice(0, 120) + '…' : pullQuote}&rdquo;
-                  </p>
-                </div>
-              )}
-              <Caps
-                size={9}
-                ls={2}
-                opacity={0.65}
-                style={{ display: 'block', textAlign: 'right' }}
-              >
-                — Pak Har · 6-Week Column
-              </Caps>
-            </div>
-
-            {/* Supporting figures */}
-            <div>
-              <Caps size={9} ls={3} opacity={0.7}>
-                Supporting Figures
-              </Caps>
-              <Hairline gap={6} />
-              <div
-                style={{
-                  border: `1px solid ${OL.ink}`,
-                  padding: '12px 14px',
-                  marginTop: 6,
-                }}
-              >
-                <Caps size={8} ls={2} opacity={0.6}>
-                  Weekly Kilometres · {trend.length} week{trend.length !== 1 ? 's' : ''}
-                </Caps>
-                <svg
-                  width="100%"
-                  height="90"
-                  viewBox="0 0 340 90"
-                  style={{ display: 'block', marginTop: 8 }}
-                >
-                  {/* baseline */}
-                  <line
-                    x1="0"
-                    y1="70"
-                    x2="340"
-                    y2="70"
-                    stroke={OL.ink}
-                    strokeWidth="0.5"
-                    opacity="0.4"
-                  />
-                  {chartData.map((v, i) => {
-                    if (v === null) return null;
-                    const h = (v / (maxTrend * 1.1)) * 60;
-                    const x = 12 + i * 55;
-                    const isCurrent = i === chartSlots - 1;
-                    return (
-                      <g key={i}>
-                        <rect
-                          x={x}
-                          y={70 - h}
-                          width={40}
-                          height={h}
-                          fill={isCurrent ? OL.accent : OL.ink}
-                        />
-                        <text
-                          x={x + 20}
-                          y={86}
-                          textAnchor="middle"
-                          style={{
-                            fontFamily: OL.sans,
-                            fontSize: 9,
-                            letterSpacing: 1,
-                            fill: OL.ink,
-                            opacity: 0.7,
-                            textTransform: 'uppercase',
-                          }}
-                        >
-                          {chartLabels[i]}
-                        </text>
-                        <text
-                          x={x + 20}
-                          y={65 - h}
-                          textAnchor="middle"
-                          style={{
-                            fontFamily: OL.mono,
-                            fontSize: 9,
-                            fill: OL.ink,
-                          }}
-                        >
-                          {v > 0 ? v.toFixed(0) : '—'}
-                        </text>
-                      </g>
-                    );
-                  })}
-                </svg>
-
-                <div
-                  style={{
-                    marginTop: 10,
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: 10,
-                    borderTop: `1px dotted ${OL.hair}`,
-                    paddingTop: 10,
-                  }}
-                >
-                  <div>
-                    <Caps size={8} ls={2} opacity={0.6}>
-                      Avg HR · 6w
-                    </Caps>
-                    <div
-                      style={{
-                        fontFamily: OL.mono,
-                        fontSize: 22,
-                        fontWeight: 700,
-                      }}
-                    >
-                      {insights.avgHr !== null ? (
-                        <>
-                          {insights.avgHr}
-                          <span style={{ fontSize: 11, opacity: 0.6 }}> bpm</span>
-                        </>
-                      ) : (
-                        '—'
-                      )}
-                    </div>
-                    <Caps size={8} ls={2} opacity={0.55}>
-                      6-week average
-                    </Caps>
-                  </div>
-                  <div>
-                    <Caps size={8} ls={2} opacity={0.6}>
-                      Load · vs peak
-                    </Caps>
-                    <div
-                      style={{
-                        fontFamily: OL.mono,
-                        fontSize: 22,
-                        fontWeight: 700,
-                        color: insights.loadChangePct !== null ? OL.accent : undefined,
-                      }}
-                    >
-                      {insights.loadChangePct !== null
-                        ? `${insights.loadChangePct > 0 ? '+' : ''}${insights.loadChangePct}%`
-                        : '—'}
-                    </div>
-                    <Caps size={8} ls={2} opacity={0.55}>
-                      since peak week
-                    </Caps>
-                  </div>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  marginTop: 12,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'baseline',
-                }}
-              >
-                <Caps size={9} ls={2} opacity={0.6}>
-                  Questions?
-                </Caps>
-                <a
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    onOpenCoach();
-                  }}
-                  style={{
-                    fontFamily: OL.sans,
-                    fontSize: 11,
-                    letterSpacing: 3,
-                    fontWeight: 700,
-                    color: OL.accent,
-                    textTransform: 'uppercase',
-                    textDecoration: 'none',
-                    borderBottom: `1px solid ${OL.accent}`,
-                  }}
-                >
-                  Write to the editor →
-                </a>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <p
-            style={{
-              fontFamily: OL.body,
-              fontSize: 13.5,
-              fontStyle: 'italic',
-              color: OL.muted,
-              marginTop: 14,
-            }}
-          >
-            No column yet. Generate insights to file the arc.
           </p>
         )}
       </div>

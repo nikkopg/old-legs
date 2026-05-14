@@ -14,7 +14,6 @@
 // Previous edge cases (TASK-137) still apply:
 //   - No activities (lastRun=null) → DashboardPaper renders "No run dispatched yet."
 //   - No plan (todayPlan=null) → DashboardPaper renders "No plan filed yet."
-//   - Insights query fails (insights=null) → DashboardPaper renders "No column yet."
 //   - isUnauthorized → redirect to /
 //   - Non-auth API error → OfflinePage shown
 //   - Loading state → skeleton block shown
@@ -30,9 +29,9 @@ import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton'
 import { OnboardingModal } from '@/components/onboarding'
 import { useDashboard } from '@/hooks/useDashboard'
 import { useUser } from '@/hooks/useUser'
-import { getInsights, getCurrentReview, generateWeeklyReview } from '@/lib/api'
+import { getCurrentReview, generateWeeklyReview } from '@/lib/api'
 import { formatDuration, formatPace } from '@/lib/formatters'
-import type { Insights, WeeklyReview } from '@/types/api'
+import type { WeeklyReview } from '@/types/api'
 import type { ApiError } from '@/types/api'
 
 // ---------------------------------------------------------------------------
@@ -46,13 +45,6 @@ export default function DashboardPage() {
   const { weeklyStats, todayPlan, lastRun, isLoading, isError, isUnauthorized } = useDashboard()
   const { user } = useUser()
   const [onboardingDone, setOnboardingDone] = useState(false)
-
-  // Non-blocking insights query — failures are silently treated as null
-  const { data: insightsData } = useQuery<Insights, ApiError>({
-    queryKey: ['insights'],
-    queryFn: getInsights,
-    retry: false,
-  })
 
   // Non-blocking weekly review query — failures are silently treated as null
   const { data: reviewData } = useQuery<WeeklyReview, ApiError>({
@@ -159,15 +151,6 @@ export default function DashboardPage() {
       }
     : null
 
-  const mappedInsights = insightsData
-    ? {
-        commentary: insightsData.pak_har_commentary,
-        weeklyKmTrend: [], // not in insights endpoint — DashboardPaper handles gracefully
-        avgHr: null,
-        loadChangePct: null,
-      }
-    : null
-
   const lastSyncedAt = lastRun?.updated_at ?? null
 
   return (
@@ -176,7 +159,6 @@ export default function DashboardPage() {
         weeklyStats={mappedWeeklyStats}
         todayPlan={mappedTodayPlan}
         lastRun={mappedLastRun}
-        insights={mappedInsights}
         lastSyncedAt={lastSyncedAt}
         weeklyReview={reviewData ?? null}
         onGenerateReview={onGenerateReview}
@@ -184,7 +166,6 @@ export default function DashboardPage() {
         reviewError={reviewError}
         onOpenRun={(id) => router.push(`/activities/${id}`)}
         onOpenPlan={() => router.push('/plan')}
-        onOpenCoach={() => router.push('/coach')}
         onNav={onNav}
       />
       {user !== null && !user.onboarding_completed && !onboardingDone && (
