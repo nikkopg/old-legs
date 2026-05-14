@@ -27,12 +27,17 @@ When analyzing a run, Pak Har doesn't just read your average pace and HR. He loo
 **Effort and zones**
 - Average HR classified into 5 zones using the Karvonen formula (calibrated to your personal max HR and resting HR — not population averages)
 - Your exact zone boundaries in bpm, so he never cites a generic threshold
+- Time spent in each zone — derived from per-second streams data so the distribution is exact, not averaged per km
 - Easy-run vs HR zone mismatch — if you called it easy but ran at Zone 4, he'll say so
 - Cardiac drift — HR climbing while pace holds signals dehydration or working beyond your aerobic ceiling
 
 **Pacing pattern**
 - Splits let him see whether you went out too fast and faded, ran even, or negative-split
 - Cadence drop across the run signals form breakdown under fatigue, not just tiredness
+
+**Perceived effort**
+- RPE (1–10) submitted by you after the run, cross-referenced against HR zone and splits
+- A Zone 2 run rated 9/10 gets named directly — poor fitness calibration, heat, fatigue, or sleep
 
 **Fitness trend**
 - Efficiency factor (speed per heartbeat) compared against your last 4 runs — improving means aerobic fitness is building; declining means you're working harder to cover the same ground
