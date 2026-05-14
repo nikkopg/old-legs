@@ -29,9 +29,9 @@ import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton'
 import { OnboardingModal } from '@/components/onboarding'
 import { useDashboard } from '@/hooks/useDashboard'
 import { useUser } from '@/hooks/useUser'
-import { getCurrentReview, generateWeeklyReview } from '@/lib/api'
+import { getCurrentReview, generateWeeklyReview, getCurrentPlan } from '@/lib/api'
 import { formatDuration, formatPace } from '@/lib/formatters'
-import type { WeeklyReview } from '@/types/api'
+import type { WeeklyReview, TrainingPlan } from '@/types/api'
 import type { ApiError } from '@/types/api'
 
 // ---------------------------------------------------------------------------
@@ -52,6 +52,20 @@ export default function DashboardPage() {
     queryFn: getCurrentReview,
     retry: false,
   })
+
+  // Non-blocking plan query — used to compute planned runs this week
+  const { data: planData } = useQuery<TrainingPlan, ApiError>({
+    queryKey: ['plan'],
+    queryFn: getCurrentPlan,
+    retry: false,
+  })
+
+  // Count non-rest days in the active plan as planned sessions this week
+  const plannedRunsThisWeek: number | null = planData
+    ? Object.values(planData.plan_data).filter(
+        (d) => d.type !== 'rest' && d.type !== 'off'
+      ).length || null
+    : null
 
   const [reviewGenerating, setReviewGenerating] = useState(false)
   const [reviewError, setReviewError] = useState<string | null>(null)
@@ -111,7 +125,7 @@ export default function DashboardPage() {
     totalKm: weeklyStats.totalKm,
     totalRuns: weeklyStats.totalRuns,
     totalTimeSec: weeklyStats.totalTimeSeconds,
-    targetKm: user?.weekly_km_target ?? null,
+    plannedRuns: plannedRunsThisWeek,
   }
 
   const mappedTodayPlan = todayPlan

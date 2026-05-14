@@ -25,7 +25,6 @@ import {
   Rule,
   Hairline,
   SectionLabel,
-  MiniBar,
   Paper,
   FooterRail,
   NewspaperChrome,
@@ -39,7 +38,7 @@ interface WeeklyStats {
   totalKm: number;
   totalRuns: number;
   totalTimeSec: number;
-  targetKm: number | null;
+  plannedRuns: number | null;
 }
 
 interface TodayPlan {
@@ -122,11 +121,10 @@ function fmtSyncedAt(raw: string | null): string {
 }
 
 function heroHeadline(stats: WeeklyStats): string {
-  const { totalKm, targetKm } = stats;
-  if (targetKm === null) return `${totalKm.toFixed(1)} km this week. Set a target in your desk.`;
-  if (totalKm < targetKm * 0.5) return 'Week is thin. Pick it up.';
-  if (totalKm >= targetKm) return 'Target met. Don\'t stop now.';
-  return `${totalKm.toFixed(1)} km in. ${(targetKm - totalKm).toFixed(1)} to go.`;
+  const { totalKm, totalRuns } = stats;
+  if (totalRuns === 0) return 'No runs filed yet this week.';
+  if (totalKm < 5) return 'Week is thin. Pick it up.';
+  return `${totalKm.toFixed(1)} km in. ${totalRuns} run${totalRuns === 1 ? '' : 's'} filed.`;
 }
 
 function fmtWeekOf(dateStr: string): string {
@@ -150,8 +148,7 @@ export function DashboardPaper({
   onOpenPlan,
   onNav,
 }: DashboardPaperProps) {
-  const { totalKm, totalRuns, totalTimeSec, targetKm } = weeklyStats;
-  const completionPct = targetKm !== null && targetKm > 0 ? (totalKm / targetKm) * 100 : null;
+  const { totalKm, totalRuns, totalTimeSec, plannedRuns } = weeklyStats;
 
   // Parse lastRun date parts
   const lastRunParts = lastRun ? lastRun.date.split(' ') : [];
@@ -284,12 +281,7 @@ export function DashboardPaper({
                   maxWidth: 560,
                 }}
               >
-                You are at <b>{totalKm.toFixed(1)} km</b>{' '}
-                {targetKm !== null ? (
-                  <>with the target sitting at <b>{targetKm}</b>.</>
-                ) : (
-                  <>with no weekly target set yet.</>
-                )}{' '}
+                <b>{totalKm.toFixed(1)} km</b> across{' '}
                 {totalRuns} run{totalRuns === 1 ? '' : 's'} filed so far this week.
               </div>
               {reviewGenerating ? (
@@ -336,79 +328,6 @@ export function DashboardPaper({
             </>
           )}
 
-          {/* Scoreboard */}
-          <div
-            style={{
-              marginTop: 16,
-              border: `3px solid ${OL.ink}`,
-              padding: '14px 18px',
-              background: 'var(--color-paper-soft)',
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: '10px 18px',
-            }}
-          >
-            {(
-              [
-                ['This Week', totalKm.toFixed(1), targetKm !== null ? `km of ${targetKm}` : 'km'],
-                ['Runs', String(totalRuns), 'this week'],
-                ['Time on Feet', fmtTime(totalTimeSec), 'minutes'],
-                ['Week Completion', completionPct !== null ? `${Math.round(completionPct)}%` : '—', completionPct !== null ? 'target' : 'no target'],
-              ] as [string, string, string][]
-            ).map(([label, value, sub]) => (
-              <div key={label}>
-                <Caps size={8} ls={2} opacity={0.6}>
-                  {label}
-                </Caps>
-                <div
-                  style={{
-                    fontFamily: OL.mono,
-                    fontSize: 26,
-                    fontWeight: 700,
-                    marginTop: 2,
-                    lineHeight: 1,
-                  }}
-                >
-                  {value}
-                </div>
-                <Caps
-                  size={8}
-                  ls={2}
-                  opacity={0.55}
-                  style={{ marginTop: 4, display: 'inline-block' }}
-                >
-                  {sub}
-                </Caps>
-              </div>
-            ))}
-          </div>
-
-          {/* Progress bar */}
-          <div style={{ marginTop: 14 }}>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'baseline',
-              }}
-            >
-              <Caps size={9} ls={3} opacity={0.7}>
-                Progress to Target
-              </Caps>
-              <span
-                style={{
-                  fontFamily: OL.mono,
-                  fontSize: 11,
-                  opacity: 0.7,
-                }}
-              >
-                {targetKm !== null ? `${totalKm.toFixed(1)} / ${targetKm.toFixed(1)} km` : `${totalKm.toFixed(1)} km · no target set`}
-              </span>
-            </div>
-            <div style={{ marginTop: 6 }}>
-              <MiniBar pct={completionPct !== null ? Math.min(completionPct, 100) : 0} accent height={14} />
-            </div>
-          </div>
         </article>
 
         {/* SIDEBAR */}
@@ -562,6 +481,52 @@ export function DashboardPaper({
             </p>
           </div>
         </aside>
+      </div>
+
+      {/* SCOREBOARD — full width below two-column grid */}
+      <div
+        style={{
+          marginTop: 20,
+          border: `3px solid ${OL.ink}`,
+          padding: '14px 18px',
+          background: 'var(--color-paper-soft)',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '10px 18px',
+        }}
+      >
+        {(
+          [
+            ['This Week', `${totalKm.toFixed(1)} km`, 'total distance'],
+            ['Runs', plannedRuns !== null ? `${totalRuns} / ${plannedRuns}` : String(totalRuns), 'this week'],
+            ['Time on Feet', fmtTime(totalTimeSec), 'total duration'],
+          ] as [string, string, string][]
+        ).map(([label, value, sub]) => (
+          <div key={label}>
+            <Caps size={8} ls={2} opacity={0.6}>
+              {label}
+            </Caps>
+            <div
+              style={{
+                fontFamily: OL.mono,
+                fontSize: 26,
+                fontWeight: 700,
+                marginTop: 2,
+                lineHeight: 1,
+              }}
+            >
+              {value}
+            </div>
+            <Caps
+              size={8}
+              ls={2}
+              opacity={0.55}
+              style={{ marginTop: 4, display: 'inline-block' }}
+            >
+              {sub}
+            </Caps>
+          </div>
+        ))}
       </div>
 
       {/* BELOW THE FOLD — last run snapshot */}
