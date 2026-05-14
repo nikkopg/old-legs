@@ -1,15 +1,17 @@
 "use client";
 
 // READY FOR QA
-// Component: DashboardPaper (TASK-136)
-// What was built: Tabloid dashboard front-page layout — above-the-fold hero + sidebar,
-//   below-the-fold last run snapshot, op-ed insights column.
-// Edge cases to test:
+// Component: DashboardPaper (TASK-184 — weekly review in Today's Lead)
+// What was built: weeklyReview prop replaces heroHeadline() formula when a review exists.
+//   - weeklyReview != null → "Filed week of X" metadata + review_text paragraphs (split \n\n)
+//   - weeklyReview == null → heroHeadline() formula + existing body + "No weekly assessment yet" link
+//   - onGenerateReview fires when the link is clicked
+// Previous edge cases (TASK-136) still apply:
 //   - todayPlan=null shows "No plan filed yet." fallback
 //   - lastRun=null shows "No run dispatched yet." fallback
 //   - insights=null shows "No column yet." fallback
-//   - weeklyStats.totalKm < targetKm*0.5 → headline "Week is thin. Pick it up."
-//   - weeklyStats.totalKm >= targetKm → headline "Target met. Don't stop now."
+//   - weeklyStats.totalKm < targetKm*0.5 → headline "Week is thin. Pick it up." (null review only)
+//   - weeklyStats.totalKm >= targetKm → headline "Target met. Don't stop now." (null review only)
 //   - lastRun.avgHr=null shows "—" in Box Score
 //   - insights.weeklyKmTrend with fewer than 6 items renders without crashing
 //   - insights.avgHr=null and loadChangePct=null show "—" in key numbers
@@ -28,6 +30,7 @@ import {
   NewspaperChrome,
   ToneBadge,
 } from './NewspaperChrome';
+import type { WeeklyReview } from '@/types/api';
 
 // ---------- interfaces ----------
 
@@ -74,6 +77,8 @@ interface DashboardPaperProps {
   lastRun: LastRun | null;
   insights: InsightsData | null;
   lastSyncedAt: string | null;
+  weeklyReview: WeeklyReview | null;
+  onGenerateReview: () => void;
   onOpenRun: (id: number) => void;
   onOpenPlan: () => void;
   onOpenCoach: () => void;
@@ -130,6 +135,12 @@ function heroHeadline(stats: WeeklyStats): string {
   return `${totalKm.toFixed(1)} km in. ${(targetKm - totalKm).toFixed(1)} to go.`;
 }
 
+function fmtWeekOf(dateStr: string): string {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
 function opEdHeadline(commentary: string): string {
   const firstLine = commentary.split('\n\n')[0].split('.')[0].trim();
   if (firstLine.length > 0 && firstLine.length < 80) return firstLine + '.';
@@ -144,6 +155,8 @@ export function DashboardPaper({
   lastRun,
   insights,
   lastSyncedAt,
+  weeklyReview,
+  onGenerateReview,
   onOpenRun,
   onOpenPlan,
   onOpenCoach,
@@ -204,34 +217,83 @@ export function DashboardPaper({
           <Caps size={10} ls={3}>
             Today&apos;s Lead · Week of {weekDateRange()}
           </Caps>
-          <h1
-            style={{
-              fontFamily: OL.display,
-              fontWeight: 400,
-              fontSize: 60,
-              lineHeight: 0.96,
-              letterSpacing: -0.8,
-              margin: '8px 0 10px',
-            }}
-          >
-            {heroHeadline(weeklyStats)}
-          </h1>
-          <div
-            style={{
-              fontFamily: OL.body,
-              fontSize: 14,
-              lineHeight: 1.6,
-              maxWidth: 560,
-            }}
-          >
-            You are at <b>{totalKm.toFixed(1)} km</b>{' '}
-            {targetKm !== null ? (
-              <>with the target sitting at <b>{targetKm}</b>.</>
-            ) : (
-              <>with no weekly target set yet.</>
-            )}{' '}
-            {totalRuns} run{totalRuns === 1 ? '' : 's'} filed so far this week.
-          </div>
+
+          {weeklyReview ? (
+            <>
+              <Caps
+                size={9}
+                ls={2}
+                opacity={0.6}
+                style={{ display: 'block', marginTop: 8, marginBottom: 6 }}
+              >
+                Filed week of {fmtWeekOf(weeklyReview.week_start_date)}
+              </Caps>
+              <div
+                style={{
+                  fontFamily: OL.body,
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  maxWidth: 560,
+                }}
+              >
+                {weeklyReview.review_text.split('\n\n').filter(Boolean).map((para, i) => (
+                  <p key={i} style={{ margin: i === 0 ? '0 0 10px' : '0 0 10px' }}>
+                    {para}
+                  </p>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <h1
+                style={{
+                  fontFamily: OL.display,
+                  fontWeight: 400,
+                  fontSize: 60,
+                  lineHeight: 0.96,
+                  letterSpacing: -0.8,
+                  margin: '8px 0 10px',
+                }}
+              >
+                {heroHeadline(weeklyStats)}
+              </h1>
+              <div
+                style={{
+                  fontFamily: OL.body,
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  maxWidth: 560,
+                }}
+              >
+                You are at <b>{totalKm.toFixed(1)} km</b>{' '}
+                {targetKm !== null ? (
+                  <>with the target sitting at <b>{targetKm}</b>.</>
+                ) : (
+                  <>with no weekly target set yet.</>
+                )}{' '}
+                {totalRuns} run{totalRuns === 1 ? '' : 's'} filed so far this week.
+              </div>
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onGenerateReview();
+                }}
+                style={{
+                  display: 'inline-block',
+                  marginTop: 10,
+                  fontFamily: OL.body,
+                  fontSize: 13,
+                  fontStyle: 'italic',
+                  color: OL.accent,
+                  cursor: 'pointer',
+                  textDecoration: 'none',
+                }}
+              >
+                No weekly assessment yet. File this week →
+              </a>
+            </>
+          )}
 
           {/* Scoreboard */}
           <div

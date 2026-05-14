@@ -1,15 +1,17 @@
 // READY FOR QA
-// Feature: Dashboard page — TASK-137 (DashboardPaper tabloid redesign)
+// Feature: Dashboard page — TASK-184 (weekly review in Today's Lead)
 // What was built:
-//   Replaced the old hub layout with the DashboardPaper tabloid component.
-//   - Uses useDashboard hook for weekly stats, today's plan, and last run.
-//   - Separate non-blocking React Query for getInsights().
-//   - Maps API shapes to DashboardPaperProps exactly per task spec.
-//   - Dark-frame wrapper matches activities/page.tsx pattern.
-//   - Loading → paper-coloured skeleton block with animate-pulse.
-//   - isUnauthorized → router.replace('/').
-//   - API error → OfflinePage with kind="api" and reload retry.
+//   Added non-blocking React Query for getCurrentReview().
+//   Added onGenerateReview handler that calls generateWeeklyReview() and invalidates ['review'].
+//   Passes weeklyReview and onGenerateReview to DashboardPaper.
+//   DashboardPaper shows review_text prose when review exists, formula headline as fallback.
 // Edge cases to test:
+//   - Review exists → review_text shown as paragraphs, metadata "Filed week of X" above
+//   - Review is null (404 / query fails) → heroHeadline() formula shown, "No weekly assessment yet. File this week →" link shown
+//   - onGenerateReview click → POST /review/generate fires, ['review'] query invalidated on success
+//   - review_text with multiple paragraphs (split on \n\n) → each rendered as <p>
+//   - generateWeeklyReview() throws → silently ignored, user can retry
+// Previous edge cases (TASK-137) still apply:
 //   - No activities (lastRun=null) → DashboardPaper renders "No run dispatched yet."
 //   - No plan (todayPlan=null) → DashboardPaper renders "No plan filed yet."
 //   - Insights query fails (insights=null) → DashboardPaper renders "No column yet."
@@ -21,16 +23,16 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { DashboardPaper } from '@/components/redesign/DashboardPaper'
 import { OfflinePage } from '@/components/redesign/OfflinePage'
 import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton'
 import { OnboardingModal } from '@/components/onboarding'
 import { useDashboard } from '@/hooks/useDashboard'
 import { useUser } from '@/hooks/useUser'
-import { getInsights } from '@/lib/api'
+import { getInsights, getCurrentReview, generateWeeklyReview } from '@/lib/api'
 import { formatDuration, formatPace } from '@/lib/formatters'
-import type { Insights } from '@/types/api'
+import type { Insights, WeeklyReview } from '@/types/api'
 import type { ApiError } from '@/types/api'
 
 // ---------------------------------------------------------------------------
@@ -39,6 +41,7 @@ import type { ApiError } from '@/types/api'
 
 export default function DashboardPage() {
   const router = useRouter()
+  const queryClient = useQueryClient()
 
   const { weeklyStats, todayPlan, lastRun, isLoading, isError, isUnauthorized } = useDashboard()
   const { user } = useUser()
@@ -50,6 +53,23 @@ export default function DashboardPage() {
     queryFn: getInsights,
     retry: false,
   })
+
+  // Non-blocking weekly review query — failures are silently treated as null
+  const { data: reviewData } = useQuery<WeeklyReview, ApiError>({
+    queryKey: ['review'],
+    queryFn: getCurrentReview,
+    retry: false,
+  })
+
+  // Generate weekly review and refresh the cached review on success
+  const onGenerateReview = async () => {
+    try {
+      await generateWeeklyReview()
+      await queryClient.invalidateQueries({ queryKey: ['review'] })
+    } catch {
+      // silently ignore — the user can try again
+    }
+  }
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -151,6 +171,8 @@ export default function DashboardPage() {
         lastRun={mappedLastRun}
         insights={mappedInsights}
         lastSyncedAt={lastSyncedAt}
+        weeklyReview={reviewData ?? null}
+        onGenerateReview={onGenerateReview}
         onOpenRun={(id) => router.push(`/activities/${id}`)}
         onOpenPlan={() => router.push('/plan')}
         onOpenCoach={() => router.push('/coach')}
