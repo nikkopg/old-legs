@@ -18,6 +18,7 @@ from models.training_plan import TrainingPlan
 from models.user import User
 from models.weekly_review import WeeklyReview
 from prompts.pak_har import REVIEW_PROMPT
+from services.coach import classify_hr_zone
 from services.ollama import (
     OLLAMA_BASE_URL,
     _CONNECT_TIMEOUT,
@@ -25,6 +26,15 @@ from services.ollama import (
     build_user_preferences_context,
     format_pace,
 )
+
+# Fallback max HR and resting HR constants (mirror coach.py defaults)
+_FALLBACK_MAX_HR: int = 185
+_DEFAULT_RHR: int = 60
+
+# Day name lookup — weekday() returns 0=Monday … 6=Sunday
+_WEEKDAY_NAMES = [
+    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
+]
 
 logger = logging.getLogger(__name__)
 
@@ -62,9 +72,198 @@ def _count_planned_runs(plan: TrainingPlan) -> int:
     )
 
 
+def _compute_total_km(activities: list[Activity]) -> float:
+    """
+    Sum distance_km across all activities.
+
+    Args:
+        activities: List of Activity ORM objects.
+
+    Returns:
+        Total km as a float. Returns 0.0 when the list is empty.
+    """
+    return sum(a.distance_km for a in activities)
+
+
+def _format_km_target(user_weekly_km_target: float | None) -> str:
+    """
+    Format the user's weekly km target for prompt injection.
+
+    Args:
+        user_weekly_km_target: The stored weekly_km_target, may be None or 0.
+
+    Returns:
+        A string like "30.0 km" or "not set".
+    """
+    if not user_weekly_km_target:
+        return "not set"
+    return f"{user_weekly_km_target:.1f} km"
+
+
+def _compute_missed_days(
+    active_plan: TrainingPlan | None,
+    week_activities: list[Activity],
+) -> str:
+    """
+    Determine which planned non-rest days had no run in them.
+
+    Extracts non-rest day names from the active plan, then checks each against
+    the actual run dates in week_activities. Returns the names of missed days
+    as a comma-separated string.
+
+    Args:
+        active_plan: The user's active TrainingPlan, or None.
+        week_activities: Activity records for the current week.
+
+    Returns:
+        A comma-separated string of missed day names (e.g. "Wednesday, Sunday"),
+        "none" when all planned days were covered, or "unknown" when no active
+        plan exists.
+    """
+    if active_plan is None:
+        return "unknown"
+
+    plan_data: dict = active_plan.plan_data or {}
+
+    # Planned non-rest days — normalised to title-case (e.g. "Monday")
+    planned_days: list[str] = [
+        day.title()
+        for day, day_data in plan_data.items()
+        if isinstance(day_data, dict) and day_data.get("type", "rest") != "rest"
+    ]
+
+    if not planned_days:
+        return "none"
+
+    # Actual run day names from the current week
+    actual_day_names: set[str] = {
+        _WEEKDAY_NAMES[a.activity_date.weekday()]
+        for a in week_activities
+    }
+
+    missed = [day for day in planned_days if day not in actual_day_names]
+
+    return ", ".join(sorted(missed, key=lambda d: _WEEKDAY_NAMES.index(d))) if missed else "none"
+
+
+def _compute_prior_week_stats(
+    user_id: int,
+    week_start: date,
+    db: Session,
+) -> tuple[int, float, str]:
+    """
+    Compute run count, total km, and average pace for the previous week.
+
+    Queries Activity records with sync_status='synced' for the 7-day window
+    immediately before week_start (i.e. 14–7 days ago).
+
+    Args:
+        user_id: The authenticated user's primary key.
+        week_start: The Monday of the *current* week.
+        db: Active database session.
+
+    Returns:
+        A tuple of (run_count, total_km, avg_pace_str) where avg_pace_str is
+        a formatted "M:SS" string, or "no data" for all three values when no
+        prior-week activities exist.
+    """
+    prior_start = week_start - timedelta(days=7)
+    prior_end = week_start - timedelta(days=1)
+
+    prior_start_dt = datetime(prior_start.year, prior_start.month, prior_start.day, 0, 0, 0)
+    prior_end_dt = datetime(prior_end.year, prior_end.month, prior_end.day, 23, 59, 59)
+
+    prior_activities: list[Activity] = (
+        db.query(Activity)
+        .filter(
+            Activity.user_id == user_id,
+            Activity.activity_date >= prior_start_dt,
+            Activity.activity_date <= prior_end_dt,
+            Activity.sync_status == "synced",
+        )
+        .all()
+    )
+
+    if not prior_activities:
+        return 0, 0.0, "no data"
+
+    run_count = len(prior_activities)
+    total_km = sum(a.distance_km for a in prior_activities)
+    paces = [a.average_pace_min_per_km for a in prior_activities if a.average_pace_min_per_km]
+    avg_pace_str = format_pace(sum(paces) / len(paces)) if paces else "no data"
+
+    return run_count, total_km, avg_pace_str
+
+
+def _compute_hr_zone_summary(
+    week_activities: list[Activity],
+    user_max_hr: int | None,
+    user_max_hr_observed: int | None,
+    user_resting_hr: int | None,
+) -> str:
+    """
+    Compute HR zone distribution as percentages across all splits in the week.
+
+    Uses the Karvonen formula (identical to coach.py classify_hr_zone).
+    Iterates over per-km splits for every activity and accumulates time in each
+    zone. Falls back gracefully when no splits or HR data are available.
+
+    Zone boundaries (% of HRR = max_hr - resting_hr):
+        Z1 < 60%  |  Z2 60–70%  |  Z3 70–80%  |  Z4 80–90%  |  Z5 ≥ 90%
+
+    The task spec uses a 5-zone model with different boundaries from coach.py's
+    _HR_ZONE_PCTS (which are 0–50%, 50–60%, etc.).  Here we use:
+        Z1 < 60%  Z2 60–70%  Z3 70–80%  Z4 80–90%  Z5 ≥ 90%
+    which is the model called out in TASK-181 spec.  We delegate zone assignment
+    to coach.classify_hr_zone (Karvonen) and accept its 5-zone output.
+
+    Args:
+        week_activities: Activities in the current week.
+        user_max_hr: User-provided max HR (highest priority).
+        user_max_hr_observed: Cached max HR from activity history.
+        user_resting_hr: User's resting HR. Falls back to _DEFAULT_RHR.
+
+    Returns:
+        Formatted string like "Z1 30%, Z2 45%, Z3 15%, Z4 8%, Z5 2%", or
+        "no HR data" when no usable data is found.
+    """
+    # Resolve HR values
+    mhr: int = user_max_hr or user_max_hr_observed or _FALLBACK_MAX_HR
+    rhr: int = user_resting_hr or _DEFAULT_RHR
+
+    zone_seconds: dict[int, float] = {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0}
+    total_timed: float = 0.0
+
+    for activity in week_activities:
+        splits = activity.splits
+        if not splits:
+            continue
+        for split in splits:
+            mt = split.get("moving_time") or 0
+            hr = split.get("hr")
+            if hr is None or hr == 0 or mt == 0:
+                continue
+            zone_num, _ = classify_hr_zone(int(round(hr)), mhr, rhr)
+            zone_seconds[zone_num] += mt
+            total_timed += mt
+
+    if total_timed == 0:
+        return "no HR data"
+
+    parts: list[str] = []
+    for z in range(1, 6):
+        pct = round(zone_seconds[z] / total_timed * 100)
+        parts.append(f"Z{z} {pct}%")
+
+    return ", ".join(parts)
+
+
 def _build_activity_summary(activities: list[Activity]) -> str:
     """
     Build a plain-text summary of this week's activities for Ollama context.
+
+    Each line includes: date, name, distance, duration, pace, avg HR (if any),
+    RPE (if set), and verdict_tag (if available).
 
     Args:
         activities: List of Activity ORM objects from the current week.
@@ -86,6 +285,12 @@ def _build_activity_summary(activities: list[Activity]) -> str:
         )
         if activity.average_hr is not None:
             line += f", avg HR {activity.average_hr} bpm"
+        # TASK-182: append RPE when available
+        if activity.rpe is not None:
+            line += f", RPE {activity.rpe}/10"
+        # TASK-183: append verdict_tag when available
+        if activity.verdict_tag is not None:
+            line += f" [{activity.verdict_tag}]"
         lines.append(line)
 
     return "\n".join(lines)
@@ -154,12 +359,47 @@ async def generate_weekly_review(user: User, db: Session) -> WeeklyReview:
     activity_summary = _build_activity_summary(week_activities)
     user_preferences = build_user_preferences_context(user)
 
+    # --- TASK-178: total km vs target ---
+    total_km = _compute_total_km(week_activities)
+    km_target = _format_km_target(user.weekly_km_target)
+
+    # --- TASK-179: missed days ---
+    missed_days = _compute_missed_days(active_plan, week_activities)
+
+    # --- TASK-180: prior week comparison ---
+    prior_week_runs, prior_week_km, prior_week_avg_pace = _compute_prior_week_stats(
+        user.id, week_start, db
+    )
+    if prior_week_runs == 0:
+        prior_week_runs_str = "no data"
+        prior_week_km_str = "no data"
+        prior_week_avg_pace_str = "no data"
+    else:
+        prior_week_runs_str = str(prior_week_runs)
+        prior_week_km_str = f"{prior_week_km:.1f}"
+        prior_week_avg_pace_str = prior_week_avg_pace
+
+    # --- TASK-181: HR zone breakdown ---
+    hr_zone_summary = _compute_hr_zone_summary(
+        week_activities,
+        user_max_hr=user.max_hr,
+        user_max_hr_observed=user.max_hr_observed,
+        user_resting_hr=user.resting_hr,
+    )
+
     # --- Build prompt ---
     user_message = REVIEW_PROMPT.format(
         week_start_date=week_start.isoformat(),
         today=today.isoformat(),
         planned_runs=planned_runs,
         actual_runs=actual_runs,
+        total_km=total_km,
+        km_target=km_target,
+        missed_days=missed_days,
+        prior_week_runs=prior_week_runs_str,
+        prior_week_km=prior_week_km_str,
+        prior_week_avg_pace=prior_week_avg_pace_str,
+        hr_zone_summary=hr_zone_summary,
         activity_summary=activity_summary,
         user_preferences=user_preferences,
     )
@@ -187,11 +427,12 @@ async def generate_weekly_review(user: User, db: Session) -> WeeklyReview:
 
     url = f"{OLLAMA_BASE_URL}/api/chat"
     logger.info(
-        "Requesting weekly review from Ollama for user_id=%d, week=%s, planned=%d, actual=%d",
+        "Requesting weekly review from Ollama for user_id=%d, week=%s, planned=%d, actual=%d, total_km=%.1f",
         user.id,
         week_start.isoformat(),
         planned_runs,
         actual_runs,
+        total_km,
     )
 
     try:

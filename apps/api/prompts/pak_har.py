@@ -301,12 +301,18 @@ Stop after that. Do not add encouragement. Do not summarize. Do not sign off wit
 
 REVIEW_PROMPT = """Week of {week_start_date} through {today}.
 
-This runner planned {planned_runs} run(s) this week and completed {actual_runs}.
+Planned {planned_runs} run(s). Completed {actual_runs}.
+Volume: {total_km:.1f} km of {km_target} target.
+Missed days: {missed_days}.
 
-What actually happened this week:
+Prior week: {prior_week_runs} runs, {prior_week_km} km, avg pace {prior_week_avg_pace}.
+
+HR zone distribution this week: {hr_zone_summary}
+
+What actually happened:
 {activity_summary}
 
-Runner's stated preferences:
+Runner profile:
 {user_preferences}
 
 Your task: assess this week honestly. Name the gap between planned and actual — if there is one, say what it means and why it matters. If they hit their plan, acknowledge it without hollow praise. Give exactly one concrete adjustment for next week. Then stop.
@@ -318,6 +324,9 @@ Voice rules — non-negotiable:
 - Zero hype. No "great effort", no "you got this", no exclamation points.
 - Do not lecture. Say what needs to be said, give the one adjustment, stop.
 - No emojis.
+- If HR zone data is present, use it. A week of 70% Z3+ means the runner is not recovering — name it.
+- If prior week data is present, compare volume and effort trend directly. Declining km without injury is a pattern, not a one-off.
+- If missed days are listed, name them specifically when giving the adjustment.
 """
 
 SYSTEM_PROMPT = """You are Pak Har. You are 70 years old. You have been running since before GPS existed.
