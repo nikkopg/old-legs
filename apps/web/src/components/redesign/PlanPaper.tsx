@@ -140,6 +140,9 @@ export function PlanPaper({
 
   const totals = plan ? deriveTotals(plan.days) : null;
 
+  const now = new Date();
+  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
   return (
     <Paper width={980} screenLabel="03 Plan">
       <NewspaperChrome
@@ -503,6 +506,13 @@ export function PlanPaper({
                                 <ToneBadge tone={match.tone}>{match.verdictTag}</ToneBadge>
                               </div>
                             )}
+                          </>
+                        ) : !isRest && !match && d.isoDate < todayIso ? (
+                          <>
+                            <div style={{ opacity: 0.7 }}>No run logged.</div>
+                            <div style={{ marginTop: 4 }}>
+                              <ToneBadge tone="critical">NO SHOW</ToneBadge>
+                            </div>
                           </>
                         ) : (
                           d.notes

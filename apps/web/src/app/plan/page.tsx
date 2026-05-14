@@ -237,6 +237,7 @@ export default function PlanPage() {
     setIsGenerating(true)
     try {
       await generatePlan()
+      queryClient.removeQueries({ queryKey: ['plan-verdict'] })
       await queryClient.invalidateQueries({ queryKey: ['plan', 'current'] })
     } catch {
       // PlanPaper handles the empty/error state; generation errors surface via

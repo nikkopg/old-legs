@@ -774,15 +774,7 @@ async def plan_verdict(
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
 
-    # 2. Require an existing analysis — without it there is no meaningful plan context.
-    if activity.analysis is None:
-        logger.info(
-            "plan-verdict skipped for activity_id=%d — no analysis present",
-            activity_id,
-        )
-        return _FALLBACK
-
-    # 3. Build the compact activity summary for the prompt.
+    # 2. Build the compact activity summary for the prompt.
     moving_time_min = round(activity.moving_time_seconds / 60)
 
     from services.ollama import format_pace
