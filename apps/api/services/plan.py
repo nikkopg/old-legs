@@ -501,6 +501,18 @@ async def generate_plan_with_ollama(user: User, db: Session) -> TrainingPlan:
     rhr, max_hr = _get_hr_params(user, recent_activities)
     zone_distribution = _build_zone_distribution(recent_activities, rhr, max_hr)
 
+    # Compute Karvonen zone boundaries so Pak Har uses the runner's actual
+    # thresholds instead of anchoring on generic examples in the prompt.
+    hrr = max_hr - rhr
+    _upper_pcts = [lo_hi[1] for lo_hi in [(0.00, 0.50), (0.50, 0.60), (0.60, 0.70), (0.70, 0.85)]]
+    z1_ceil, z2_ceil, z3_ceil, z4_ceil = [round(rhr + p * hrr) for p in _upper_pcts]
+    zone_boundaries = (
+        f"Zone boundaries for this runner "
+        f"(Karvonen, MHR {max_hr} bpm, RHR {rhr} bpm): "
+        f"Z1 <{z1_ceil} | Z2 {z1_ceil}–{z2_ceil} | "
+        f"Z3 {z2_ceil}–{z3_ceil} | Z4 {z3_ceil}–{z4_ceil} | Z5 >{z4_ceil} bpm"
+    )
+
     system_content = PLAN_PROMPT.format(
         strava_context=strava_context,
         user_preferences=user_preferences,
@@ -508,6 +520,8 @@ async def generate_plan_with_ollama(user: User, db: Session) -> TrainingPlan:
         plan_adherence=plan_adherence,
         rpe_trend=rpe_trend,
         zone_distribution=zone_distribution,
+        zone_boundaries=zone_boundaries,
+        zone2_ceiling=z2_ceil,
     )
 
     payload = {
