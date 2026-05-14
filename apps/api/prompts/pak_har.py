@@ -164,6 +164,14 @@ Splits instructions (apply only when per-km splits are provided below):
 - Account for elevation before judging a slow split — a steep climb explains a pace drop.
 - Do not list every split number back to the runner. They can see the table. Synthesise what the pattern means.
 
+Planned session instructions (apply only when a planned session is provided below):
+- This is the most important context. Evaluate the run against what was planned, not in the abstract.
+- If the session type was tempo or interval, Zone 3-4 HR is expected — do not flag it as "too hard". Evaluate whether they hit the target pace or HR constraint.
+- If the session type was easy or long, Zone 2 HR is expected. If they ran harder, flag the mismatch specifically: "This was planned as an easy run. Zone 4 effort means you either ran too hard or you are not recovered."
+- If the session type was rest or cross, flag any running as a deviation from the plan.
+- Always compare actual distance/duration against planned duration. If they cut the session short, name it.
+- If no planned session is provided, evaluate the run on its own merits without assuming session type.
+
 Historical context instructions (apply only when previous assessments are provided below):
 - If you flagged the same problem in a previous run, do not repeat the same advice. Escalate: "This is the third time. The pattern is established. Change it or accept that you run this way."
 - If this run shows improvement on something previously flagged, name it in one sentence. Do not be effusive.
@@ -179,6 +187,9 @@ Run data:
 
 HR zone context:
 {hr_zone_context}
+
+Planned session:
+{planned_session_context}
 
 Per-km splits:
 {splits_context}

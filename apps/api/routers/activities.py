@@ -100,6 +100,7 @@ import httpx
 from config import settings
 from dependencies import get_current_user
 from models.activity import Activity
+from models.training_plan import TrainingPlan
 from models.user import User
 from models.weekly_review import WeeklyReview
 from prompts.pak_har import ANALYSIS_PROMPT
@@ -328,9 +329,27 @@ async def analyze_activity(
     )
     weekly_review_text: str | None = latest_review.review_text if latest_review else None
 
+    # 3d. Look up the active training plan and find the day matching this activity's date.
+    #     plan_data keys are lowercase day names ("monday", "tuesday", etc.).
+    #     Returns None when no plan is active or the day has no entry in plan_data.
+    active_plan = (
+        db.query(TrainingPlan)
+        .filter(
+            TrainingPlan.user_id == current_user.id,
+            TrainingPlan.is_active == True,  # noqa: E712 — SQLAlchemy requires == True
+        )
+        .order_by(TrainingPlan.created_at.desc())
+        .first()
+    )
+
+    planned_session: dict | None = None
+    if active_plan and active_plan.plan_data:
+        activity_day = activity.activity_date.strftime("%A").lower()  # e.g. "tuesday"
+        planned_session = active_plan.plan_data.get(activity_day)
+
     # 4. Build the run context string (basic stats + HR zone classification, mismatch,
-    #    trend, splits, historical analyses, and weekly review — all gated appropriately
-    #    inside the service).
+    #    trend, splits, historical analyses, weekly review, and planned session — all
+    #    gated appropriately inside the service).
     #    Pass resting_hr and max_hr_observed from the user row so zone calc uses
     #    actual values rather than population-average defaults.
     run_context = build_analysis_context(
@@ -342,6 +361,7 @@ async def analyze_activity(
         splits=splits,
         recent_analyses=recent_analyses,
         weekly_review=weekly_review_text,
+        planned_session=planned_session,
     )
 
     # 5. Build the hr_zone_context string for the prompt placeholder.
@@ -362,7 +382,7 @@ async def analyze_activity(
     else:
         hr_zone_context = "(no heart rate data for this run)"
 
-    # 5a. Format the three new context sections for the prompt placeholders.
+    # 5a. Format the four new context sections for the prompt placeholders.
     from services.coach import _format_splits_context, _format_historical_context, _WEEKLY_REVIEW_TRUNCATE
 
     splits_context = _format_splits_context(splits) if splits else "(not available)"
@@ -375,11 +395,30 @@ async def analyze_activity(
     else:
         weekly_review_context = "(not available)"
 
+    # Format planned session for the prompt placeholder.
+    # When a matching plan day exists, emit the structured block.
+    # When no plan is active, emit an explicit "(no training plan active for this week)"
+    # so Pak Har knows to evaluate the run on its own merits.
+    if planned_session:
+        plan_lines: list[str] = []
+        if planned_session.get("type"):
+            plan_lines.append(f"  Type: {planned_session['type']}")
+        if planned_session.get("target"):
+            plan_lines.append(f"  Target: {planned_session['target']}")
+        if planned_session.get("description"):
+            plan_lines.append(f"  Description: {planned_session['description']}")
+        if planned_session.get("duration_minutes") is not None:
+            plan_lines.append(f"  Duration: {planned_session['duration_minutes']} min")
+        planned_session_context = "\n".join(plan_lines) if plan_lines else "(no training plan active for this week)"
+    else:
+        planned_session_context = "(no training plan active for this week)"
+
     # 6. Assemble the system prompt with run context, HR zone context, and user preferences injected.
     user_preferences = build_user_preferences_context(current_user)
     system_content = ANALYSIS_PROMPT.format(
         run_context=run_context,
         hr_zone_context=hr_zone_context,
+        planned_session_context=planned_session_context,
         splits_context=splits_context,
         historical_context=historical_context,
         weekly_review_context=weekly_review_context,

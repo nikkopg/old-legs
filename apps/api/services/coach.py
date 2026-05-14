@@ -313,6 +313,7 @@ def build_analysis_context(
     splits: list[dict] | None = None,
     recent_analyses: list[tuple[str, float, str]] | None = None,
     weekly_review: str | None = None,
+    planned_session: dict | None = None,
 ) -> str:
     """
     Build the full context string for Pak Har's post-run analysis prompt.
@@ -320,7 +321,8 @@ def build_analysis_context(
     Includes basic run data (always), HR zone classification and mismatch
     flags (only when average_hr is not null), an HR trend note (only
     when sufficient comparable runs exist and HR is rising), and optionally:
-    per-km splits, previous run analyses, and the most recent weekly review.
+    per-km splits, previous run analyses, the most recent weekly review,
+    and the planned training session for the day of this run.
 
     MHR resolution priority:
         1. max_hr — user-provided explicit value (most trusted)
@@ -343,6 +345,12 @@ def build_analysis_context(
                          tuples from previous analyzed runs. At most 3 are used.
         weekly_review: Optional text of the most recent weekly review. Truncated
                        to 500 characters when injected into the context.
+        planned_session: Optional dict representing the training plan day that
+                         corresponds to this activity's date. Expected keys:
+                         type, target, description, duration_minutes. When
+                         provided and non-empty, a planned session block is
+                         appended so Pak Har can evaluate the run against what
+                         was actually planned.
 
     Returns:
         A multi-line plain-text context string ready to be injected into the
@@ -431,5 +439,18 @@ def build_analysis_context(
         if len(weekly_review) > _WEEKLY_REVIEW_TRUNCATE:
             truncated += "..."
         lines.append(f"Most recent weekly review:\n{truncated}")
+
+    # --- Planned session — only when a matching plan day exists ---
+    if planned_session:
+        session_lines: list[str] = ["Planned session for this day:"]
+        if planned_session.get("type"):
+            session_lines.append(f"  Type: {planned_session['type']}")
+        if planned_session.get("target"):
+            session_lines.append(f"  Target: {planned_session['target']}")
+        if planned_session.get("description"):
+            session_lines.append(f"  Description: {planned_session['description']}")
+        if planned_session.get("duration_minutes") is not None:
+            session_lines.append(f"  Duration: {planned_session['duration_minutes']} min")
+        lines.append("\n".join(session_lines))
 
     return "\n".join(lines)
