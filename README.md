@@ -16,6 +16,34 @@ Old Legs is a free, self-hosted AI running coach. It connects to your Strava acc
 
 Your coach. He's been running since before GPS existed. He has no patience for excuses and no interest in hollow encouragement. He'll tell you your pace dropped because you went out too hard, not because you "had an off day". He's the kind of coach you'd actually listen to.
 
+## What Pak Har considers
+
+When analyzing a run, Pak Har doesn't just read your average pace and HR. He looks at the full picture — the same signals a professional coach would pull from the data:
+
+**The run itself**
+- Distance, moving time, average pace, elevation gain
+- Per-km splits — pace, HR, cadence, and elevation change per kilometre
+
+**Effort and zones**
+- Average HR classified into 5 zones using the Karvonen formula (calibrated to your personal max HR and resting HR — not population averages)
+- Your exact zone boundaries in bpm, so he never cites a generic threshold
+- Easy-run vs HR zone mismatch — if you called it easy but ran at Zone 4, he'll say so
+- Cardiac drift — HR climbing while pace holds signals dehydration or working beyond your aerobic ceiling
+
+**Pacing pattern**
+- Splits let him see whether you went out too fast and faded, ran even, or negative-split
+- Cadence drop across the run signals form breakdown under fatigue, not just tiredness
+
+**Fitness trend**
+- Efficiency factor (speed per heartbeat) compared against your last 4 runs — improving means aerobic fitness is building; declining means you're working harder to cover the same ground
+- HR trend across comparable distances — if your HR at 8km has climbed 10 bpm over the last 3 similar runs, that's fatigue accumulation
+
+**Context**
+- Your active training plan for the day — if Tuesday was scheduled as a tempo, Zone 4 HR is expected and he won't flag it as "too hard"
+- Your last 3 run analyses — if he's flagged the same problem three times, he escalates instead of repeating himself
+- Your most recent weekly review — training load context so a hard effort after a heavy week reads differently than the same effort after two rest days
+- Your stated preferences — weekly km target, days available, biggest struggle
+
 ---
 
 ## Self-hosting
