@@ -128,6 +128,7 @@ export interface UserProfile {
   onboarding_completed: boolean
   weekly_km_target: number | null
   days_available: number | null
+  available_days: string[] | null
   biggest_struggle: string | null
   resting_hr: number | null
   max_hr: number | null
@@ -136,6 +137,7 @@ export interface UserProfile {
   total_distance_km: number
   weeks_on_plan: number
   goal_event: GoalEvent | null
+  race_date: string | null
   created_at: string
   updated_at: string
 }
@@ -143,10 +145,12 @@ export interface UserProfile {
 export interface OnboardingRequest {
   weekly_km_target: number
   days_available: number
+  available_days?: string[] | null
   biggest_struggle: string
   resting_hr?: number | null
   max_hr?: number | null
   goal_event?: GoalEvent | null
+  race_date?: string | null
 }
 
 export interface OnboardingResponse {

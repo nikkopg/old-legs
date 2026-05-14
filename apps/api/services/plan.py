@@ -516,6 +516,29 @@ async def generate_plan_with_ollama(user: User, db: Session) -> TrainingPlan:
 
     goal_event_context = goal_event_label(user.goal_event)
 
+    # Compute race date context for the plan prompt
+    race_date_context: str = ""
+    if user.race_date:
+        today_date = datetime.now(timezone.utc).date()
+        weeks_to_race = (user.race_date - today_date).days // 7
+        if weeks_to_race < 0:
+            race_date_context = "Race date has passed. Treat this as a recovery/rebuild phase."
+        elif weeks_to_race < 2:
+            race_date_context = (
+                f"Race date: {user.race_date} ({weeks_to_race} weeks away). "
+                "Taper week. Cut volume 30-40%, keep two short sharp sessions, no new stressors."
+            )
+        elif weeks_to_race <= 7:
+            race_date_context = (
+                f"Race date: {user.race_date} ({weeks_to_race} weeks away). "
+                "Focus: race-specific work. Sharpening phase — reduce volume 10-15%, maintain intensity."
+            )
+        else:
+            race_date_context = (
+                f"Race date: {user.race_date} ({weeks_to_race} weeks away). "
+                "Focus: base building. Prioritize aerobic volume and consistency."
+            )
+
     system_content = PLAN_PROMPT.format(
         strava_context=strava_context,
         user_preferences=user_preferences,
@@ -526,6 +549,7 @@ async def generate_plan_with_ollama(user: User, db: Session) -> TrainingPlan:
         zone_boundaries=zone_boundaries,
         zone2_ceiling=z2_ceil,
         goal_event_context=goal_event_context,
+        race_date_context=race_date_context,
     )
 
     payload = {

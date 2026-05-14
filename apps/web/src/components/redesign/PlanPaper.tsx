@@ -296,7 +296,7 @@ export function PlanPaper({
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: '44px 92px 1fr 160px 160px 2fr 20px',
+                gridTemplateColumns: '44px 92px 1fr 160px 160px 2fr',
                 gap: 14,
                 padding: '8px 4px',
                 borderBottom: `1px solid ${OL.ink}`,
@@ -324,7 +324,7 @@ export function PlanPaper({
                   key={d.day}
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '44px 92px 1fr 160px 160px 2fr 20px',
+                    gridTemplateColumns: '44px 92px 1fr 160px 160px 2fr',
                     gap: 14,
                     padding: '14px 4px',
                     paddingLeft: isToday ? 8 : 4,
@@ -511,18 +511,6 @@ export function PlanPaper({
                     );
                   })()}
 
-                  {/* Col 7: Arrow */}
-                  <div
-                    style={{
-                      paddingTop: 6,
-                      fontFamily: OL.display,
-                      fontSize: 18,
-                      color: isRest ? 'transparent' : OL.ink,
-                      cursor: isRest ? 'default' : 'pointer',
-                    }}
-                  >
-                    →
-                  </div>
                 </div>
               );
             })}
@@ -538,7 +526,7 @@ export function PlanPaper({
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '44px 92px 1fr 160px 160px 2fr 20px',
+                  gridTemplateColumns: '44px 92px 1fr 160px 160px 2fr',
                   gap: 14,
                   padding: '10px 4px',
                   background: OL.ink,

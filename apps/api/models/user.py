@@ -12,9 +12,9 @@
 #   - onboarding_completed defaults to False — set to True after POST /user/onboarding
 #   - unique constraint on strava_athlete_id once set prevents duplicate Strava accounts
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from sqlalchemy import String, DateTime, Boolean, Float, Integer, Text, func
+from sqlalchemy import Date, JSON, String, DateTime, Boolean, Float, Integer, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import Base
@@ -48,11 +48,15 @@ class User(Base):
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     weekly_km_target: Mapped[float] = mapped_column(Float, default=0.0)
     days_available: Mapped[int] = mapped_column(Integer, default=3)
+    # Replaces days_available for new users — stores specific day names as a JSON array.
+    # Old users who haven't re-saved will retain the count in days_available.
+    available_days: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     biggest_struggle: Mapped[str | None] = mapped_column(Text, nullable=True)
     resting_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_hr_observed: Mapped[int | None] = mapped_column(Integer, nullable=True)
     goal_event: Mapped[str | None] = mapped_column(String, nullable=True)
+    race_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))

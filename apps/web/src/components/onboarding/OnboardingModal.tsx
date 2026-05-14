@@ -32,6 +32,20 @@ const GOAL_OPTIONS: Array<{ value: GoalEvent; label: string; sub: string }> = [
 ]
 
 // ---------------------------------------------------------------------------
+// Day-of-week toggle constants
+// ---------------------------------------------------------------------------
+
+const DAYS_OF_WEEK: Array<{ value: string; label: string }> = [
+  { value: 'monday',    label: 'Mon' },
+  { value: 'tuesday',   label: 'Tue' },
+  { value: 'wednesday', label: 'Wed' },
+  { value: 'thursday',  label: 'Thu' },
+  { value: 'friday',    label: 'Fri' },
+  { value: 'saturday',  label: 'Sat' },
+  { value: 'sunday',    label: 'Sun' },
+]
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -39,11 +53,12 @@ const TOTAL_STEPS = 6
 
 interface FormState {
   weeklyKm: string
-  daysPerWeek: string
+  availableDays: string[]
   biggestStruggle: string
   restingHr: string
   maxHr: string
   goalEvent: GoalEvent | null
+  raceDate: string
 }
 
 // ---------------------------------------------------------------------------
@@ -62,18 +77,19 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1)
   const [form, setForm] = useState<FormState>({
     weeklyKm: '',
-    daysPerWeek: '',
+    availableDays: [],
     biggestStruggle: '',
     restingHr: '',
     maxHr: '',
     goalEvent: null,
+    raceDate: '',
   })
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
   const isStepValid = (): boolean => {
     if (step === 1) return true // weeklyKm — no required validation, 0 is acceptable
-    if (step === 2) return form.daysPerWeek !== ''
+    if (step === 2) return form.availableDays.length > 0
     if (step === 3) return true // biggestStruggle — optional-ish, allow empty
     if (step === 4) {
       return form.restingHr === '' || (Number(form.restingHr) >= 30 && Number(form.restingHr) <= 100)
@@ -109,11 +125,13 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
     try {
       const body: OnboardingRequest = {
         weekly_km_target: Number(form.weeklyKm) || 0,
-        days_available: Math.max(1, Math.min(7, Number(form.daysPerWeek) || 1)),
+        days_available: form.availableDays.length,
+        available_days: form.availableDays,
         biggest_struggle: form.biggestStruggle.trim(),
         resting_hr: form.restingHr !== '' ? Number(form.restingHr) : null,
         max_hr: form.maxHr !== '' ? Number(form.maxHr) : null,
         goal_event: form.goalEvent,
+        race_date: form.raceDate || null,
       }
       await saveOnboarding(body)
       onComplete()
@@ -233,7 +251,7 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
 
         {step === 1 && (
           <>
-            <div style={questionStyle}>How many km do you want to run per week?</div>
+            <div style={questionStyle}>How many km do you comfortably run per week right now?</div>
             <input
               style={inputStyle}
               type="number"
@@ -257,25 +275,52 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
 
         {step === 2 && (
           <>
-            <div style={questionStyle}>How many days can you run per week?</div>
-            <input
-              style={inputStyle}
-              type="number"
-              min={1}
-              max={7}
-              value={form.daysPerWeek}
-              onChange={(e) => setForm((f) => ({ ...f, daysPerWeek: e.target.value }))}
-              placeholder="e.g. 4"
-              autoFocus
-            />
+            <div style={questionStyle}>Which days can you run?</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const, marginTop: 4 }}>
+              {DAYS_OF_WEEK.map(({ value, label }) => {
+                const active = form.availableDays.includes(value)
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() =>
+                      setForm((f) => ({
+                        ...f,
+                        availableDays: active
+                          ? f.availableDays.filter((d) => d !== value)
+                          : [...f.availableDays, value],
+                      }))
+                    }
+                    style={{
+                      fontFamily: T.mono,
+                      fontSize: 10,
+                      textTransform: 'uppercase' as const,
+                      letterSpacing: 1,
+                      padding: '4px 0',
+                      width: 36,
+                      height: 28,
+                      border: `1px solid ${T.ink}`,
+                      background: active ? T.ink : 'transparent',
+                      color: active ? T.paper : T.ink,
+                      cursor: 'pointer',
+                      borderRadius: 0,
+                      outline: 'none',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
             <div style={buttonRowStyle}>
               <button style={ghostBtnStyle} onClick={handleBack}>
                 Back
               </button>
               <button
-                style={primaryBtnStyle}
+                style={{ ...primaryBtnStyle, opacity: form.availableDays.length === 0 || isSaving ? 0.4 : 1 }}
                 onClick={handleNext}
-                disabled={isSaving}
+                disabled={isSaving || form.availableDays.length === 0}
               >
                 Next
               </button>
@@ -432,6 +477,43 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
                   </div>
                 </button>
               ))}
+            </div>
+            {/* Race date */}
+            <div style={{ marginTop: 12 }}>
+              <label
+                htmlFor="race-date"
+                style={{
+                  fontFamily: T.sans,
+                  fontSize: 8,
+                  textTransform: 'uppercase' as const,
+                  letterSpacing: 2,
+                  opacity: 0.6,
+                  display: 'block',
+                  marginBottom: 6,
+                  color: T.ink,
+                }}
+              >
+                Race date
+              </label>
+              <input
+                id="race-date"
+                type="date"
+                value={form.raceDate}
+                min={new Date().toISOString().split('T')[0]}
+                onChange={(e) => setForm((f) => ({ ...f, raceDate: e.target.value }))}
+                style={{
+                  border: `1px solid ${T.ink}`,
+                  background: T.paper,
+                  color: T.ink,
+                  fontFamily: T.mono,
+                  fontSize: 13,
+                  borderRadius: 0,
+                  padding: '6px 8px',
+                  width: '100%',
+                  boxSizing: 'border-box' as const,
+                  outline: 'none',
+                }}
+              />
             </div>
             {saveError && (
               <div

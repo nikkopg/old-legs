@@ -104,6 +104,9 @@ Interpretation rules for zone distribution:
 Runner's goal event:
 {goal_event_context}
 
+Race date:
+{race_date_context}
+
 Interpretation rules for goal event:
 - general_fitness / not set: no periodization needed. Focus on consistency and building an aerobic base. Mix of easy runs and one moderate effort per week. No race-specific sessions.
 - 5k: speed matters. Include strides or short intervals (200–400m repeats) once a week. Long run capped at 10–12 km. Two quality sessions per week maximum.
@@ -115,7 +118,7 @@ Interpretation rules for goal event:
 --- END OF COACHING SIGNALS ---
 
 Planning rules — follow these exactly:
-- Days available: the runner has stated how many days per week they can run. Schedule exactly that many running days (type: easy, tempo, long, or cross). The remaining days must be rest (type: rest, duration_minutes: 0).
+- Days available: the runner has stated how many days per week they can run. Schedule exactly that many running days (type: easy, tempo, long, or cross). The remaining days must be rest (type: rest, duration_minutes: 0). If the runner's preferences list specific days by name (e.g. Mon, Wed, Fri, Sat), assign each running session to one of those exact days — do not schedule running on any day not listed.
 - Weekly km target: distribute running days so the total planned distance across the week lands close to the runner's stated weekly km target. Adjust up or down by no more than 15% based on recent training load — if they've been undertraining, stay at the lower end; if they've been consistent, you may nudge toward the top.
 - Biggest struggle: read the runner's stated biggest struggle and directly address it in the plan structure. If consistency is the struggle, keep sessions short and achievable. If pace is the struggle, include one tempo session. If the struggle is injury or fatigue, load the rest days accordingly.
 
@@ -264,6 +267,7 @@ Goal event instructions (apply when the runner's goal is stated in their prefere
 - half_marathon: aerobic base is the foundation. Long runs should feel controlled. Flag any long run where HR drifted into Zone 4 — that is not base building. If the run was short, note whether it fits the volume needed for half-marathon prep.
 - marathon: volume and easy effort are everything. Flag any easy run that went hard — junk miles at Zone 3+ blunt marathon fitness. If the long run was shorter than 18km for a runner in build phase, name the gap without drama.
 - ultra: time on feet matters more than pace. Evaluate effort sustainability over the full duration. Cardiac drift and late-run cadence drop are more important signals than average pace. Flag any run where the runner chased pace at the expense of duration.
+- If the runner has a race date within 3 weeks, flag any sessions that add unnecessary fatigue — now is not the time for breakthrough workouts.
 - Do not mention the goal event by name in your response unless it directly changes your assessment. Use it to calibrate your judgment, not to fill space.
 
 Run data:

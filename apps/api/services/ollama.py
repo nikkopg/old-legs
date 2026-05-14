@@ -8,7 +8,7 @@ Prepends Pak Har system prompt from prompts/pak_har.py on every request.
 
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date as date_type, datetime, timedelta, timezone
 from typing import AsyncGenerator
 
 import httpx
@@ -161,15 +161,45 @@ def build_user_preferences_context(user: User) -> str:
         biggest struggle, and goal event. Falls back gracefully for unset fields.
     """
     target = f"{user.weekly_km_target:.1f} km/week" if user.weekly_km_target else "not set"
-    days = str(user.days_available) if user.days_available else "not set"
     struggle = user.biggest_struggle if user.biggest_struggle else "not specified"
     goal = goal_event_label(user.goal_event)
-    return (
-        f"- Weekly km target: {target}\n"
-        f"- Days available to run: {days}\n"
-        f"- Biggest struggle: {struggle}\n"
-        f"- Goal: {goal}"
-    )
+    lines = [
+        f"- Weekly km target: {target}",
+    ]
+
+    if user.available_days:
+        _DAY_LABELS: dict[str, str] = {
+            'monday': 'Mon', 'tuesday': 'Tue', 'wednesday': 'Wed',
+            'thursday': 'Thu', 'friday': 'Fri', 'saturday': 'Sat', 'sunday': 'Sun',
+        }
+        _DAY_ORDER = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+        sorted_days = sorted(
+            user.available_days,
+            key=lambda d: _DAY_ORDER.index(d) if d in _DAY_ORDER else 99,
+        )
+        days_str = ', '.join(_DAY_LABELS.get(d, d.capitalize()) for d in sorted_days)
+        lines.append(f"- Available days: {days_str} ({len(user.available_days)} days/week)")
+    else:
+        days = str(user.days_available) if user.days_available else "not set"
+        lines.append(f"- Days available: {days} per week")
+
+    lines += [
+        f"- Biggest struggle: {struggle}",
+        f"- Goal: {goal}",
+    ]
+
+    if user.race_date:
+        today = date_type.today()
+        weeks_to_race = (user.race_date - today).days // 7
+        if weeks_to_race < 0:
+            race_context = f"Race date: {user.race_date} (past)"
+        elif weeks_to_race == 0:
+            race_context = f"Race date: {user.race_date} (this week)"
+        else:
+            race_context = f"Race date: {user.race_date} ({weeks_to_race} weeks away)"
+        lines.append(f"- {race_context}")
+
+    return "\n".join(lines)
 
 
 async def stream_chat(

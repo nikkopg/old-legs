@@ -1,18 +1,19 @@
 "use client";
 
 // READY FOR QA
-// Feature: goal_event field in Runner's Brief (Settings) + Onboarding step 6
-// What was built: GoalEvent pill selector in SettingsPaper Runner's Brief section.
-//   - 6 goal options rendered as compact pills (hard corners, Space Mono labels)
-//   - Selected pill: ink bg, paper text. Unselected: transparent bg, ink border.
-//   - Clicking a selected pill deselects it (sets null). Clicking a new pill selects it.
-//   - goalEvent prop added to SettingsPaperProps and preferences object.
-//   - onPreferenceChange extended to accept 'goalEvent' field.
+// Feature: race_date field in Runner's Brief (Settings) + Onboarding step 6
+// What was built: race date input added side-by-side with goal event dropdown in a 2-col grid.
+//   - Training goal dropdown (left) + Race date input (right) in display:grid 1fr 1fr gap-14
+//   - Native <input type="date"> styled with ink border, paper bg, mono font 13px, border-radius 0
+//   - min attribute set to today's date (no past dates)
+//   - raceDate: string added to SettingsPaperProps.preferences
+//   - onPreferenceChange extended to accept 'raceDate' field name
 // Edge cases to test:
-//   - null goalEvent (nothing selected) — no pill highlighted
-//   - toggling same pill off sets goalEvent back to null
-//   - saving with null goalEvent sends goal_event: null to backend
-//   - long sub-labels don't break pill layout
+//   - empty raceDate ('' / not set) — input shows blank, no date highlighted
+//   - selecting a date populates the input correctly
+//   - past dates are not selectable (min constraint)
+//   - saving with empty raceDate sends race_date: null to backend
+//   - saving with a date sends race_date: 'YYYY-MM-DD' to backend
 
 // READY FOR QA
 // Component: SettingsPaper (TASK-142 + TASK-152)
@@ -86,6 +87,20 @@ interface DeliveryPreferences {
   missedRunNudge: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Day-of-week toggle constants
+// ---------------------------------------------------------------------------
+
+const DAYS_OF_WEEK: Array<{ value: string; label: string }> = [
+  { value: 'monday',    label: 'Mon' },
+  { value: 'tuesday',   label: 'Tue' },
+  { value: 'wednesday', label: 'Wed' },
+  { value: 'thursday',  label: 'Thu' },
+  { value: 'friday',    label: 'Fri' },
+  { value: 'saturday',  label: 'Sat' },
+  { value: 'sunday',    label: 'Sun' },
+];
+
 interface SettingsPaperProps {
   user: UserProfile;
   stats: UserStats;
@@ -103,13 +118,15 @@ interface SettingsPaperProps {
   onResetContextCancel?: () => void;
   preferences: {
     weeklyKmTarget: string;
-    daysAvailable: string;
+    availableDays: string[];
     biggestStruggle: string;
     restingHr: string;
     maxHr: string;
     goalEvent: GoalEvent | null;
+    raceDate: string;
   };
-  onPreferenceChange: (field: 'weeklyKmTarget' | 'daysAvailable' | 'biggestStruggle' | 'restingHr' | 'maxHr', value: string) => void;
+  onPreferenceChange: (field: 'weeklyKmTarget' | 'biggestStruggle' | 'restingHr' | 'maxHr' | 'raceDate', value: string) => void;
+  onAvailableDaysChange: (days: string[]) => void;
   onGoalEventChange: (value: GoalEvent | null) => void;
   onSavePreferences: () => void;
   isSavingPreferences: boolean;
@@ -136,6 +153,7 @@ export function SettingsPaper({
   onResetContextCancel,
   preferences,
   onPreferenceChange,
+  onAvailableDaysChange,
   onGoalEventChange,
   onSavePreferences,
   isSavingPreferences,
@@ -250,7 +268,7 @@ export function SettingsPaper({
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 14 }}>
               {/* Weekly km target */}
               <div>
-                <Caps size={8} ls={2} opacity={0.6}>Weekly km target</Caps>
+                <Caps size={8} ls={2} opacity={0.6}>Current weekly km</Caps>
                 <input
                   type="number"
                   min={0}
@@ -272,26 +290,42 @@ export function SettingsPaper({
               </div>
               {/* Days available */}
               <div>
-                <Caps size={8} ls={2} opacity={0.6}>Days per week</Caps>
-                <input
-                  type="number"
-                  min={1}
-                  max={7}
-                  value={preferences.daysAvailable}
-                  onChange={e => onPreferenceChange('daysAvailable', e.target.value)}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    marginTop: 4,
-                    fontFamily: OL.mono,
-                    fontSize: 13,
-                    padding: '6px 8px',
-                    border: `1px solid ${OL.ink}`,
-                    background: 'transparent',
-                    outline: 'none',
-                    boxSizing: 'border-box' as const,
-                  }}
-                />
+                <Caps size={8} ls={2} opacity={0.6}>Days available</Caps>
+                <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' as const }}>
+                  {DAYS_OF_WEEK.map(({ value, label }) => {
+                    const active = preferences.availableDays.includes(value);
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => {
+                          const next = active
+                            ? preferences.availableDays.filter((d) => d !== value)
+                            : [...preferences.availableDays, value];
+                          onAvailableDaysChange(next);
+                        }}
+                        style={{
+                          fontFamily: OL.mono,
+                          fontSize: 10,
+                          textTransform: 'uppercase' as const,
+                          letterSpacing: 1,
+                          padding: '4px 0',
+                          width: 34,
+                          height: 28,
+                          border: `1px solid ${OL.ink}`,
+                          background: active ? OL.ink : 'transparent',
+                          color: active ? OL.paper : OL.ink,
+                          cursor: 'pointer',
+                          borderRadius: 0,
+                          outline: 'none',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               {/* Biggest struggle */}
               <div>
@@ -366,38 +400,65 @@ export function SettingsPaper({
                 />
               </div>
             </div>
-            {/* Goal event dropdown */}
-            <div style={{ marginBottom: 14 }}>
-              <Caps size={8} ls={2} opacity={0.6}>Training goal</Caps>
-              <select
-                value={preferences.goalEvent ?? ''}
-                onChange={(e) => onGoalEventChange((e.target.value as GoalEvent) || null)}
-                style={{
-                  display: 'block',
-                  marginTop: 6,
-                  width: '100%',
-                  fontFamily: OL.mono,
-                  fontSize: 13,
-                  color: OL.ink,
-                  background: OL.paper,
-                  border: `1px solid ${OL.ink}`,
-                  borderRadius: 0,
-                  padding: '6px 8px',
-                  outline: 'none',
-                  cursor: 'pointer',
-                }}
-              >
-                <option value=''>— not set —</option>
-                {GOAL_OPTIONS.map(({ value, label }) => (
-                  <option key={value} value={value}>{label}</option>
-                ))}
-              </select>
+            {/* Goal event + Race date — 2-col grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+              {/* Training goal */}
+              <div>
+                <Caps size={8} ls={2} opacity={0.6}>Training goal</Caps>
+                <select
+                  value={preferences.goalEvent ?? ''}
+                  onChange={(e) => onGoalEventChange((e.target.value as GoalEvent) || null)}
+                  style={{
+                    display: 'block',
+                    marginTop: 6,
+                    width: '100%',
+                    fontFamily: OL.mono,
+                    fontSize: 13,
+                    color: OL.ink,
+                    background: OL.paper,
+                    border: `1px solid ${OL.ink}`,
+                    borderRadius: 0,
+                    padding: '6px 8px',
+                    outline: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value=''>— not set —</option>
+                  {GOAL_OPTIONS.map(({ value, label }) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              {/* Race date */}
+              <div>
+                <Caps size={8} ls={2} opacity={0.6}>Race date</Caps>
+                <input
+                  type="date"
+                  value={preferences.raceDate}
+                  min={new Date().toISOString().split('T')[0]}
+                  onChange={(e) => onPreferenceChange('raceDate', e.target.value)}
+                  style={{
+                    display: 'block',
+                    marginTop: 6,
+                    width: '100%',
+                    fontFamily: OL.mono,
+                    fontSize: 13,
+                    color: OL.ink,
+                    background: 'var(--color-paper)',
+                    border: `1px solid ${OL.ink}`,
+                    borderRadius: 0,
+                    padding: '6px 8px',
+                    outline: 'none',
+                    boxSizing: 'border-box' as const,
+                  }}
+                />
+              </div>
             </div>
             {/* Save row */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
               <button
                 onClick={onSavePreferences}
-                disabled={isSavingPreferences || preferences.biggestStruggle.trim() === '' || preferences.weeklyKmTarget === '' || preferences.daysAvailable === ''}
+                disabled={isSavingPreferences || preferences.biggestStruggle.trim() === '' || preferences.weeklyKmTarget === '' || preferences.availableDays.length === 0}
                 style={{
                   background: isSavingPreferences ? OL.muted : OL.ink,
                   color: OL.paper,
@@ -409,7 +470,7 @@ export function SettingsPaper({
                   fontWeight: 700,
                   textTransform: 'uppercase' as const,
                   cursor: isSavingPreferences ? 'not-allowed' : 'pointer',
-                  opacity: (preferences.biggestStruggle.trim() === '' || preferences.weeklyKmTarget === '' || preferences.daysAvailable === '') ? 0.4 : 1,
+                  opacity: (preferences.biggestStruggle.trim() === '' || preferences.weeklyKmTarget === '' || preferences.availableDays.length === 0) ? 0.4 : 1,
                 }}
               >
                 {isSavingPreferences ? 'Saving...' : 'Save →'}

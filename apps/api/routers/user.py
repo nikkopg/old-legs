@@ -75,6 +75,10 @@ async def save_onboarding(
         current_user.max_hr = body.max_hr
     if body.goal_event is not None:
         current_user.goal_event = body.goal_event
+    # Always overwrite race_date — allows the user to set or clear it
+    current_user.race_date = body.race_date
+    if body.available_days is not None:
+        current_user.available_days = body.available_days
     current_user.onboarding_completed = True
 
     db.commit()
@@ -137,11 +141,13 @@ async def get_me(
         onboarding_completed=current_user.onboarding_completed,
         weekly_km_target=current_user.weekly_km_target,
         days_available=current_user.days_available,
+        available_days=current_user.available_days,
         biggest_struggle=current_user.biggest_struggle,
         resting_hr=current_user.resting_hr,
         max_hr=current_user.max_hr,
         max_hr_observed=current_user.max_hr_observed,
         goal_event=current_user.goal_event,
+        race_date=current_user.race_date,
         created_at=current_user.created_at,
         updated_at=current_user.updated_at,
         total_activities=total_activities,

@@ -12,7 +12,7 @@
 #   - tokens (access/refresh) are NEVER exposed via API — not included in any schema
 #   - days_available must be 1–7; weekly_km_target must be >= 0
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -34,9 +34,11 @@ class UserBase(BaseModel):
     onboarding_completed: bool = False
     weekly_km_target: float = 0.0
     days_available: int = 3
+    available_days: Optional[list[str]] = None
     biggest_struggle: str | None = None
     resting_hr: int | None = None
     goal_event: Optional[str] = None
+    race_date: Optional[date] = None
 
 
 class UserCreate(UserBase):
@@ -58,11 +60,13 @@ class UserRead(UserBase):
     onboarding_completed: bool
     weekly_km_target: float
     days_available: int
+    available_days: Optional[list[str]] = None
     biggest_struggle: str | None
     resting_hr: int | None = None
     max_hr: int | None = None
     max_hr_observed: int | None = None
     goal_event: Optional[str] = None
+    race_date: Optional[date] = None
     created_at: datetime
     updated_at: datetime
 
@@ -91,6 +95,34 @@ class OnboardingRequest(BaseModel):
             "Null means not set."
         ),
     )
+    race_date: Optional[date] = Field(
+        None,
+        description="Target race date in ISO 8601 format (YYYY-MM-DD). Null clears the race date.",
+    )
+    available_days: Optional[list[str]] = Field(
+        None,
+        description=(
+            "Specific days the runner is available to train. "
+            "Valid values: monday, tuesday, wednesday, thursday, friday, saturday, sunday. "
+            "Must contain at least one day if provided."
+        ),
+    )
+
+    @field_validator("available_days")
+    @classmethod
+    def validate_available_days(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+        """Reject invalid day names and empty lists with a 422."""
+        if v is None:
+            return v
+        valid = {'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'}
+        for day in v:
+            if day not in valid:
+                raise ValueError(
+                    f"Invalid day: '{day}'. Must be one of {sorted(valid)}."
+                )
+        if len(v) == 0:
+            raise ValueError("available_days must contain at least one day if provided.")
+        return v
 
     @field_validator("goal_event")
     @classmethod

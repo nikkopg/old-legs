@@ -94,11 +94,12 @@ export default function SettingsPage() {
   // Runner's Brief preferences state
   const [preferences, setPreferences] = useState({
     weeklyKmTarget: '',
-    daysAvailable: '',
+    availableDays: [] as string[],
     biggestStruggle: '',
     restingHr: '',
     maxHr: '',
     goalEvent: null as GoalEvent | null,
+    raceDate: '',
   })
   const [prefSeeded, setPrefSeeded] = useState(false)
   const [isSavingPreferences, setIsSavingPreferences] = useState(false)
@@ -123,11 +124,12 @@ export default function SettingsPage() {
     if (userProfile && !prefSeeded) {
       setPreferences({
         weeklyKmTarget: userProfile.weekly_km_target !== null ? String(userProfile.weekly_km_target) : '',
-        daysAvailable: userProfile.days_available !== null ? String(userProfile.days_available) : '',
+        availableDays: userProfile.available_days ?? [],
         biggestStruggle: userProfile.biggest_struggle ?? '',
         restingHr: userProfile.resting_hr !== null && userProfile.resting_hr !== undefined ? String(userProfile.resting_hr) : '',
         maxHr: userProfile.max_hr !== null && userProfile.max_hr !== undefined ? String(userProfile.max_hr) : '',
         goalEvent: userProfile.goal_event ?? null,
+        raceDate: userProfile.race_date ?? '',
       })
       setPrefSeeded(true)
     }
@@ -162,11 +164,16 @@ export default function SettingsPage() {
 
   // Runner's Brief preference handlers
   const handlePreferenceChange = (
-    field: 'weeklyKmTarget' | 'daysAvailable' | 'biggestStruggle' | 'restingHr' | 'maxHr',
+    field: 'weeklyKmTarget' | 'biggestStruggle' | 'restingHr' | 'maxHr' | 'raceDate',
     value: string,
   ) => {
     setPreferencesSaved(false)
     setPreferences((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const handleAvailableDaysChange = (days: string[]) => {
+    setPreferencesSaved(false)
+    setPreferences((prev) => ({ ...prev, availableDays: days }))
   }
 
   const handleGoalEventChange = (value: GoalEvent | null) => {
@@ -176,8 +183,7 @@ export default function SettingsPage() {
 
   const handleSavePreferences = async () => {
     const parsedKm = Number(preferences.weeklyKmTarget)
-    const parsedDays = Number(preferences.daysAvailable)
-    if (parsedDays < 1 || parsedDays > 7) return
+    if (preferences.availableDays.length === 0) return
     const parsedRestingHr = preferences.restingHr !== '' ? Number(preferences.restingHr) : null
     if (parsedRestingHr !== null && (parsedRestingHr < 30 || parsedRestingHr > 100)) return
     const parsedMaxHr = preferences.maxHr !== '' ? Number(preferences.maxHr) : null
@@ -188,13 +194,19 @@ export default function SettingsPage() {
     try {
       await saveOnboarding({
         weekly_km_target: parsedKm,
-        days_available: parsedDays,
+        days_available: preferences.availableDays.length,
+        available_days: preferences.availableDays,
         biggest_struggle: preferences.biggestStruggle.trim(),
         resting_hr: parsedRestingHr,
         max_hr: parsedMaxHr,
         goal_event: preferences.goalEvent,
+        race_date: preferences.raceDate || null,
       })
       setPreferencesSaved(true)
+      // Invalidate cache so the next visit seeds from fresh data, then allow
+      // re-seeding on this page when the refetch completes.
+      queryClient.invalidateQueries({ queryKey: ['user', 'me'] })
+      setPrefSeeded(false)
     } catch (err) {
       const apiErr = err as ApiError
       setPreferencesError(apiErr?.detail ?? 'Something went wrong.')
@@ -274,6 +286,7 @@ export default function SettingsPage() {
       onResetContextCancel={handleResetContextCancel}
       preferences={preferences}
       onPreferenceChange={handlePreferenceChange}
+      onAvailableDaysChange={handleAvailableDaysChange}
       onGoalEventChange={handleGoalEventChange}
       onSavePreferences={handleSavePreferences}
       isSavingPreferences={isSavingPreferences}
