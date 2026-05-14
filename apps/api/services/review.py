@@ -114,22 +114,25 @@ def _format_km_target(user_weekly_km_target: float | None) -> str:
 def _compute_missed_days(
     active_plan: TrainingPlan | None,
     week_activities: list[Activity],
+    week_start: date,
+    today: date,
 ) -> str:
     """
-    Determine which planned non-rest days had no run in them.
+    Determine which planned non-rest days in the past had no run.
 
-    Extracts non-rest day names from the active plan, then checks each against
-    the actual run dates in week_activities. Returns the names of missed days
-    as a comma-separated string.
+    Only days whose date is strictly before today are considered — future
+    sessions in the current week are not counted as missed.
 
     Args:
         active_plan: The user's active TrainingPlan, or None.
         week_activities: Activity records for the current week.
+        week_start: Monday of the current week.
+        today: Today's date (UTC).
 
     Returns:
         A comma-separated string of missed day names (e.g. "Wednesday, Sunday"),
-        "none" when all planned days were covered, or "no plan on file" when no
-        active plan exists.
+        "none" when all past planned days were covered, or "no plan on file" when
+        no active plan exists.
     """
     if active_plan is None:
         return "no plan on file"
@@ -152,7 +155,13 @@ def _compute_missed_days(
         for a in week_activities
     }
 
-    missed = [day for day in planned_days if day not in actual_day_names]
+    # Only flag a day as missed if its date is strictly in the past
+    day_offset = {name: i for i, name in enumerate(_WEEKDAY_NAMES)}
+    missed = [
+        day for day in planned_days
+        if day not in actual_day_names
+        and (week_start + timedelta(days=day_offset[day])) < today
+    ]
 
     return ", ".join(sorted(missed, key=lambda d: _WEEKDAY_NAMES.index(d))) if missed else "none"
 
@@ -371,7 +380,7 @@ async def generate_weekly_review(user: User, db: Session) -> WeeklyReview:
     km_target = _format_km_target(user.weekly_km_target)
 
     # --- TASK-179: missed days ---
-    missed_days = _compute_missed_days(active_plan, week_activities)
+    missed_days = _compute_missed_days(active_plan, week_activities, week_start, today)
 
     # --- TASK-180: prior week comparison ---
     prior_week_runs, prior_week_km, prior_week_avg_pace = _compute_prior_week_stats(
