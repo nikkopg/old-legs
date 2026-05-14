@@ -81,10 +81,8 @@ type VoiceLevel = 'gentle' | 'standard' | 'unfiltered';
 type Theme = 'light' | 'dark';
 
 interface DeliveryPreferences {
-  dispatchAfterRun: boolean;
   weeklyPlanMonday: boolean;
   weeklyReviewSunday: boolean;
-  missedRunNudge: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +168,6 @@ export function SettingsPaper({
     { key: 'dispatchAfterRun', label: 'Dispatch after every run' },
     { key: 'weeklyPlanMonday', label: 'Weekly plan on Monday 05:00' },
     { key: 'weeklyReviewSunday', label: 'Weekly review on Sunday 20:00' },
-    { key: 'missedRunNudge', label: 'Missed-run nudge (gentle)' },
   ];
 
   const statsRows: Array<{ value: number; label: string }> = [

@@ -48,10 +48,8 @@ import { useTheme } from '@/hooks/useTheme'
 type VoiceLevel = 'gentle' | 'standard' | 'unfiltered'
 
 interface DeliveryPreferences {
-  dispatchAfterRun: boolean
   weeklyPlanMonday: boolean
   weeklyReviewSunday: boolean
-  missedRunNudge: boolean
 }
 
 type ResetContextState = 'idle' | 'confirming' | 'loading' | 'error'
@@ -85,10 +83,8 @@ export default function SettingsPage() {
   // Local-only preferences state (no backend yet)
   const [voice, setVoice] = useState<VoiceLevel>('standard')
   const [deliveryPrefs, setDeliveryPrefs] = useState<DeliveryPreferences>({
-    dispatchAfterRun: true,
     weeklyPlanMonday: true,
     weeklyReviewSunday: true,
-    missedRunNudge: true,
   })
 
   // Runner's Brief preferences state

@@ -842,4 +842,66 @@ async def sync_activities(user_id: int, access_token: str, db: Session) -> int:
                 f"splits fallback for {splits_from_fallback} activities (user {user_id})"
             )
 
+    # --- Third pass: auto-analyze newly inserted activities ---
+    # Only activities inserted in this sync (analysis IS NULL) are candidates.
+    # Existing activities already have their analysis preserved via the upsert.
+    # Cap at 3 per sync to avoid blocking the sync response and hammering Ollama.
+    # All exceptions at the loop level are caught — a failed analysis must never
+    # cause the sync to fail or raise.
+    _MAX_AUTO_ANALYZE = 3
+    if touched_strava_ids and new_count > 0:
+        try:
+            from services.coach import run_analysis_for_activity
+
+            user_row = db.query(User).filter(User.id == user_id).first()
+            if user_row is None:
+                logger.warning(
+                    f"Third pass: user_id={user_id} not found — skipping auto-analysis"
+                )
+            else:
+                activities_to_analyze = (
+                    db.query(Activity)
+                    .filter(
+                        Activity.user_id == user_id,
+                        Activity.strava_activity_id.in_(touched_strava_ids),
+                        Activity.analysis.is_(None),
+                    )
+                    .order_by(Activity.activity_date.desc())
+                    .limit(_MAX_AUTO_ANALYZE)
+                    .all()
+                )
+
+                analyzed_count = 0
+                for activity in activities_to_analyze:
+                    try:
+                        success = await run_analysis_for_activity(
+                            activity.id, user_row, db
+                        )
+                        if success:
+                            analyzed_count += 1
+                            logger.info(
+                                f"Auto-analyzed activity_id={activity.id} "
+                                f"(strava_id={activity.strava_activity_id}) "
+                                f"for user {user_id}"
+                            )
+                        else:
+                            logger.warning(
+                                f"Auto-analysis returned False for activity_id={activity.id} "
+                                f"user {user_id} — Ollama may be unavailable"
+                            )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.error(
+                            f"Auto-analysis error for activity_id={activity.id} "
+                            f"user {user_id}: {exc}"
+                        )
+
+                if analyzed_count > 0:
+                    logger.info(
+                        f"Auto-analyzed {analyzed_count} new activities for user {user_id}"
+                    )
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                f"Third pass (auto-analysis) failed for user {user_id}: {exc}"
+            )
+
     return new_count

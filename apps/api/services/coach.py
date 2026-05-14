@@ -39,9 +39,12 @@ Responsible for:
 - Final context string assembly for the ANALYSIS_PROMPT
 """
 
+import json as _json
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
+import httpx
 from sqlalchemy.orm import Session
 
 from models.activity import Activity
@@ -785,3 +788,362 @@ def build_analysis_context(
         lines.append("\n".join(session_lines))
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Shared analysis pipeline — used by both the HTTP route and background sync
+# ---------------------------------------------------------------------------
+
+_VERDICT_TAGS = frozenset({
+    "PACED POORLY", "ON PLAN", "HELD THE LINE", "FADED LATE",
+    "FUELING", "RESTRAINED", "STEADY", "NO SHOW",
+})
+_TONES = frozenset({"critical", "good", "neutral"})
+
+
+async def run_analysis_for_activity(activity_id: int, user, db: Session) -> bool:
+    """
+    Run Pak Har's full post-run analysis for a single activity.
+
+    Performs the complete analysis pipeline: builds context, calls Ollama for
+    the long-form analysis (streaming, collected), persists it, then makes a
+    second non-streaming call to extract verdict_short, verdict_tag, and tone.
+    Both results are committed to the Activity row.
+
+    Designed to be called from background contexts (e.g. sync pipeline) as well
+    as from the HTTP route handler. Does NOT call check_rate_limit() — rate
+    limiting is the caller's responsibility for user-facing requests.
+
+    Args:
+        activity_id: Primary key of the Activity to analyze.
+        user: User ORM instance owning the activity.
+        db: Active database session.
+
+    Returns:
+        True on success (analysis persisted). False on any exception — all
+        exceptions are swallowed so a failed analysis never propagates to the
+        caller (critical for background sync jobs).
+    """
+    # Lazy imports to avoid circular dependencies at module load time.
+    from config import settings
+    from models.training_plan import TrainingPlan
+    from models.weekly_review import WeeklyReview
+    from prompts.pak_har import ANALYSIS_PROMPT
+    from services.ollama import (
+        build_user_preferences_context,
+        OLLAMA_BASE_URL,
+        _CONNECT_TIMEOUT,
+        _READ_TIMEOUT,
+    )
+
+    try:
+        # 1. Fetch activity (must belong to the supplied user).
+        activity = (
+            db.query(Activity)
+            .filter(
+                Activity.id == activity_id,
+                Activity.user_id == user.id,
+            )
+            .first()
+        )
+        if not activity:
+            logger.warning(
+                "run_analysis_for_activity: activity_id=%d not found for user_id=%d — skipping",
+                activity_id,
+                user.id,
+            )
+            return False
+
+        # 2. Fetch recent activities for HR trend detection (excluding current).
+        recent_activities = (
+            db.query(Activity)
+            .filter(
+                Activity.user_id == user.id,
+                Activity.id != activity_id,
+                Activity.sync_status == "synced",
+            )
+            .order_by(Activity.activity_date.desc())
+            .limit(20)
+            .all()
+        )
+
+        splits = activity.splits or []
+
+        # 3. Fetch last 3 previously-analyzed activities for historical context.
+        recent_analyzed = (
+            db.query(Activity)
+            .filter(
+                Activity.user_id == user.id,
+                Activity.id != activity_id,
+                Activity.analysis.isnot(None),
+            )
+            .order_by(Activity.activity_date.desc())
+            .limit(3)
+            .all()
+        )
+        recent_analyses: list[tuple[str, float, str]] = [
+            (
+                a.activity_date.date().isoformat(),
+                a.distance_km,
+                a.analysis,
+            )
+            for a in recent_analyzed
+            if a.analysis
+        ]
+
+        # 4. Fetch most recent weekly review.
+        latest_review = (
+            db.query(WeeklyReview)
+            .filter(WeeklyReview.user_id == user.id)
+            .order_by(WeeklyReview.created_at.desc())
+            .first()
+        )
+        weekly_review_text: str | None = latest_review.review_text if latest_review else None
+
+        # 5. Look up active training plan day matching this activity's date.
+        active_plan = (
+            db.query(TrainingPlan)
+            .filter(
+                TrainingPlan.user_id == user.id,
+                TrainingPlan.is_active == True,  # noqa: E712
+            )
+            .order_by(TrainingPlan.created_at.desc())
+            .first()
+        )
+        planned_session: dict | None = None
+        if active_plan and active_plan.plan_data:
+            activity_day = activity.activity_date.strftime("%A").lower()
+            planned_session = active_plan.plan_data.get(activity_day)
+
+        # 6. Build run context string.
+        run_context = build_analysis_context(
+            activity,
+            recent_activities,
+            resting_hr=user.resting_hr or 60,
+            max_hr_observed=user.max_hr_observed,
+            max_hr=user.max_hr,
+            splits=splits,
+            recent_analyses=recent_analyses,
+            weekly_review=weekly_review_text,
+            planned_session=planned_session,
+            rpe=activity.rpe,
+        )
+
+        # 7. Build HR zone context string.
+        if activity.average_hr is not None:
+            hr_zone_context = "\n".join(
+                line for line in run_context.splitlines()
+                if any(
+                    keyword in line.lower()
+                    for keyword in ("heart rate", "hr zone", "mismatch", "hr trend", "fatigue")
+                )
+            ) or "(HR data present but no zone lines extracted — check build_analysis_context)"
+        else:
+            hr_zone_context = "(no heart rate data for this run)"
+
+        # 8. Format context sections for prompt placeholders.
+        splits_context = _format_splits_context(splits) if splits else "(not available)"
+        historical_context = (
+            _format_historical_context(recent_analyses) if recent_analyses else "(not available)"
+        )
+        if weekly_review_text:
+            truncated_review = weekly_review_text[:_WEEKLY_REVIEW_TRUNCATE]
+            if len(weekly_review_text) > _WEEKLY_REVIEW_TRUNCATE:
+                truncated_review += "..."
+            weekly_review_context = truncated_review
+        else:
+            weekly_review_context = "(not available)"
+
+        if planned_session:
+            plan_lines: list[str] = []
+            if planned_session.get("type"):
+                plan_lines.append(f"  Type: {planned_session['type']}")
+            if planned_session.get("target"):
+                plan_lines.append(f"  Target: {planned_session['target']}")
+            if planned_session.get("description"):
+                plan_lines.append(f"  Description: {planned_session['description']}")
+            if planned_session.get("duration_minutes") is not None:
+                plan_lines.append(f"  Duration: {planned_session['duration_minutes']} min")
+            planned_session_context = (
+                "\n".join(plan_lines) if plan_lines else "(no training plan active for this week)"
+            )
+        else:
+            planned_session_context = "(no training plan active for this week)"
+
+        # 9. Assemble system prompt.
+        user_preferences = build_user_preferences_context(user)
+        system_content = ANALYSIS_PROMPT.format(
+            run_context=run_context,
+            hr_zone_context=hr_zone_context,
+            planned_session_context=planned_session_context,
+            splits_context=splits_context,
+            historical_context=historical_context,
+            weekly_review_context=weekly_review_context,
+            user_preferences=user_preferences,
+        )
+
+        payload = {
+            "model": settings.get_ollama_model(),
+            "messages": [
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": "Give me your analysis of this run."},
+            ],
+            "stream": True,
+        }
+
+        url = f"{OLLAMA_BASE_URL}/api/chat"
+        logger.info(
+            "run_analysis_for_activity: requesting Ollama analysis for activity_id=%d user_id=%d",
+            activity_id,
+            user.id,
+        )
+
+        # 10. Stream response from Ollama, collect into full_analysis.
+        chunks: list[str] = []
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(
+                connect=_CONNECT_TIMEOUT, read=_READ_TIMEOUT, write=10.0, pool=5.0
+            )
+        ) as client:
+            async with client.stream("POST", url, json=payload) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line.strip():
+                        continue
+                    try:
+                        data = _json.loads(line)
+                    except _json.JSONDecodeError:
+                        logger.warning(
+                            "run_analysis_for_activity: non-JSON line from Ollama "
+                            "(activity_id=%d) — skipping",
+                            activity_id,
+                        )
+                        continue
+                    if data.get("done"):
+                        break
+                    content = data.get("message", {}).get("content")
+                    if content:
+                        chunks.append(content)
+
+        full_analysis = "".join(chunks)
+
+        # 11. Persist long-form analysis — always committed before verdict extraction.
+        activity.analysis = full_analysis
+        activity.analysis_generated_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(activity)
+
+        logger.info(
+            "run_analysis_for_activity: analysis persisted for activity_id=%d user_id=%d (%d chars)",
+            activity_id,
+            user.id,
+            len(full_analysis),
+        )
+
+        # 12. Second Ollama call — structured verdict extraction (best-effort).
+        verdict_short: str | None = None
+        verdict_tag: str | None = None
+        tone: str | None = None
+
+        if full_analysis.strip():
+            extraction_payload = {
+                "model": settings.get_ollama_model(),
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are a JSON extractor. Output only valid JSON, no markdown.",
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            "Given this running analysis:\n"
+                            "---\n"
+                            f"{full_analysis}\n"
+                            "---\n\n"
+                            "Extract three fields:\n"
+                            "1. verdict_short: One sentence, max 12 words, summarising what this run showed. "
+                            "No praise, no fluff.\n"
+                            "2. verdict_tag: Pick exactly one from this list: "
+                            "PACED POORLY | ON PLAN | HELD THE LINE | FADED LATE | "
+                            "FUELING | RESTRAINED | STEADY | NO SHOW\n"
+                            "3. tone: Pick exactly one: critical | good | neutral\n\n"
+                            'Respond with only valid JSON: {"verdict_short": "...", "verdict_tag": "...", "tone": "..."}'
+                        ),
+                    },
+                ],
+                "stream": False,
+            }
+
+            try:
+                async with httpx.AsyncClient(
+                    timeout=httpx.Timeout(
+                        connect=_CONNECT_TIMEOUT, read=_READ_TIMEOUT, write=10.0, pool=5.0
+                    )
+                ) as client:
+                    extraction_response = await client.post(url, json=extraction_payload)
+                    extraction_response.raise_for_status()
+                    extraction_data = extraction_response.json()
+
+                raw_content: str = (
+                    extraction_data.get("message", {}).get("content", "")
+                    or extraction_data.get("response", "")
+                ).strip()
+
+                parsed = _json.loads(raw_content)
+
+                raw_verdict_short = parsed.get("verdict_short")
+                raw_verdict_tag = parsed.get("verdict_tag")
+                raw_tone = parsed.get("tone")
+
+                verdict_short = str(raw_verdict_short).strip() if raw_verdict_short else None
+                verdict_tag = (
+                    str(raw_verdict_tag).strip().upper()
+                    if raw_verdict_tag and str(raw_verdict_tag).strip().upper() in _VERDICT_TAGS
+                    else None
+                )
+                tone = (
+                    str(raw_tone).strip().lower()
+                    if raw_tone and str(raw_tone).strip().lower() in _TONES
+                    else None
+                )
+
+                logger.info(
+                    "run_analysis_for_activity: verdict extracted for activity_id=%d: tag=%r tone=%r",
+                    activity_id,
+                    verdict_tag,
+                    tone,
+                )
+
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "run_analysis_for_activity: verdict extraction failed for activity_id=%d: %s",
+                    activity_id,
+                    exc,
+                )
+                verdict_short = None
+                verdict_tag = None
+                tone = None
+        else:
+            logger.warning(
+                "run_analysis_for_activity: skipping verdict extraction for activity_id=%d "
+                "— analysis text is empty",
+                activity_id,
+            )
+
+        # 13. Persist verdict fields.
+        activity.verdict_short = verdict_short
+        activity.verdict_tag = verdict_tag
+        activity.tone = tone
+        db.commit()
+        db.refresh(activity)
+
+        return True
+
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "run_analysis_for_activity: unhandled error for activity_id=%d user_id=%d: %s",
+            activity_id,
+            user.id,
+            exc,
+        )
+        return False
