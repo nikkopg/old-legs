@@ -366,37 +366,32 @@ export function SettingsPaper({
                 />
               </div>
             </div>
-            {/* Goal event pills */}
+            {/* Goal event dropdown */}
             <div style={{ marginBottom: 14 }}>
               <Caps size={8} ls={2} opacity={0.6}>Training goal</Caps>
-              <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 6, marginTop: 6 }}>
-                {GOAL_OPTIONS.map(({ value, label }) => {
-                  const active = preferences.goalEvent === value;
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => onGoalEventChange(active ? null : value)}
-                      style={{
-                        fontFamily: OL.sans,
-                        fontSize: 10,
-                        fontWeight: 700,
-                        textTransform: 'uppercase' as const,
-                        letterSpacing: 3,
-                        padding: '5px 10px',
-                        border: `1px solid ${OL.ink}`,
-                        background: active ? OL.ink : 'transparent',
-                        color: active ? OL.paper : OL.ink,
-                        cursor: 'pointer',
-                        borderRadius: 0,
-                        outline: 'none',
-                      }}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
+              <select
+                value={preferences.goalEvent ?? ''}
+                onChange={(e) => onGoalEventChange((e.target.value as GoalEvent) || null)}
+                style={{
+                  display: 'block',
+                  marginTop: 6,
+                  width: '100%',
+                  fontFamily: OL.mono,
+                  fontSize: 13,
+                  color: OL.ink,
+                  background: OL.paper,
+                  border: `1px solid ${OL.ink}`,
+                  borderRadius: 0,
+                  padding: '6px 8px',
+                  outline: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <option value=''>— not set —</option>
+                {GOAL_OPTIONS.map(({ value, label }) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
             </div>
             {/* Save row */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
