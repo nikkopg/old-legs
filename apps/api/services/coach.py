@@ -197,19 +197,130 @@ def _compute_hr_trend(
     return None
 
 
+# ---------------------------------------------------------------------------
+# Splits formatting
+# ---------------------------------------------------------------------------
+
+_MAX_SPLITS: int = 20
+
+
+def _format_splits_context(splits: list[dict]) -> str:
+    """
+    Format per-km split data into a human-readable table for the analysis prompt.
+
+    Converts avg_speed_ms to min/km pace, doubles Strava's half-cadence value,
+    and omits HR or cadence columns entirely when all splits have null values
+    for that field. Caps at _MAX_SPLITS entries.
+
+    Each split dict is expected to have:
+        km, moving_time, distance, avg_speed_ms, hr (nullable),
+        cad (nullable), elev (nullable)
+
+    Args:
+        splits: List of per-km split dicts from Activity.splits.
+
+    Returns:
+        A plain-text multi-line string ready to inject into the prompt.
+    """
+    if not splits:
+        return "(not available)"
+
+    capped = splits[:_MAX_SPLITS]
+
+    all_hr_null = all(s.get("hr") is None for s in capped)
+    all_cad_null = all(s.get("cad") is None for s in capped)
+
+    lines: list[str] = ["Per-km splits:"]
+    for s in capped:
+        km = s.get("km", "?")
+        avg_speed_ms = s.get("avg_speed_ms")
+        if avg_speed_ms and avg_speed_ms > 0:
+            pace_str = format_pace(1000 / (avg_speed_ms * 60))
+        else:
+            pace_str = "--:--"
+
+        parts = [f"km {km} — {pace_str}/km"]
+
+        if not all_hr_null:
+            hr_val = s.get("hr")
+            parts.append(f"HR {round(hr_val) if hr_val is not None else '—'} bpm")
+
+        if not all_cad_null:
+            cad_val = s.get("cad")
+            if cad_val is not None:
+                parts.append(f"Cad {round(cad_val * 2)} spm")
+            else:
+                parts.append("Cad — spm")
+
+        elev_val = s.get("elev")
+        if elev_val is not None:
+            parts.append(f"Elev {int(elev_val):+d}m")
+
+        lines.append("  " + " | ".join(parts))
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Historical analyses formatting
+# ---------------------------------------------------------------------------
+
+_MAX_HISTORICAL: int = 3
+_HISTORICAL_TRUNCATE: int = 300
+
+
+def _format_historical_context(recent_analyses: list[tuple[str, float, str]]) -> str:
+    """
+    Format a list of previous run analyses into a brief reference block.
+
+    Each entry is a (date_str, distance_km, analysis_text) tuple.
+    At most _MAX_HISTORICAL entries are included. Analysis text is truncated
+    to _HISTORICAL_TRUNCATE characters.
+
+    Args:
+        recent_analyses: List of (date_str, distance_km, analysis_text) tuples,
+                         ordered by date descending (most recent first).
+
+    Returns:
+        A plain-text multi-line string, or "(not available)" if the list is empty.
+    """
+    if not recent_analyses:
+        return "(not available)"
+
+    lines: list[str] = ["Recent run history (Pak Har's previous assessments):"]
+    for date_str, distance_km, analysis_text in recent_analyses[:_MAX_HISTORICAL]:
+        truncated = analysis_text[:_HISTORICAL_TRUNCATE]
+        if len(analysis_text) > _HISTORICAL_TRUNCATE:
+            truncated += "..."
+        lines.append(f"  {date_str}, {distance_km:.1f} km: {truncated}")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Weekly review formatting
+# ---------------------------------------------------------------------------
+
+_WEEKLY_REVIEW_TRUNCATE: int = 500
+
+
 def build_analysis_context(
     activity: Activity,
     recent_activities: list[Activity],
     resting_hr: int = _DEFAULT_RHR,
     max_hr_observed: int | None = None,
     max_hr: int | None = None,
+    splits: list[dict] | None = None,
+    recent_analyses: list[tuple[str, float, str]] | None = None,
+    weekly_review: str | None = None,
 ) -> str:
     """
     Build the full context string for Pak Har's post-run analysis prompt.
 
     Includes basic run data (always), HR zone classification and mismatch
-    flags (only when average_hr is not null), and an HR trend note (only
-    when sufficient comparable runs exist and HR is rising).
+    flags (only when average_hr is not null), an HR trend note (only
+    when sufficient comparable runs exist and HR is rising), and optionally:
+    per-km splits, previous run analyses, and the most recent weekly review.
 
     MHR resolution priority:
         1. max_hr — user-provided explicit value (most trusted)
@@ -226,6 +337,12 @@ def build_analysis_context(
         max_hr_observed: Cached max HR from the user row. Used when max_hr is
                          not set — avoids a full table scan on every analysis call.
         max_hr: User-provided max HR (highest-priority source for zone calc).
+        splits: Optional list of per-km split dicts from Activity.splits.
+                When provided and non-empty, a formatted splits table is appended.
+        recent_analyses: Optional list of (date_str, distance_km, analysis_text)
+                         tuples from previous analyzed runs. At most 3 are used.
+        weekly_review: Optional text of the most recent weekly review. Truncated
+                       to 500 characters when injected into the context.
 
     Returns:
         A multi-line plain-text context string ready to be injected into the
@@ -299,5 +416,20 @@ def build_analysis_context(
         hr_trend = _compute_hr_trend(activity, recent_activities)
         if hr_trend:
             lines.append(hr_trend)
+
+    # --- Splits section — only when splits are provided and non-empty ---
+    if splits:
+        lines.append(_format_splits_context(splits))
+
+    # --- Historical analyses — only when entries are provided ---
+    if recent_analyses:
+        lines.append(_format_historical_context(recent_analyses))
+
+    # --- Weekly review — only when provided ---
+    if weekly_review:
+        truncated = weekly_review[:_WEEKLY_REVIEW_TRUNCATE]
+        if len(weekly_review) > _WEEKLY_REVIEW_TRUNCATE:
+            truncated += "..."
+        lines.append(f"Most recent weekly review:\n{truncated}")
 
     return "\n".join(lines)

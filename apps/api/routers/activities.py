@@ -101,6 +101,7 @@ from config import settings
 from dependencies import get_current_user
 from models.activity import Activity
 from models.user import User
+from models.weekly_review import WeeklyReview
 from prompts.pak_har import ANALYSIS_PROMPT
 from schemas.activity import ActivityListResponse, ActivityRead, PlanVerdictRequest, PlanVerdictResponse
 from services.coach import build_analysis_context
@@ -292,8 +293,44 @@ async def analyze_activity(
         .all()
     )
 
+    # 3a. Extract per-km splits from the activity (may be None if not yet fetched).
+    splits = activity.splits or []
+
+    # 3b. Fetch the last 3 previously-analyzed activities (excluding current) for
+    #     historical context — so Pak Har can reference repeating or improving patterns.
+    recent_analyzed = (
+        db.query(Activity)
+        .filter(
+            Activity.user_id == current_user.id,
+            Activity.id != activity_id,
+            Activity.analysis.isnot(None),
+        )
+        .order_by(Activity.activity_date.desc())
+        .limit(3)
+        .all()
+    )
+    recent_analyses: list[tuple[str, float, str]] = [
+        (
+            a.activity_date.date().isoformat(),
+            a.distance_km,
+            a.analysis,
+        )
+        for a in recent_analyzed
+        if a.analysis  # guard against empty strings
+    ]
+
+    # 3c. Fetch the most recent weekly review for this user (if any).
+    latest_review = (
+        db.query(WeeklyReview)
+        .filter(WeeklyReview.user_id == current_user.id)
+        .order_by(WeeklyReview.created_at.desc())
+        .first()
+    )
+    weekly_review_text: str | None = latest_review.review_text if latest_review else None
+
     # 4. Build the run context string (basic stats + HR zone classification, mismatch,
-    #    and trend — all gated on average_hr being non-null inside the service).
+    #    trend, splits, historical analyses, and weekly review — all gated appropriately
+    #    inside the service).
     #    Pass resting_hr and max_hr_observed from the user row so zone calc uses
     #    actual values rather than population-average defaults.
     run_context = build_analysis_context(
@@ -302,11 +339,16 @@ async def analyze_activity(
         resting_hr=current_user.resting_hr or 60,
         max_hr_observed=current_user.max_hr_observed,
         max_hr=current_user.max_hr,
+        splits=splits,
+        recent_analyses=recent_analyses,
+        weekly_review=weekly_review_text,
     )
 
     # 5. Build the hr_zone_context string for the prompt placeholder.
     #    When HR data is absent, the placeholder makes the absence explicit so
     #    ANALYSIS_PROMPT knows to skip all HR commentary.
+    #    The keyword filter intentionally excludes the new context sections
+    #    (splits, history, weekly review) — none contain the filter keywords.
     if activity.average_hr is not None:
         # Extract just the HR-related lines from run_context (lines 7 onward after basic stats).
         # Simpler: pass a dedicated hr-only summary so ANALYSIS_PROMPT has a clean slot.
@@ -320,11 +362,27 @@ async def analyze_activity(
     else:
         hr_zone_context = "(no heart rate data for this run)"
 
+    # 5a. Format the three new context sections for the prompt placeholders.
+    from services.coach import _format_splits_context, _format_historical_context, _WEEKLY_REVIEW_TRUNCATE
+
+    splits_context = _format_splits_context(splits) if splits else "(not available)"
+    historical_context = _format_historical_context(recent_analyses) if recent_analyses else "(not available)"
+    if weekly_review_text:
+        truncated_review = weekly_review_text[:_WEEKLY_REVIEW_TRUNCATE]
+        if len(weekly_review_text) > _WEEKLY_REVIEW_TRUNCATE:
+            truncated_review += "..."
+        weekly_review_context = truncated_review
+    else:
+        weekly_review_context = "(not available)"
+
     # 6. Assemble the system prompt with run context, HR zone context, and user preferences injected.
     user_preferences = build_user_preferences_context(current_user)
     system_content = ANALYSIS_PROMPT.format(
         run_context=run_context,
         hr_zone_context=hr_zone_context,
+        splits_context=splits_context,
+        historical_context=historical_context,
+        weekly_review_context=weekly_review_context,
         user_preferences=user_preferences,
     )
 
