@@ -538,60 +538,39 @@ export function SettingsPaper({
 
           {/* Section 4 — Reading Light (theme toggle) */}
           <section style={{ padding: '14px 0', borderBottom: `1px solid ${OL.ink}` }}>
-            <SectionLabel right={theme === 'dark' ? 'off' : 'on'}>Reading Light</SectionLabel>
-            <p style={{
-              fontFamily: OL.body,
-              fontSize: 13,
-              lineHeight: 1.6,
-              color: OL.muted,
-              maxWidth: 560,
-              margin: '0 0 10px',
+            <SectionLabel>Reading Light</SectionLabel>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '8px 0',
             }}>
-              The lamp on the desk. Turn it off and the paper goes tobacco-brown for late editions.
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
-              {([
-                { opt: 'light', label: 'On', description: 'Cream paper, dark ink. The default.' },
-                { opt: 'dark',  label: 'Off', description: 'Tobacco paper, warm cream type. Easier after dark.' },
-              ] as Array<{ opt: Theme; label: string; description: string }>).map(({ opt, label, description }) => {
-                const active = theme === opt;
-                return (
-                  <div
-                    key={opt}
-                    onClick={() => onThemeChange(opt)}
-                    style={{
-                      border: `${active ? 3 : 1}px solid ${OL.ink}`,
-                      padding: '10px 12px',
-                      cursor: 'pointer',
-                      background: active ? OL.paperSoft2 : 'transparent',
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Caps size={10} ls={2} weight={800}>{label}</Caps>
-                      {active && (
-                        <Caps
-                          size={9}
-                          ls={2}
-                          opacity={1}
-                          weight={800}
-                          style={{ color: OL.accent }}
-                        >
-                          ✓ {opt === 'light' ? 'Lit' : 'Out'}
-                        </Caps>
-                      )}
-                    </div>
-                    <p style={{
-                      fontFamily: OL.body,
-                      fontSize: 12,
-                      lineHeight: 1.5,
-                      color: OL.muted,
-                      margin: '6px 0 0',
-                    }}>
-                      {description}
-                    </p>
-                  </div>
-                );
-              })}
+              <span style={{ fontFamily: OL.body, fontSize: 13 }}>
+                The lamp on the desk. Turn it off and the paper goes tobacco-brown for late editions.
+              </span>
+              <span
+                onClick={() => onThemeChange(theme === 'light' ? 'dark' : 'light')}
+                style={{
+                  display: 'inline-block',
+                  flexShrink: 0,
+                  marginLeft: 20,
+                  width: 44,
+                  height: 20,
+                  border: `1px solid ${OL.ink}`,
+                  padding: 2,
+                  background: theme === 'light' ? OL.ink : 'transparent',
+                  cursor: 'pointer',
+                }}
+              >
+                <span style={{
+                  display: 'block',
+                  width: 14,
+                  height: 14,
+                  background: theme === 'light' ? OL.paper : OL.ink,
+                  marginLeft: theme === 'light' ? 22 : 0,
+                  transition: 'margin 0.15s',
+                }} />
+              </span>
             </div>
           </section>
 
