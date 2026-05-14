@@ -31,8 +31,13 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
   if (!res.ok) {
     let detail = `API error ${res.status}`
     try {
-      const body = (await res.json()) as ApiError
-      if (body.detail) detail = body.detail
+      const body = await res.json()
+      if (typeof body.detail === 'string') {
+        detail = body.detail
+      } else if (Array.isArray(body.detail) && body.detail.length > 0) {
+        // FastAPI 422 — detail is an array of Pydantic error objects {type, loc, msg, input}
+        detail = body.detail.map((e: { msg?: string }) => e.msg ?? String(e)).join('; ')
+      }
     } catch {
       // response body wasn't JSON — keep the default message
     }
@@ -192,8 +197,12 @@ export async function streamChat(
   if (!res.ok) {
     let detail = `API error ${res.status}`
     try {
-      const body = (await res.json()) as ApiError
-      if (body.detail) detail = body.detail
+      const body = await res.json()
+      if (typeof body.detail === 'string') {
+        detail = body.detail
+      } else if (Array.isArray(body.detail) && body.detail.length > 0) {
+        detail = body.detail.map((e: { msg?: string }) => e.msg ?? String(e)).join('; ')
+      }
     } catch {
       // response body wasn't JSON
     }
