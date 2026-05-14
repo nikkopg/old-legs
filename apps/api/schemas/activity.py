@@ -1,6 +1,7 @@
 # READY FOR QA
-# Feature: Activity Pydantic schemas (updated TASK-163)
-# What was built: ActivityCreate, ActivityRead, ActivityUpdate, ActivityWithAnalysis
+# Feature: Activity Pydantic schemas (updated TASK-163 + RPE)
+# What was built: ActivityCreate, ActivityRead, ActivityUpdate, ActivityWithAnalysis,
+#   ActivityRpeUpdate (PATCH /activities/{id}/rpe)
 # Edge cases to consider:
 #   - HR fields nullable for activities without a HR monitor
 #   - analysis is nullable — analysis_generated_at indicates if analysis was attempted
@@ -12,11 +13,13 @@
 #   - splits: Optional list of per-km split dicts, null until second-pass Strava detail fetch runs.
 #     Each dict shape: {km, moving_time, distance, avg_speed_ms, hr, cad, elev}
 #     hr / cad / elev are nullable within each split (device-dependent).
+#   - rpe: Optional[int], default None. Valid range 1–10 when provided. Validated in
+#     ActivityRpeUpdate; null is accepted to clear a previously set value.
 
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class ActivityBase(BaseModel):
@@ -68,6 +71,9 @@ class ActivityRead(ActivityBase):
     # Populated by the streams fetch pass in sync_activities(); never overwritten once set.
     streams: Optional[dict] = None
 
+    # Rate of Perceived Exertion — user-supplied, 1–10. Null until runner rates the run.
+    rpe: Optional[int] = None
+
 
 class ActivityUpdate(BaseModel):
     """Fields updatable after initial sync (e.g. analysis fields)."""
@@ -90,6 +96,22 @@ class ActivityListResponse(BaseModel):
     total: int
     page: int
     per_page: int
+
+
+class ActivityRpeUpdate(BaseModel):
+    """Request body for PATCH /activities/{id}/rpe.
+
+    rpe is required in the request body. Send null to clear a previously saved value.
+    Omitting rpe entirely returns 422 (field required).
+    """
+    rpe: Optional[int]
+
+    @field_validator('rpe')
+    @classmethod
+    def validate_rpe(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and not (1 <= v <= 10):
+            raise ValueError('RPE must be between 1 and 10')
+        return v
 
 
 class PlanVerdictRequest(BaseModel):

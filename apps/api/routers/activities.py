@@ -104,7 +104,7 @@ from models.training_plan import TrainingPlan
 from models.user import User
 from models.weekly_review import WeeklyReview
 from prompts.pak_har import ANALYSIS_PROMPT
-from schemas.activity import ActivityListResponse, ActivityRead, PlanVerdictRequest, PlanVerdictResponse
+from schemas.activity import ActivityListResponse, ActivityRead, ActivityRpeUpdate, PlanVerdictRequest, PlanVerdictResponse
 from services.coach import build_analysis_context
 from services.database import get_db
 from services.ollama import build_user_preferences_context, OLLAMA_BASE_URL, _CONNECT_TIMEOUT, _READ_TIMEOUT
@@ -224,6 +224,76 @@ async def get_activity(
 
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
+
+    return activity
+
+
+# READY FOR QA
+# Feature: RPE (Rate of Perceived Exertion) save endpoint
+# What was built: PATCH /activities/{id}/rpe
+# Edge cases to test:
+#   - Unauthenticated → 401
+#   - activity_id not found → 404
+#   - activity_id belongs to another user → 404 (not 403, no ID enumeration)
+#   - rpe=null (body: {"rpe": null}) → clears any existing RPE value, returns ActivityRead
+#   - rpe=1 (min) → accepted
+#   - rpe=10 (max) → accepted
+#   - rpe=0 → 422 (out of range)
+#   - rpe=11 → 422 (out of range)
+#   - rpe omitted from body entirely → 422 (required field)
+#   - rpe=-1 → 422 (out of range)
+
+
+@router.patch("/{activity_id}/rpe", response_model=ActivityRead)
+async def update_activity_rpe(
+    activity_id: int,
+    body: ActivityRpeUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ActivityRead:
+    """
+    PATCH /activities/{activity_id}/rpe — save or clear the runner's RPE for a run.
+
+    RPE (Rate of Perceived Exertion) is a 1–10 integer that the runner provides
+    after completing a run to indicate how hard it felt. Pass null to clear a
+    previously saved value.
+
+    Range is validated by the request schema (1–10 when not null). The DB stores
+    any integer — range enforcement lives at this layer only.
+
+    **Auth:** Requires `session_user_id` httpOnly cookie.
+
+    **Request body:** `{ "rpe": 1–10 | null }`
+
+    **Response (200):** Full `ActivityRead` object with `rpe` updated.
+
+    **Errors:**
+    - 401: Not authenticated
+    - 404: Activity not found or does not belong to this user
+    - 422: rpe value out of range (not 1–10) or request body malformed
+    """
+    activity = (
+        db.query(Activity)
+        .filter(
+            Activity.id == activity_id,
+            Activity.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    activity.rpe = body.rpe
+    db.commit()
+    db.refresh(activity)
+
+    logger.info(
+        "RPE updated for activity_id=%d user_id=%d rpe=%r",
+        activity_id,
+        current_user.id,
+        body.rpe,
+    )
 
     return activity
 
@@ -362,6 +432,7 @@ async def analyze_activity(
         recent_analyses=recent_analyses,
         weekly_review=weekly_review_text,
         planned_session=planned_session,
+        rpe=activity.rpe,
     )
 
     # 5. Build the hr_zone_context string for the prompt placeholder.

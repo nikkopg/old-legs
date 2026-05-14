@@ -96,6 +96,13 @@ export async function analyzeActivity(id: number): Promise<{ analysis: string }>
   })
 }
 
+export async function saveRpe(activityId: number, rpe: number | null): Promise<Activity> {
+  return apiFetch<Activity>(`/activities/${activityId}/rpe`, {
+    method: 'PATCH',
+    body: JSON.stringify({ rpe }),
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Training Plan
 // ---------------------------------------------------------------------------

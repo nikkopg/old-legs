@@ -41,6 +41,9 @@ export interface DispatchProps {
   onNav?: (key: string) => void;
   onAnalyze?: () => void;
   isAnalyzing?: boolean;
+  rpe?: number | null;
+  onRpeChange?: (rpe: number | null) => void;
+  rpeSaveState?: 'idle' | 'saving' | 'saved';
 }
 
 // ---- Streams chart helpers ----
@@ -259,9 +262,135 @@ function formatZoneTime(seconds: number): string {
   return `${m}m${s > 0 ? ` ${s}s` : ''}`;
 }
 
+// ---- RPE helpers ----
+
+const RPE_LABELS: Record<number, string> = {
+  1: 'very easy',
+  2: 'very easy',
+  3: 'light to moderate',
+  4: 'light to moderate',
+  5: 'somewhat hard',
+  6: 'somewhat hard',
+  7: 'hard to very hard',
+  8: 'hard to very hard',
+  9: 'maximal',
+  10: 'maximal',
+};
+
+interface RpeInputProps {
+  rpe: number | null;
+  onRpeChange?: (rpe: number | null) => void;
+  rpeSaveState?: 'idle' | 'saving' | 'saved';
+}
+
+function RpeInput({ rpe, onRpeChange, rpeSaveState = 'idle' }: RpeInputProps) {
+  const isReadOnly = onRpeChange === undefined;
+
+  return (
+    <div>
+      {/* Box row */}
+      <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+        {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => {
+          const isSelected = rpe === n;
+          return (
+            <button
+              key={n}
+              disabled={isReadOnly}
+              aria-label={`RPE ${n}`}
+              aria-pressed={isSelected}
+              onClick={() => {
+                if (!isReadOnly) {
+                  onRpeChange(isSelected ? null : n);
+                }
+              }}
+              style={{
+                width: 28,
+                height: 28,
+                border: '1px solid var(--color-ink)',
+                background: isSelected ? 'var(--color-ink)' : 'transparent',
+                color: isSelected ? 'var(--color-paper)' : 'var(--color-ink)',
+                fontFamily: 'var(--font-mono-tabloid)',
+                fontSize: 11,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: isReadOnly ? 'default' : 'pointer',
+                flexShrink: 0,
+                padding: 0,
+                lineHeight: 1,
+              }}
+            >
+              {n}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Axis labels */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          marginTop: 5,
+          fontFamily: 'var(--font-sans)',
+          fontSize: 8,
+          textTransform: 'uppercase' as const,
+          letterSpacing: '0.08em',
+          opacity: 0.55,
+        }}
+      >
+        <span>Very easy</span>
+        <span>Moderate</span>
+        <span>Maximal</span>
+      </div>
+
+      {/* Status line */}
+      <div style={{ marginTop: 6, minHeight: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div
+          style={{
+            fontFamily: 'var(--font-mono-tabloid)',
+            fontSize: 11,
+            opacity: rpe !== null ? 1 : 0.4,
+          }}
+        >
+          {rpe !== null
+            ? `${rpe} / 10 — ${RPE_LABELS[rpe]}`
+            : (
+              <span
+                style={{
+                  fontFamily: 'var(--font-sans)',
+                  fontSize: 8,
+                  textTransform: 'uppercase' as const,
+                  letterSpacing: '0.08em',
+                }}
+              >
+                Not rated
+              </span>
+            )}
+        </div>
+        {rpeSaveState !== 'idle' && (
+          <div
+            style={{
+              fontFamily: 'var(--font-sans)',
+              fontSize: 8,
+              textTransform: 'uppercase' as const,
+              letterSpacing: '0.08em',
+              color: rpeSaveState === 'saved' ? 'var(--color-accent)' : 'var(--color-muted)',
+              transition: 'opacity 0.3s',
+              opacity: rpeSaveState === 'saving' ? 0.7 : 1,
+            }}
+          >
+            {rpeSaveState === 'saving' ? 'Saving...' : 'Saved'}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ---- Main component ----
 
-export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav, onAnalyze, isAnalyzing }: DispatchProps) {
+export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav, onAnalyze, isAnalyzing, rpe = null, onRpeChange, rpeSaveState = 'idle' }: DispatchProps) {
   const dateInfo = formatActivityDate(activity.activity_date);
   const headline = getVerdictHeadline(activity);
   const paragraphs = activity.analysis ? getAnalysisParagraphs(activity.analysis) : [];
@@ -1269,6 +1398,13 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
                   </div>
                 );
               })()}
+
+              {/* Effort · RPE */}
+              <div className="font-sans text-[9px] uppercase tracking-widest opacity-70 mt-4">
+                EFFORT · RPE
+              </div>
+              <Hairline className="my-[6px]" />
+              <RpeInput rpe={rpe} onRpeChange={onRpeChange} rpeSaveState={rpeSaveState} />
 
               {/* Weekly km rail */}
               <div className="font-sans text-[9px] uppercase tracking-widest opacity-70 mt-4">

@@ -14,6 +14,9 @@
 #     during sync (Strava GET /activities/{id}). Null until that fetch runs; never re-fetched once set.
 #   - streams: nullable JSON dict of high-resolution Strava streams data (per-second arrays).
 #     Keys: n, time, dist, vel, hr, cad, alt, grade, latlng. Null until explicitly fetched.
+#   - rpe: nullable integer (1–10), user-supplied Rate of Perceived Exertion. DB stores null by
+#     default; range validation (1–10) is enforced at the API layer (PATCH /activities/{id}/rpe),
+#     not the DB layer. Null means the runner has not rated this run yet.
 
 from datetime import datetime, timezone
 
@@ -76,6 +79,11 @@ class Activity(Base):
     # Keys: n, time, dist, vel, hr, cad, alt, grade, latlng (absent streams stored as null).
     # Null until explicitly fetched; never re-fetched once populated.
     streams: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=None)
+
+    # Rate of Perceived Exertion — user-supplied integer 1–10.
+    # Range validation is enforced at the API layer (PATCH /activities/{id}/rpe).
+    # Null means the runner has not yet rated this activity.
+    rpe: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Sync lifecycle
     sync_status: Mapped[str] = mapped_column(

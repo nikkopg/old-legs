@@ -1,5 +1,5 @@
 // READY FOR QA
-// Feature: Activity detail page — Dispatch tabloid view (TASK-131)
+// Feature: Activity detail page — Dispatch tabloid view (TASK-131) + RPE wiring
 // What was built:
 //   - /activities/[id] replaced with the Dispatch tabloid broadsheet component
 //   - Fetches single activity via GET /activities/{id} in parallel with all activities
@@ -9,6 +9,7 @@
 //   - 404 error state: "Run not found."
 //   - Other error states: "Could not load this run."
 //   - 401 redirects to /
+//   - RPE input wired: handleRpeChange calls PATCH /activities/{id}/rpe, invalidates query, shows save state
 // Edge cases to test:
 //   - Activity ID that doesn't exist (404 → "Run not found.")
 //   - Activity with no analysis (Dispatch shows "Pak Har hasn't seen this run yet.")
@@ -18,6 +19,9 @@
 //   - API unreachable (non-401 error → "Could not load this run.")
 //   - Very short run (<1km, distance_km close to 0)
 //   - weeklyKm rail shows correct current week highlighted
+//   - RPE save failure (silent — rpeSaveState resets to idle, optimistic UI value retained by component)
+//   - RPE null (no selection) — sends rpe: null to PATCH endpoint
+//   - rpeSaveState transitions: idle → saving → saved → idle (after 1500ms)
 
 'use client';
 
@@ -27,7 +31,7 @@ import { useEffect, useState } from 'react';
 import { Dispatch } from '@/components/redesign';
 import type { DispatchSplit } from '@/components/redesign/Dispatch';
 import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton';
-import { getActivity, getActivities, analyzeActivity } from '@/lib/api';
+import { getActivity, getActivities, analyzeActivity, saveRpe } from '@/lib/api';
 import { formatPace } from '@/lib/formatters';
 import { computeWeeklyKm } from '@/lib/weeklyKm';
 import { useUser } from '@/hooks/useUser';
@@ -75,7 +79,20 @@ export default function ActivityDetailPage() {
   const id = Number(params.id);
   const queryClient = useQueryClient();
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [rpeSaveState, setRpeSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const { user } = useUser();
+
+  async function handleRpeChange(rpe: number | null): Promise<void> {
+    setRpeSaveState('saving');
+    try {
+      await saveRpe(id, rpe);
+      await queryClient.invalidateQueries({ queryKey: ['activity', id] });
+      setRpeSaveState('saved');
+      setTimeout(() => setRpeSaveState('idle'), 1500);
+    } catch {
+      setRpeSaveState('idle');
+    }
+  }
 
   async function handleAnalyze(): Promise<void> {
     setIsAnalyzing(true);
@@ -182,6 +199,9 @@ export default function ActivityDetailPage() {
       onBack={() => router.push('/activities')}
       onAnalyze={handleAnalyze}
       isAnalyzing={isAnalyzing}
+      rpe={activity?.rpe ?? null}
+      onRpeChange={handleRpeChange}
+      rpeSaveState={rpeSaveState}
       onNav={(key) => {
         const routes: Record<string, string> = {
           dashboard: '/dashboard',

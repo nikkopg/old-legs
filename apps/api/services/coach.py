@@ -474,6 +474,31 @@ def _format_historical_context(recent_analyses: list[tuple[str, float, str]]) ->
 _WEEKLY_REVIEW_TRUNCATE: int = 500
 
 
+# ---------------------------------------------------------------------------
+# RPE helpers
+# ---------------------------------------------------------------------------
+
+def _rpe_label(rpe: int) -> str:
+    """
+    Map an RPE integer (1–10) to a descriptive label.
+
+    Args:
+        rpe: Rate of Perceived Exertion, 1–10.
+
+    Returns:
+        A plain-text label string describing the effort band.
+    """
+    if rpe <= 2:
+        return "very easy"
+    if rpe <= 4:
+        return "light to moderate"
+    if rpe <= 6:
+        return "somewhat hard"
+    if rpe <= 8:
+        return "hard to very hard"
+    return "maximal"
+
+
 def build_analysis_context(
     activity: Activity,
     recent_activities: list[Activity],
@@ -484,6 +509,7 @@ def build_analysis_context(
     recent_analyses: list[tuple[str, float, str]] | None = None,
     weekly_review: str | None = None,
     planned_session: dict | None = None,
+    rpe: int | None = None,
 ) -> str:
     """
     Build the full context string for Pak Har's post-run analysis prompt.
@@ -521,6 +547,11 @@ def build_analysis_context(
                          provided and non-empty, a planned session block is
                          appended so Pak Har can evaluate the run against what
                          was actually planned.
+        rpe: Optional Rate of Perceived Exertion (1–10) provided by the runner.
+             When present, a perceived effort line is appended after the zone
+             boundaries, including an RPE label and — when HR zone data is also
+             available — a cross-reference note if RPE and HR zone disagree
+             significantly.
 
     Returns:
         A multi-line plain-text context string ready to be injected into the
@@ -579,6 +610,27 @@ def build_analysis_context(
             f"Z5 >{zone_ceilings[3]} bpm"
         )
 
+        # --- RPE section — only when provided and HR data is present ---
+        if rpe is not None:
+            rpe_label = _rpe_label(rpe)
+            lines.append(f"Perceived effort (RPE): {rpe}/10 — {rpe_label}")
+
+            # Cross-reference RPE against HR zone when they disagree significantly.
+            zone_label_short = f"Zone {zone_num}"
+            if rpe <= 4 and zone_num >= 4:
+                lines.append(
+                    f"RPE mismatch: runner rated effort {rpe}/10 (light) but HR puts this in "
+                    f"{zone_label_short}. Either the effort was not perceived accurately or "
+                    f"there is an underlying fatigue or health factor worth noting."
+                )
+            elif rpe >= 8 and zone_num <= 2:
+                zone_label_easy = f"Zone {zone_num}"
+                lines.append(
+                    f"RPE mismatch: runner rated effort {rpe}/10 (maximal) but HR stayed in "
+                    f"{zone_label_easy}. Could indicate poor fitness calibration, heat, "
+                    f"dehydration, or poor sleep."
+                )
+
         if activity.max_hr is not None:
             lines.append(f"Max heart rate: {activity.max_hr} bpm")
 
@@ -599,6 +651,12 @@ def build_analysis_context(
         ef_signal = _compute_efficiency_factor(activity, recent_activities)
         if ef_signal:
             lines.append(ef_signal)
+
+    # --- RPE without HR — emit perceived effort line when HR data is absent ---
+    # (The HR-present branch handles RPE inside the HR block above.)
+    if rpe is not None and activity.average_hr is None:
+        rpe_label = _rpe_label(rpe)
+        lines.append(f"Perceived effort (RPE): {rpe}/10 — {rpe_label}")
 
     # --- Splits section — only when splits are provided and non-empty ---
     if splits:
