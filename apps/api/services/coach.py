@@ -215,38 +215,59 @@ def _compute_hr_trend(
 # Time-in-zone helper
 # ---------------------------------------------------------------------------
 
-def _compute_time_in_zones(splits: list, rhr: int, mhr: int) -> str | None:
+def _compute_time_in_zones(
+    splits: list,
+    rhr: int,
+    mhr: int,
+    streams: dict | None = None,
+) -> str | None:
     """
-    Compute time spent in each HR zone from per-km split data.
+    Compute time spent in each HR zone using Karvonen formula.
 
-    Each split's average HR is classified into a zone using the Karvonen
-    formula via classify_hr_zone(). The split's moving_time (seconds) is
-    accumulated per zone. This is an approximation — HR is averaged per split,
-    not per second — but it is the best available without second-by-second
-    streams.
+    Prefers per-second streams data when available (matching the frontend
+    HR zone card exactly). Falls back to per-km splits with averaged HR,
+    which is an approximation — a km that crosses a zone boundary is
+    assigned entirely to whichever zone its average HR lands in.
 
-    Returns None (silently) when:
-    - No splits have HR data
-    - Total timed seconds cover less than 50% of the activity moving time
-      (too many HR-null splits — would mislead Pak Har about zone distribution)
-
-    The 50% threshold is computed against the sum of all split moving_time
-    values (not the Activity.moving_time_seconds field), because the splits
-    list may not represent the full activity.
-
-    Args:
-        splits: List of per-km split dicts with at minimum:
-                km (int), moving_time (int, seconds), hr (float | None).
-        rhr: Resting heart rate in bpm (Karvonen baseline).
-        mhr: Max heart rate in bpm (Karvonen ceiling).
-
-    Returns:
-        A plain-text multi-line string describing zone distribution,
-        or None when data is insufficient or coverage is below 50%.
+    Returns None silently when HR coverage is insufficient.
     """
-    zone_seconds: dict[int, int] = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
-    timed_seconds: int = 0
-    total_split_seconds: int = 0
+    def _fmt(seconds: float) -> str:
+        m, s = divmod(int(seconds), 60)
+        return f"{m}:{s:02d}"
+
+    zone_seconds: dict[int, float] = {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0, 5: 0.0}
+
+    # --- Streams path (per-second, matches frontend computeHrZonesFromStreams) ---
+    if streams and streams.get("hr") and streams.get("time") and streams.get("n", 0) > 0:
+        hr_arr: list = streams["hr"]
+        time_arr: list = streams["time"]
+        n: int = streams["n"]
+        avg_stride = time_arr[-1] / (n - 1) if n > 1 else 1.0
+        total = 0.0
+
+        for i in range(n):
+            hr = hr_arr[i]
+            if hr is None:
+                continue
+            duration = (time_arr[i + 1] - time_arr[i]) if i < n - 1 else avg_stride
+            if duration <= 0:
+                continue
+            zone_num, _ = classify_hr_zone(int(round(hr)), mhr, rhr)
+            zone_seconds[zone_num] += duration
+            total += duration
+
+        if total == 0:
+            return None
+
+        zone_parts = " | ".join(f"Z{z} {_fmt(zone_seconds[z])}" for z in range(1, 6))
+        return (
+            f"Time in zone: {zone_parts}\n"
+            f"Total timed: {_fmt(total)} (per-second streams)"
+        )
+
+    # --- Splits fallback (per-km averaged HR) ---
+    timed_seconds: float = 0.0
+    total_split_seconds: float = 0.0
 
     for split in splits:
         mt = split.get("moving_time") or 0
@@ -261,23 +282,13 @@ def _compute_time_in_zones(splits: list, rhr: int, mhr: int) -> str | None:
     if timed_seconds == 0:
         return None
 
-    # Require at least 50% HR coverage to avoid misleading zone distribution
     if total_split_seconds > 0 and timed_seconds / total_split_seconds < 0.50:
         return None
 
-    def _fmt(seconds: int) -> str:
-        m, s = divmod(seconds, 60)
-        return f"{m}:{s:02d}"
-
-    zone_parts = " | ".join(
-        f"Z{z} {_fmt(zone_seconds[z])}" for z in range(1, 6)
-    )
-    total_moving_fmt = _fmt(total_split_seconds)
-    timed_fmt = _fmt(timed_seconds)
-
+    zone_parts = " | ".join(f"Z{z} {_fmt(zone_seconds[z])}" for z in range(1, 6))
     return (
         f"Time in zone: {zone_parts}\n"
-        f"Total timed: {timed_fmt} (of {total_moving_fmt} moving time)"
+        f"Total timed: {_fmt(timed_seconds)} (of {_fmt(total_split_seconds)} moving time)"
     )
 
 
@@ -687,11 +698,11 @@ def build_analysis_context(
             f"Z5 >{zone_ceilings[3]} bpm"
         )
 
-        # --- Time in zone — derived from split HR data, only when available ---
-        if splits:
-            tiz = _compute_time_in_zones(splits, resting_hr, derived_mhr)
-            if tiz:
-                lines.append(tiz)
+        # --- Time in zone — streams preferred, splits as fallback ---
+        streams_data = activity.streams if isinstance(activity.streams, dict) else None
+        tiz = _compute_time_in_zones(splits, resting_hr, derived_mhr, streams=streams_data)
+        if tiz:
+            lines.append(tiz)
 
         # --- RPE section — only when provided and HR data is present ---
         if rpe is not None:
