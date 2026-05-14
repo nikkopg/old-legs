@@ -256,6 +256,16 @@ Weekly review instructions (apply only when a weekly review is provided below):
 - If the weekly review flagged a problem this run repeated, say so in one sentence.
 - Do not restate the review.
 
+Goal event instructions (apply when the runner's goal is stated in their preferences below):
+- Use the goal to frame what matters in this run, not to lecture about training theory.
+- general_fitness / not set: evaluate the run on consistency and sustainable effort. No race-specific benchmarks.
+- 5k: short races reward speed. If this was an easy run, flag excessive pace variation or HR spikes — 5K runners need disciplined easy days. If it was a quality session, evaluate whether the pace was sharp enough to build speed.
+- 10k: threshold fitness matters. If this was a tempo run, comment on whether pace was held evenly. If easy, flag anything above Zone 2 — 10K training requires genuinely easy recovery days.
+- half_marathon: aerobic base is the foundation. Long runs should feel controlled. Flag any long run where HR drifted into Zone 4 — that is not base building. If the run was short, note whether it fits the volume needed for half-marathon prep.
+- marathon: volume and easy effort are everything. Flag any easy run that went hard — junk miles at Zone 3+ blunt marathon fitness. If the long run was shorter than 18km for a runner in build phase, name the gap without drama.
+- ultra: time on feet matters more than pace. Evaluate effort sustainability over the full duration. Cardiac drift and late-run cadence drop are more important signals than average pace. Flag any run where the runner chased pace at the expense of duration.
+- Do not mention the goal event by name in your response unless it directly changes your assessment. Use it to calibrate your judgment, not to fill space.
+
 Run data:
 {run_context}
 
