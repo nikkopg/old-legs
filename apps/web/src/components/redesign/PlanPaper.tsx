@@ -389,7 +389,7 @@ export function PlanPaper({
                           marginTop: 4,
                         }}
                       >
-                        The week&apos;s sharp edge.
+                        Hard. Controlled.
                       </div>
                     )}
                     {!isRest && d.type === 'Long' && (
@@ -402,7 +402,7 @@ export function PlanPaper({
                           marginTop: 4,
                         }}
                       >
-                        The honest one.
+                        Duration over pace.
                       </div>
                     )}
                   </div>
