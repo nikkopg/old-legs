@@ -1,11 +1,14 @@
 # READY FOR QA
 # Feature: HR zone interpretation for post-run analysis (TASK-109)
+#          + cardiac drift + efficiency factor trend signals (additive)
 # What was built:
 #   - classify_hr_zone(): maps average HR to a 5-zone label using derived MHR from activity history (fallback: 185 bpm)
 #   - build_analysis_context(): builds the full context string for the post-run analysis
 #     prompt, including HR zone label, easy-run zone mismatch flag, and a fatigue trend note
 #     when HR is rising at similar distance over the last 3 comparable runs
 #   - HR context is omitted entirely when average_hr is null (do not speculate)
+#   - _compute_cardiac_drift(): detects HR climb relative to pace from per-km splits
+#   - _compute_efficiency_factor(): computes speed/HR ratio and trends it against recent runs
 # Edge cases to test:
 #   - Activity with average_hr=None → no HR lines in context, no zone label, no mismatch flag
 #   - Activity with average_hr in zone 1 or 2 and name contains "easy" → no mismatch (correct effort)
@@ -14,6 +17,10 @@
 #   - Comparable runs have declining or flat HR → no fatigue note
 #   - Comparable runs have rising HR (all 3 higher than current) → fatigue flag included
 #   - activity.name in various cases ("Easy Run", "EASY jog") → case-insensitive match
+#   - Splits with fewer than 4 valid HR+speed entries → cardiac drift omitted
+#   - cardiac drift 0–4.9% → None returned (unremarkable)
+#   - Fewer than 2 recent activities with HR → EF trend omitted
+#   - EF change -3% to +3% → None returned (stable)
 
 """
 Coach service — builds analysis context for Pak Har's post-run feedback.
@@ -194,6 +201,169 @@ def _compute_hr_trend(
             f"HR is rising at the same distance — potential fatigue accumulation."
         )
 
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Cardiac drift helper
+# ---------------------------------------------------------------------------
+
+_CARDIAC_DRIFT_MIN_SPLITS: int = 4
+_CARDIAC_DRIFT_SIGNIFICANT_PCT: float = 5.0
+_PACE_DEGRADATION_THRESHOLD_PCT: float = 5.0
+
+
+def _compute_cardiac_drift(splits: list[dict]) -> str | None:
+    """
+    Detect cardiac drift from per-km split data.
+
+    Cardiac drift is the phenomenon of HR rising while pace remains roughly
+    constant — a sign of dehydration or working beyond current aerobic
+    capacity. Coaches commonly flag >5% HR drift as significant.
+
+    The run is divided into thirds by index. HR and pace averages are taken
+    from the first and last thirds. Only splits with both non-null hr and
+    non-null avg_speed_ms are included. At least 4 such splits are required.
+
+    Pace is derived from avg_speed_ms: pace_min_per_km = 1000 / (speed_ms * 60)
+    so a higher pace value means slower running (min/km rises as you slow down).
+
+    Args:
+        splits: List of per-km split dicts with keys: hr (nullable),
+                avg_speed_ms (nullable), and any other split fields.
+
+    Returns:
+        A plain-text string describing the cardiac drift finding, or None when
+        drift is between 0–5% (unremarkable) or data is insufficient.
+    """
+    valid = [
+        s for s in splits
+        if s.get("hr") is not None and s.get("avg_speed_ms") is not None and s["avg_speed_ms"] > 0
+    ]
+    if len(valid) < _CARDIAC_DRIFT_MIN_SPLITS:
+        return None
+
+    third = len(valid) // 3
+    first_third = valid[:third]
+    last_third = valid[len(valid) - third:]
+
+    first_avg_hr = sum(s["hr"] for s in first_third) / len(first_third)
+    last_avg_hr = sum(s["hr"] for s in last_third) / len(last_third)
+
+    first_avg_pace = sum(1000 / (s["avg_speed_ms"] * 60) for s in first_third) / len(first_third)
+    last_avg_pace = sum(1000 / (s["avg_speed_ms"] * 60) for s in last_third) / len(last_third)
+
+    drift_pct = (last_avg_hr - first_avg_hr) / first_avg_hr * 100
+    pace_drift_pct = (last_avg_pace - first_avg_pace) / first_avg_pace * 100
+
+    first_hr = round(first_avg_hr)
+    last_hr = round(last_avg_hr)
+
+    if drift_pct >= _CARDIAC_DRIFT_SIGNIFICANT_PCT:
+        if pace_drift_pct < _PACE_DEGRADATION_THRESHOLD_PCT:
+            # Pace held, HR climbed — classic cardiac drift
+            pace_str = format_pace(first_avg_pace)
+            return (
+                f"Cardiac drift: +{drift_pct:.1f}% (HR first third avg {first_hr} bpm "
+                f"→ last third avg {last_hr} bpm, pace held at ~{pace_str}/km). "
+                f"HR climbing while pace held is cardiac drift — sign of dehydration "
+                f"or working beyond current aerobic capacity."
+            )
+        else:
+            # Both HR and pace degraded — fatigue accumulation
+            first_pace_str = format_pace(first_avg_pace)
+            last_pace_str = format_pace(last_avg_pace)
+            return (
+                f"Cardiac drift: +{drift_pct:.1f}% (HR first third avg {first_hr} bpm "
+                f"→ last third avg {last_hr} bpm, pace also dropped from "
+                f"~{first_pace_str} to ~{last_pace_str}/km). Both HR and pace degraded "
+                f"— fatigue accumulation or insufficient recovery before this run."
+            )
+
+    if drift_pct < 0:
+        abs_drift = abs(drift_pct)
+        return (
+            f"Cardiac efficiency: HR dropped {abs_drift:.1f}% while pace held "
+            f"— well-paced warm-up or good aerobic conditioning for this effort."
+        )
+
+    # Drift 0–5%: unremarkable
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Efficiency factor helper
+# ---------------------------------------------------------------------------
+
+_EF_MIN_RECENT_ACTIVITIES: int = 2
+_EF_MAX_RECENT_ACTIVITIES: int = 4
+_EF_SIGNIFICANT_CHANGE_PCT: float = 3.0
+
+
+def _compute_efficiency_factor(
+    activity: Activity,
+    recent_activities: list[Activity],
+) -> str | None:
+    """
+    Compute the efficiency factor (speed per heartbeat) for the current run
+    and compare it against the user's recent activity baseline.
+
+    EF = speed_ms / average_hr
+
+    Where speed_ms is derived from the activity's overall distance and
+    moving time: speed_ms = distance_km * 1000 / moving_time_seconds.
+
+    An improving EF signals aerobic fitness building — the runner is moving
+    faster per heartbeat. A declining EF signals they are working harder to
+    cover the same distance, indicating fatigue or declining fitness.
+
+    Only meaningful when average_hr is not None and > 0.
+
+    Args:
+        activity: The Activity being analyzed.
+        recent_activities: The user's other recent activities, ordered by
+                           activity_date descending. The current activity
+                           should be excluded from this list.
+
+    Returns:
+        A plain-text string describing the EF trend, or None when the change
+        is within -3% to +3% (stable) or there is insufficient data.
+    """
+    if activity.average_hr is None or activity.average_hr == 0:
+        return None
+
+    current_speed_ms = activity.distance_km * 1000 / activity.moving_time_seconds
+    current_ef = current_speed_ms / activity.average_hr
+
+    recent_efs: list[float] = []
+    for a in recent_activities:
+        if a.average_hr is None or a.average_hr == 0:
+            continue
+        speed_ms = a.distance_km * 1000 / a.moving_time_seconds
+        recent_efs.append(speed_ms / a.average_hr)
+        if len(recent_efs) >= _EF_MAX_RECENT_ACTIVITIES:
+            break
+
+    if len(recent_efs) < _EF_MIN_RECENT_ACTIVITIES:
+        return None
+
+    avg_recent_ef = sum(recent_efs) / len(recent_efs)
+    change_pct = (current_ef - avg_recent_ef) / avg_recent_ef * 100
+
+    if change_pct > _EF_SIGNIFICANT_CHANGE_PCT:
+        return (
+            f"Efficiency factor: {current_ef:.4f} (speed/HR) — up {change_pct:.1f}% "
+            f"vs recent average ({avg_recent_ef:.4f}). Aerobic fitness is building at this distance."
+        )
+
+    if change_pct < -_EF_SIGNIFICANT_CHANGE_PCT:
+        return (
+            f"Efficiency factor: {current_ef:.4f} (speed/HR) — down {abs(change_pct):.1f}% "
+            f"vs recent average ({avg_recent_ef:.4f}). Running harder to cover the same distance "
+            f"— fatigue or declining fitness."
+        )
+
+    # -3% to +3%: stable, not worth reporting
     return None
 
 
@@ -425,9 +595,18 @@ def build_analysis_context(
         if hr_trend:
             lines.append(hr_trend)
 
+        # Efficiency factor trend — only meaningful when HR is available
+        ef_signal = _compute_efficiency_factor(activity, recent_activities)
+        if ef_signal:
+            lines.append(ef_signal)
+
     # --- Splits section — only when splits are provided and non-empty ---
     if splits:
         lines.append(_format_splits_context(splits))
+        # Cardiac drift — derived from split-level HR + speed data
+        cardiac_drift = _compute_cardiac_drift(splits)
+        if cardiac_drift:
+            lines.append(cardiac_drift)
 
     # --- Historical analyses — only when entries are provided ---
     if recent_analyses:
