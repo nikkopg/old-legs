@@ -37,6 +37,7 @@ export interface DispatchProps {
   weeklyKm: WeeklyKmEntry[];
   splits?: DispatchSplit[];
   userMaxHr?: number | null;
+  userRhr?: number | null;
   onBack: () => void;
   onNav?: (key: string) => void;
   onAnalyze?: () => void;
@@ -183,18 +184,34 @@ interface HrZoneResult {
   pct: number;
 }
 
-function computeHrZones(splits: DispatchSplit[], maxHr: number): HrZoneResult[] {
+// Karvonen zone thresholds (% of HRR), matching backend coach.py exactly.
+// zone_boundary = rhr + (pct × (maxHr - rhr))
+const KARVONEN_ZONES: [number, number][] = [
+  [0.00, 0.50], // Z1
+  [0.50, 0.60], // Z2
+  [0.60, 0.70], // Z3
+  [0.70, 0.85], // Z4
+  [0.85, 9.99], // Z5
+];
+
+function karvonenZone(hr: number, maxHr: number, rhr: number): number {
+  const hrr = maxHr - rhr;
+  if (hrr <= 0) return 0;
+  const pct = (hr - rhr) / hrr;
+  for (let i = 0; i < KARVONEN_ZONES.length; i++) {
+    const [lo, hi] = KARVONEN_ZONES[i];
+    if (pct >= lo && pct < hi) return i;
+  }
+  return 4; // Z5
+}
+
+function computeHrZones(splits: DispatchSplit[], maxHr: number, rhr: number): HrZoneResult[] {
   if (maxHr <= 0) return HR_ZONE_LABELS.map((label) => ({ label, seconds: 0, pct: 0 }));
   const totals = [0, 0, 0, 0, 0];
   let total = 0;
   for (const s of splits) {
     if (s.hr === null || s.movingTime === undefined) continue;
-    const pct = s.hr / maxHr;
-    let zone = 0;
-    if (pct >= 0.9) zone = 4;
-    else if (pct >= 0.8) zone = 3;
-    else if (pct >= 0.7) zone = 2;
-    else if (pct >= 0.6) zone = 1;
+    const zone = karvonenZone(s.hr, maxHr, rhr);
     totals[zone] += s.movingTime;
     total += s.movingTime;
   }
@@ -207,15 +224,12 @@ function computeHrZones(splits: DispatchSplit[], maxHr: number): HrZoneResult[] 
 
 /**
  * Compute HR zones from per-second (downsampled) streams data.
- * Uses `streams.time` to derive exact duration per point.
- * Zones: Z1 <60%, Z2 60–70%, Z3 70–80%, Z4 80–90%, Z5 ≥90% of maxHr.
+ * Uses Karvonen formula: zone_boundary = rhr + (pct × HRR), matching backend coach.py.
  */
-function computeHrZonesFromStreams(streams: ActivityStreams, maxHr: number): HrZoneResult[] {
+function computeHrZonesFromStreams(streams: ActivityStreams, maxHr: number, rhr: number): HrZoneResult[] {
   if (maxHr <= 0) return HR_ZONE_LABELS.map((label) => ({ label, seconds: 0, pct: 0 }));
-  // streams.hr is guaranteed non-null by the caller's type guard
   const hrArr = streams.hr as number[];
   const timeArr = streams.time;
-  // Average stride duration — used as fallback for the last point
   const avgStride = streams.n > 1 ? timeArr[streams.n - 1] / (streams.n - 1) : 1;
 
   const totals = [0, 0, 0, 0, 0];
@@ -224,16 +238,10 @@ function computeHrZonesFromStreams(streams: ActivityStreams, maxHr: number): HrZ
   for (let i = 0; i < streams.n; i++) {
     const hr = hrArr[i];
     if (hr === null || hr === undefined) continue;
-    // Duration this sample represents (seconds)
     const duration = i < streams.n - 1 ? timeArr[i + 1] - timeArr[i] : avgStride;
     if (duration <= 0) continue;
 
-    const pct = hr / maxHr;
-    let zone = 0;
-    if (pct >= 0.9) zone = 4;
-    else if (pct >= 0.8) zone = 3;
-    else if (pct >= 0.7) zone = 2;
-    else if (pct >= 0.6) zone = 1;
+    const zone = karvonenZone(hr, maxHr, rhr);
     totals[zone] += duration;
     total += duration;
   }
@@ -390,7 +398,7 @@ function RpeInput({ rpe, onRpeChange, rpeSaveState = 'idle' }: RpeInputProps) {
 
 // ---- Main component ----
 
-export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav, onAnalyze, isAnalyzing, rpe = null, onRpeChange, rpeSaveState = 'idle' }: DispatchProps) {
+export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBack, onNav, onAnalyze, isAnalyzing, rpe = null, onRpeChange, rpeSaveState = 'idle' }: DispatchProps) {
   const dateInfo = formatActivityDate(activity.activity_date);
   const headline = getVerdictHeadline(activity);
   const paragraphs = activity.analysis ? getAnalysisParagraphs(activity.analysis) : [];
@@ -1364,8 +1372,8 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, onBack, onNav,
                 </p>
               ) : (() => {
                 const zones = hasValidStreamsHr(activity.streams)
-                  ? computeHrZonesFromStreams(activity.streams, userMaxHr)
-                  : computeHrZones(splits ?? [], userMaxHr);
+                  ? computeHrZonesFromStreams(activity.streams, userMaxHr, userRhr ?? 60)
+                  : computeHrZones(splits ?? [], userMaxHr, userRhr ?? 60);
                 const hasAnyHrData = zones.some((z) => z.seconds > 0);
                 if (!hasAnyHrData) {
                   return (
