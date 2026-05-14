@@ -8,11 +8,14 @@ the JSON response, and persists the plan in the database.
 
 import json
 import logging
+from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
+from typing import Optional
 
 import httpx
 from sqlalchemy.orm import Session
 
+from models.activity import Activity
 from models.training_plan import TrainingPlan
 from models.user import User
 from prompts.pak_har import PLAN_PROMPT
@@ -23,9 +26,341 @@ from services.ollama import (
     _READ_TIMEOUT,
     build_strava_context,
     build_user_preferences_context,
+    format_pace,
 )
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# HR zone thresholds for zone distribution analysis (mirrors coach.py)
+# ---------------------------------------------------------------------------
+# (lower_pct_inclusive, upper_pct_exclusive)
+# Zone is "easy" if zone number ≤ 2, "hard" if zone number ≥ 3.
+_PLAN_HR_ZONE_PCTS: list[tuple[float, float, int]] = [
+    (0.00, 0.50, 1),
+    (0.50, 0.60, 2),
+    (0.60, 0.70, 3),
+    (0.70, 0.85, 4),
+    (0.85, 9.99, 5),
+]
+_DEFAULT_RHR: int = 60
+_FALLBACK_MAX_HR: int = 185
+
+
+def _classify_zone_number(average_hr: int, max_hr: int, resting_hr: int) -> int:
+    """
+    Return the Karvonen zone number (1–5) for a given average HR.
+
+    Args:
+        average_hr: Average HR for a run, in bpm.
+        max_hr: User's max HR.
+        resting_hr: User's resting HR.
+
+    Returns:
+        Integer zone 1–5.
+    """
+    hrr = max_hr - resting_hr
+    if hrr <= 0:
+        return 1
+    pct = (average_hr - resting_hr) / hrr
+    for lower_pct, upper_pct, zone_num in _PLAN_HR_ZONE_PCTS:
+        if lower_pct <= pct < upper_pct:
+            return zone_num
+    return 5
+
+
+# ---------------------------------------------------------------------------
+# Coaching signal helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_weekly_breakdown(activities: list[Activity]) -> str:
+    """
+    Group activities by ISO calendar week and produce a per-week volume summary.
+
+    Covers the last 4 completed weeks (Mon–Sun). Reports km, run count, avg
+    pace per week, and a trend label across the four weeks.
+
+    Args:
+        activities: List of Activity ORM objects (any order, any date range).
+
+    Returns:
+        A plain-text multi-line summary string, or an empty string if there
+        are fewer than 2 activities to derive a meaningful breakdown from.
+    """
+    if len(activities) < 2:
+        return ""
+
+    # Group by ISO year-week key (e.g. "2025-W17")
+    week_buckets: dict[str, list[Activity]] = defaultdict(list)
+    for a in activities:
+        act_date = a.activity_date.date() if isinstance(a.activity_date, datetime) else a.activity_date
+        iso = act_date.isocalendar()
+        key = f"{iso.year}-W{iso.week:02d}"
+        week_buckets[key].append(a)
+
+    if len(week_buckets) < 2:
+        return ""
+
+    # Sort weeks chronologically
+    sorted_weeks = sorted(week_buckets.keys())
+
+    # Build per-week rows
+    rows: list[tuple[str, float, int, float]] = []  # (week_label, km, runs, avg_pace)
+    for week_key in sorted_weeks:
+        acts = week_buckets[week_key]
+        total_km = sum(a.distance_km for a in acts)
+        avg_pace = sum(a.average_pace_min_per_km for a in acts) / len(acts)
+        rows.append((week_key, total_km, len(acts), avg_pace))
+
+    # Derive trend from first to last week's km
+    first_km = rows[0][1]
+    last_km = rows[-1][1]
+    pct_change = ((last_km - first_km) / first_km * 100) if first_km > 0 else 0
+
+    # Week-over-week deltas for erratic detection
+    week_kms = [r[1] for r in rows]
+    wow_changes = [abs(week_kms[i] - week_kms[i - 1]) / week_kms[i - 1] * 100
+                   for i in range(1, len(week_kms))
+                   if week_kms[i - 1] > 0]
+    avg_wow_swing = sum(wow_changes) / len(wow_changes) if wow_changes else 0
+
+    if avg_wow_swing > 25:
+        trend_label = "erratic"
+    elif pct_change > 8:
+        trend_label = "building"
+    elif pct_change < -8:
+        trend_label = "declining"
+    else:
+        trend_label = "maintaining"
+
+    lines = ["Week-by-week breakdown:"]
+    for week_key, km, runs, avg_pace in rows:
+        lines.append(
+            f"  {week_key}: {km:.1f} km across {runs} run{'s' if runs != 1 else ''}"
+            f", avg pace {format_pace(avg_pace)}/km"
+        )
+    lines.append(f"Volume trend: {trend_label}")
+
+    # Flag dangerous buildup (>10% single-week jump on the most recent step)
+    if len(week_kms) >= 2 and week_kms[-2] > 0:
+        last_wow = (week_kms[-1] - week_kms[-2]) / week_kms[-2] * 100
+        if last_wow > 10:
+            lines.append(
+                f"Warning: last week was {last_wow:.0f}% higher than the week before — "
+                f"that is above the safe 10% build rate."
+            )
+
+    return "\n".join(lines)
+
+
+def _build_plan_adherence(
+    db: Session,
+    user_id: int,
+    recent_activities: list[Activity],
+) -> str:
+    """
+    Compare the most recently completed training plan against actual activities
+    that fell within its target week.
+
+    "Completed" means is_active=False, sorted by created_at descending.
+
+    Args:
+        db: Active database session.
+        user_id: The user's integer ID.
+        recent_activities: Activities already fetched by the caller (used to
+                           avoid a separate query for activities in the plan week).
+
+    Returns:
+        A plain-text adherence summary, or an empty string if no completed plan
+        exists or plan_data is malformed.
+    """
+    last_plan: Optional[TrainingPlan] = (
+        db.query(TrainingPlan)
+        .filter(
+            TrainingPlan.user_id == user_id,
+            TrainingPlan.is_active == False,  # noqa: E712
+        )
+        .order_by(TrainingPlan.created_at.desc())
+        .first()
+    )
+
+    if last_plan is None:
+        return ""
+
+    plan_data = last_plan.plan_data
+    if not isinstance(plan_data, dict):
+        return ""
+
+    # Determine the plan week boundaries (Mon–Sun)
+    week_start: date = last_plan.week_start_date
+    week_end: date = week_start + timedelta(days=6)
+
+    # Find activities within that plan's week
+    plan_week_acts: list[Activity] = [
+        a for a in recent_activities
+        if week_start <= (
+            a.activity_date.date()
+            if isinstance(a.activity_date, datetime)
+            else a.activity_date
+        ) <= week_end
+    ]
+    # Activity dates in set for fast lookup
+    run_dates: set[date] = {
+        (a.activity_date.date() if isinstance(a.activity_date, datetime) else a.activity_date)
+        for a in plan_week_acts
+    }
+
+    day_names = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    planned_run_days: list[str] = []
+    missed_days: list[str] = []
+    completed_count = 0
+
+    for i, day_name in enumerate(day_names):
+        day_plan = plan_data.get(day_name, {})
+        plan_type = day_plan.get("type", "rest") if isinstance(day_plan, dict) else "rest"
+        if plan_type == "rest":
+            continue
+        planned_run_days.append(day_name)
+        # Check if there was a run on this day of the plan week
+        target_date = week_start + timedelta(days=i)
+        if target_date in run_dates:
+            completed_count += 1
+        else:
+            missed_days.append(day_name.capitalize())
+
+    total_planned = len(planned_run_days)
+    if total_planned == 0:
+        return ""
+
+    lines = [
+        f"Previous plan adherence (week of {week_start.isoformat()}):",
+        f"  {completed_count}/{total_planned} sessions completed.",
+    ]
+    if missed_days:
+        lines.append(f"  Missed: {', '.join(missed_days)}.")
+    else:
+        lines.append("  All planned sessions completed.")
+
+    return "\n".join(lines)
+
+
+def _build_rpe_trend(activities: list[Activity]) -> str:
+    """
+    Compute average RPE across the last 4–6 activities that have a non-null RPE.
+
+    Args:
+        activities: List of Activity ORM objects ordered by date (any order).
+
+    Returns:
+        A plain-text RPE trend string with a signal label, or an empty string
+        if fewer than 3 activities have RPE data.
+    """
+    rpe_acts = [a for a in activities if a.rpe is not None]
+    # Take the 6 most recent by activity_date
+    rpe_acts_sorted = sorted(
+        rpe_acts,
+        key=lambda a: a.activity_date,
+        reverse=True,
+    )[:6]
+
+    if len(rpe_acts_sorted) < 3:
+        return ""
+
+    avg_rpe = sum(a.rpe for a in rpe_acts_sorted) / len(rpe_acts_sorted)  # type: ignore[arg-type]
+
+    if avg_rpe >= 7:
+        signal = "high perceived load — runner is working hard across sessions"
+    elif avg_rpe <= 4:
+        signal = "low perceived effort — under-effort or well-recovered"
+    else:
+        signal = "moderate perceived effort — normal range"
+
+    return (
+        f"RPE trend (last {len(rpe_acts_sorted)} rated runs): "
+        f"avg {avg_rpe:.1f}/10 — {signal}."
+    )
+
+
+def _build_zone_distribution(
+    activities: list[Activity],
+    rhr: int,
+    max_hr: int,
+) -> str:
+    """
+    Classify each run's average HR into Karvonen zones and report the easy/hard split.
+
+    Zones 1–2 are "easy"; Zones 3–5 are "hard".
+
+    Args:
+        activities: List of Activity ORM objects (only those with avg HR are used).
+        rhr: Resting heart rate in bpm.
+        max_hr: Max heart rate in bpm.
+
+    Returns:
+        A plain-text zone distribution string with a signal when >50% are hard,
+        or an empty string if fewer than 3 activities have HR data.
+    """
+    hr_acts = [a for a in activities if a.average_hr is not None]
+    if len(hr_acts) < 3:
+        return ""
+
+    easy_count = 0
+    hard_count = 0
+    for a in hr_acts:
+        zone = _classify_zone_number(a.average_hr, max_hr, rhr)  # type: ignore[arg-type]
+        if zone <= 2:
+            easy_count += 1
+        else:
+            hard_count += 1
+
+    total = easy_count + hard_count
+    easy_pct = easy_count / total * 100
+    hard_pct = hard_count / total * 100
+
+    lines = [
+        f"HR zone distribution (last 4 weeks, {total} runs with HR data):",
+        f"  Easy (Zone 1–2): {easy_count} runs ({easy_pct:.0f}%)",
+        f"  Hard (Zone 3–5): {hard_count} runs ({hard_pct:.0f}%)",
+    ]
+    if hard_pct > 50:
+        lines.append(
+            "Signal: more than half of recent runs were in Zone 3 or higher. "
+            "This is chronic overreaching. Next week needs to be predominantly easy effort."
+        )
+
+    return "\n".join(lines)
+
+
+def _get_hr_params(user: User, activities: list[Activity]) -> tuple[int, int]:
+    """
+    Resolve resting HR and max HR for zone classification.
+
+    Prefers values stored on the User row (resting_hr, max_hr_observed / max_hr).
+    Falls back to scanning activity max_hr fields, then population defaults.
+
+    Args:
+        user: The authenticated User ORM object.
+        activities: Recent activities used as fallback for max HR.
+
+    Returns:
+        A (rhr, max_hr) tuple, both in bpm.
+    """
+    rhr = user.resting_hr if user.resting_hr is not None else _DEFAULT_RHR
+    # Prefer the explicitly stored observed max HR, then the user-entered value
+    max_hr = user.max_hr_observed or user.max_hr
+    if max_hr is None:
+        candidates = [a.max_hr for a in activities if a.max_hr is not None]
+        max_hr = max(candidates) if candidates else None
+    if max_hr is None:
+        # Rough estimate: highest avg_hr × 1.1, minimum fallback
+        avg_hrs = [a.average_hr for a in activities if a.average_hr is not None]
+        if avg_hrs:
+            max_hr = int(max(avg_hrs) * 1.1)
+        else:
+            max_hr = _FALLBACK_MAX_HR
+
+    return rhr, max_hr
 
 
 def _get_week_start() -> date:
@@ -120,11 +455,14 @@ async def generate_plan_with_ollama(user: User, db: Session) -> TrainingPlan:
     Generate a 7-day training plan for the given user using Ollama.
 
     Steps:
-    1. Build Strava activity context from the last 4 weeks.
-    2. Call Ollama non-streaming with PLAN_PROMPT, collect the full response.
-    3. Parse the JSON response into plan_data and pak_har_notes dicts.
-    4. Deactivate any previously active TrainingPlan for this user.
-    5. Persist and return the new TrainingPlan row.
+    1. Fetch the last 4 weeks of activities once (reused by all signal helpers).
+    2. Build Strava activity context and user preferences strings.
+    3. Build four pro-coach signals: weekly volume breakdown, previous plan
+       adherence, RPE trend, and HR zone distribution.
+    4. Call Ollama non-streaming with PLAN_PROMPT, collect the full response.
+    5. Parse the JSON response into plan_data and pak_har_notes dicts.
+    6. Deactivate any previously active TrainingPlan for this user.
+    7. Persist and return the new TrainingPlan row.
 
     Args:
         user: The authenticated User ORM object.
@@ -138,11 +476,38 @@ async def generate_plan_with_ollama(user: User, db: Session) -> TrainingPlan:
         TimeoutError: If Ollama does not respond within the read timeout.
         ValueError: If the Ollama response cannot be parsed into a valid plan.
     """
+    # Fetch activities once — reused by all helper functions to avoid N+1 queries.
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+    cutoff = now_utc - timedelta(days=28)
+    recent_activities: list[Activity] = (
+        db.query(Activity)
+        .filter(
+            Activity.user_id == user.id,
+            Activity.activity_date >= cutoff,
+            Activity.sync_status == "synced",
+        )
+        .order_by(Activity.activity_date.desc())
+        .limit(20)
+        .all()
+    )
+
     strava_context = build_strava_context(user, db)
     user_preferences = build_user_preferences_context(user)
+
+    # Build coaching signals from the fetched activity list.
+    weekly_breakdown = _build_weekly_breakdown(recent_activities)
+    plan_adherence = _build_plan_adherence(db, user.id, recent_activities)
+    rpe_trend = _build_rpe_trend(recent_activities)
+    rhr, max_hr = _get_hr_params(user, recent_activities)
+    zone_distribution = _build_zone_distribution(recent_activities, rhr, max_hr)
+
     system_content = PLAN_PROMPT.format(
         strava_context=strava_context,
         user_preferences=user_preferences,
+        weekly_breakdown=weekly_breakdown,
+        plan_adherence=plan_adherence,
+        rpe_trend=rpe_trend,
+        zone_distribution=zone_distribution,
     )
 
     payload = {
