@@ -61,13 +61,20 @@ export default function DashboardPage() {
     retry: false,
   })
 
-  // Generate weekly review and refresh the cached review on success
+  const [reviewGenerating, setReviewGenerating] = useState(false)
+  const [reviewError, setReviewError] = useState<string | null>(null)
+
   const onGenerateReview = async () => {
+    setReviewGenerating(true)
+    setReviewError(null)
     try {
       await generateWeeklyReview()
       await queryClient.invalidateQueries({ queryKey: ['review'] })
-    } catch {
-      // silently ignore — the user can try again
+    } catch (err) {
+      const apiErr = err as ApiError
+      setReviewError(apiErr?.detail ?? 'Could not file the week. Is Ollama running?')
+    } finally {
+      setReviewGenerating(false)
     }
   }
 
@@ -173,6 +180,8 @@ export default function DashboardPage() {
         lastSyncedAt={lastSyncedAt}
         weeklyReview={reviewData ?? null}
         onGenerateReview={onGenerateReview}
+        reviewGenerating={reviewGenerating}
+        reviewError={reviewError}
         onOpenRun={(id) => router.push(`/activities/${id}`)}
         onOpenPlan={() => router.push('/plan')}
         onOpenCoach={() => router.push('/coach')}

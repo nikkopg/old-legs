@@ -79,6 +79,8 @@ interface DashboardPaperProps {
   lastSyncedAt: string | null;
   weeklyReview: WeeklyReview | null;
   onGenerateReview: () => void;
+  reviewGenerating: boolean;
+  reviewError: string | null;
   onOpenRun: (id: number) => void;
   onOpenPlan: () => void;
   onOpenCoach: () => void;
@@ -157,6 +159,8 @@ export function DashboardPaper({
   lastSyncedAt,
   weeklyReview,
   onGenerateReview,
+  reviewGenerating,
+  reviewError,
   onOpenRun,
   onOpenPlan,
   onOpenCoach,
@@ -273,25 +277,47 @@ export function DashboardPaper({
                 )}{' '}
                 {totalRuns} run{totalRuns === 1 ? '' : 's'} filed so far this week.
               </div>
-              <a
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onGenerateReview();
-                }}
-                style={{
+              {reviewGenerating ? (
+                <span style={{
                   display: 'inline-block',
                   marginTop: 10,
+                  fontFamily: OL.mono,
+                  fontSize: 12,
+                  color: OL.muted,
+                }}>
+                  Filing...
+                </span>
+              ) : (
+                <a
+                  href="#"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onGenerateReview();
+                  }}
+                  style={{
+                    display: 'inline-block',
+                    marginTop: 10,
+                    fontFamily: OL.body,
+                    fontSize: 13,
+                    fontStyle: 'italic',
+                    color: OL.accent,
+                    cursor: 'pointer',
+                    textDecoration: 'none',
+                  }}
+                >
+                  No weekly assessment yet. File this week →
+                </a>
+              )}
+              {reviewError && (
+                <div style={{
+                  marginTop: 6,
                   fontFamily: OL.body,
                   fontSize: 13,
-                  fontStyle: 'italic',
                   color: OL.accent,
-                  cursor: 'pointer',
-                  textDecoration: 'none',
-                }}
-              >
-                No weekly assessment yet. File this week →
-              </a>
+                }}>
+                  {reviewError}
+                </div>
+              )}
             </>
           )}
 

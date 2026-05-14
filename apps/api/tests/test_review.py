@@ -3,7 +3,7 @@ Tests for POST /review/generate and GET /review/current (TASK-105).
 
 Coverage:
 - POST happy path: user has active plan + activities this week → 200 WeeklyReviewRead
-- POST no active plan → 404
+- POST no active plan → 200, planned_runs=0, missed_days="no plan on file"
 - POST unauthenticated → 401
 - POST Ollama offline → 503
 - POST Ollama timeout → 504
@@ -148,17 +148,15 @@ class TestGenerateReview:
         response = test_app.post("/review/generate")
         assert response.status_code == 401
 
-    def test_no_active_plan_returns_404(self, authenticated_client: TestClient) -> None:
-        """No active training plan → service raises ValueError → 404."""
-        with patch("routers.review.generate_weekly_review") as mock_gen:
-            async def raise_value_error(user, db):
-                raise ValueError("No active training plan found.")
-
-            mock_gen.side_effect = raise_value_error
+    def test_no_active_plan_still_generates_review(self, authenticated_client: TestClient) -> None:
+        """No active training plan → review generates with planned_runs=0 and missed_days='no plan on file'."""
+        with patch("routers.review.generate_weekly_review", side_effect=_fake_generate_review(planned=0, actual=0)):
             response = authenticated_client.post("/review/generate")
 
-        assert response.status_code == 404
-        assert "No active training plan" in response.json()["detail"]
+        assert response.status_code == 200
+        body = response.json()
+        assert body["planned_runs"] == 0
+        assert body["actual_runs"] == 0
 
     def test_happy_path_returns_weekly_review_read(
         self,

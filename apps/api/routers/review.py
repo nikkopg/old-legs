@@ -2,12 +2,12 @@
 # Feature: Weekly review endpoints (TASK-105)
 # What was built:
 #   - POST /review/generate — generates Pak Har's weekly planned-vs-actual assessment.
-#     Finds the active TrainingPlan, counts planned non-rest days, counts Activity records
-#     for this week, calls Ollama non-streaming with REVIEW_PROMPT, persists a new
-#     WeeklyReview row, and returns it.
+#     Finds the active TrainingPlan (optional), counts planned non-rest days (0 when no plan),
+#     counts Activity records for this week, calls Ollama non-streaming with REVIEW_PROMPT,
+#     persists a new WeeklyReview row, and returns it.
 #   - GET /review/current — returns the most recent WeeklyReview for the authenticated user.
 # Edge cases to test:
-#   - No active training plan: 404 with "No active training plan found." returned before Ollama call.
+#   - No active training plan: review generates with planned_runs=0, missed_days="no plan on file".
 #   - No activities this week: actual_runs=0, Ollama receives "No runs completed this week." context.
 #   - Ollama offline: 503 returned, no DB write occurs.
 #   - Ollama returns empty content: 503 returned (treated as RuntimeError from service layer).
@@ -52,15 +52,15 @@ async def generate_review(
     """
     Generate Pak Har's weekly review for the authenticated user.
 
-    Compares the active TrainingPlan's planned run count against Activity records
-    from the current week. Calls Ollama non-streaming, persists a new WeeklyReview
-    row (always inserts — never upserts), and returns it.
+    Compares the active TrainingPlan's planned run count (0 when no plan exists)
+    against Activity records from the current week. Calls Ollama non-streaming,
+    persists a new WeeklyReview row (always inserts — never upserts), and returns it.
+    Generates successfully even when no active training plan is on file.
 
     Rate limited: 20 requests/60s per user (shared sliding window).
 
     Raises:
         401: Not authenticated.
-        404: No active training plan found.
         429: Rate limit exceeded.
         503: Ollama is not running, unreachable, or returned empty content.
         504: Ollama did not respond within the read timeout.
@@ -73,10 +73,6 @@ async def generate_review(
 
     try:
         review = await generate_weekly_review(user=user, db=db)
-    except ValueError as exc:
-        # No active training plan
-        logger.warning("Weekly review blocked for user_id=%d: %s", user.id, exc)
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except RuntimeError as exc:
         logger.error("Ollama error during weekly review for user_id=%d: %s", user.id, exc)
         raise HTTPException(status_code=503, detail=str(exc)) from exc

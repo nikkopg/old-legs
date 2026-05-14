@@ -51,7 +51,7 @@ def _get_week_monday() -> date:
     return today - timedelta(days=days_since_monday)
 
 
-def _count_planned_runs(plan: TrainingPlan) -> int:
+def _count_planned_runs(plan: TrainingPlan | None) -> int:
     """
     Count non-rest days in a TrainingPlan's plan_data.
 
@@ -60,11 +60,13 @@ def _count_planned_runs(plan: TrainingPlan) -> int:
     for the week.
 
     Args:
-        plan: The active TrainingPlan ORM object.
+        plan: The active TrainingPlan ORM object, or None when no plan exists.
 
     Returns:
-        Integer count of non-rest days.
+        Integer count of non-rest days, or 0 when plan is None.
     """
+    if plan is None:
+        return 0
     plan_data: dict = plan.plan_data or {}
     return sum(
         1 for day_data in plan_data.values()
@@ -117,11 +119,11 @@ def _compute_missed_days(
 
     Returns:
         A comma-separated string of missed day names (e.g. "Wednesday, Sunday"),
-        "none" when all planned days were covered, or "unknown" when no active
-        plan exists.
+        "none" when all planned days were covered, or "no plan on file" when no
+        active plan exists.
     """
     if active_plan is None:
-        return "unknown"
+        return "no plan on file"
 
     plan_data: dict = active_plan.plan_data or {}
 
@@ -316,14 +318,13 @@ async def generate_weekly_review(user: User, db: Session) -> WeeklyReview:
         The newly created WeeklyReview ORM object.
 
     Raises:
-        ValueError: If no active training plan exists for this user.
         RuntimeError: If Ollama is unreachable.
         TimeoutError: If Ollama does not respond within the read timeout.
     """
     week_start = _get_week_monday()
     today = datetime.now(timezone.utc).date()
 
-    # --- Fetch active plan ---
+    # --- Fetch active plan (optional — review generates regardless) ---
     active_plan: TrainingPlan | None = (
         db.query(TrainingPlan)
         .filter(
@@ -333,9 +334,6 @@ async def generate_weekly_review(user: User, db: Session) -> WeeklyReview:
         .order_by(TrainingPlan.created_at.desc())
         .first()
     )
-
-    if active_plan is None:
-        raise ValueError("No active training plan found.")
 
     planned_runs = _count_planned_runs(active_plan)
 
