@@ -123,6 +123,32 @@ def build_strava_context(user: User, db: Session) -> str:
     return "\n".join(lines)
 
 
+_GOAL_EVENT_LABELS: dict[str, str] = {
+    "general_fitness": "No race — general fitness",
+    "5k": "5K race",
+    "10k": "10K race",
+    "half_marathon": "Half marathon (21 km)",
+    "marathon": "Marathon (42 km)",
+    "ultra": "Ultra (50 km+)",
+}
+
+
+def goal_event_label(goal_event: str | None) -> str:
+    """
+    Return a human-readable display label for a goal_event value.
+
+    Args:
+        goal_event: Raw goal_event string stored on the User row, or None.
+
+    Returns:
+        A display label string. Falls back to "not set" for None or
+        unrecognised values so callers never surface raw internal keys.
+    """
+    if goal_event is None:
+        return "not set"
+    return _GOAL_EVENT_LABELS.get(goal_event, "not set")
+
+
 def build_user_preferences_context(user: User) -> str:
     """
     Build a plain-text summary of the user's stated preferences for LLM injection.
@@ -132,15 +158,17 @@ def build_user_preferences_context(user: User) -> str:
 
     Returns:
         A multi-line string describing the user's weekly target, available days,
-        and biggest struggle. Falls back gracefully for unset fields.
+        biggest struggle, and goal event. Falls back gracefully for unset fields.
     """
     target = f"{user.weekly_km_target:.1f} km/week" if user.weekly_km_target else "not set"
     days = str(user.days_available) if user.days_available else "not set"
     struggle = user.biggest_struggle if user.biggest_struggle else "not specified"
+    goal = goal_event_label(user.goal_event)
     return (
         f"- Weekly km target: {target}\n"
         f"- Days available to run: {days}\n"
-        f"- Biggest struggle: {struggle}"
+        f"- Biggest struggle: {struggle}\n"
+        f"- Goal: {goal}"
     )
 
 

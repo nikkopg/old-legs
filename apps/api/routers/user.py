@@ -1,7 +1,16 @@
 # READY FOR QA
 # Features: POST /user/onboarding (TASK-102), GET /user/me (TASK-103)
 # What was built: save user preferences + mark onboarding complete; return full user profile with computed stats
-# Edge cases to test: unauthenticated requests, days_available out of range (0 or 8), empty biggest_struggle, user with zero activities
+# Changes: goal_event field added to OnboardingRequest and UserProfile
+# Edge cases to test:
+#   - unauthenticated requests
+#   - days_available out of range (0 or 8)
+#   - empty biggest_struggle
+#   - user with zero activities
+#   - goal_event with invalid value (e.g. "triathlon") → must return 422
+#   - goal_event omitted → treated as None (no change to existing stored value)
+#   - goal_event: null → still accepted (clears/keeps null)
+#   - GET /user/me for user with no goal_event → returns goal_event: null
 
 """
 User router.
@@ -64,6 +73,8 @@ async def save_onboarding(
         current_user.resting_hr = body.resting_hr
     if body.max_hr is not None:
         current_user.max_hr = body.max_hr
+    if body.goal_event is not None:
+        current_user.goal_event = body.goal_event
     current_user.onboarding_completed = True
 
     db.commit()
@@ -130,6 +141,7 @@ async def get_me(
         resting_hr=current_user.resting_hr,
         max_hr=current_user.max_hr,
         max_hr_observed=current_user.max_hr_observed,
+        goal_event=current_user.goal_event,
         created_at=current_user.created_at,
         updated_at=current_user.updated_at,
         total_activities=total_activities,

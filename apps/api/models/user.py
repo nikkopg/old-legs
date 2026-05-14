@@ -52,6 +52,7 @@ class User(Base):
     resting_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)
     max_hr_observed: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    goal_event: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))

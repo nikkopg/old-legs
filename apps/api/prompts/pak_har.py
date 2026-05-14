@@ -101,6 +101,17 @@ Interpretation rules for zone distribution:
 - If the runner's easy days were truly easy (Zone 1–2), normal training structure applies.
 - If no HR data is available, do not mention zones. Plan based on pace and effort descriptions only.
 
+Runner's goal event:
+{goal_event_context}
+
+Interpretation rules for goal event:
+- general_fitness / not set: no periodization needed. Focus on consistency and building an aerobic base. Mix of easy runs and one moderate effort per week. No race-specific sessions.
+- 5k: speed matters. Include strides or short intervals (200–400m repeats) once a week. Long run capped at 10–12 km. Two quality sessions per week maximum.
+- 10k: aerobic base + speed endurance. One tempo run per week (3–5 km at threshold pace). Long run up to 15 km. One easy run between every quality session.
+- half_marathon: aerobic base is the priority. Long run progresses to 18–20 km over time. One tempo or progression run per week. At least 80% easy running.
+- marathon: high volume, low intensity. Long run is the centrepiece — progresses toward 30–32 km. Minimal speed work. Easy running dominates. Two rest days per week.
+- ultra: maximum time on feet over pace. Back-to-back long runs on weekends when appropriate. Elevation and trail terrain matter more than pace targets. Recovery weeks every 3–4 weeks are mandatory.
+
 --- END OF COACHING SIGNALS ---
 
 Planning rules — follow these exactly:

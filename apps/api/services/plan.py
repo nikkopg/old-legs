@@ -27,6 +27,7 @@ from services.ollama import (
     build_strava_context,
     build_user_preferences_context,
     format_pace,
+    goal_event_label,
 )
 
 logger = logging.getLogger(__name__)
@@ -513,6 +514,8 @@ async def generate_plan_with_ollama(user: User, db: Session) -> TrainingPlan:
         f"Z3 {z2_ceil}–{z3_ceil} | Z4 {z3_ceil}–{z4_ceil} | Z5 >{z4_ceil} bpm"
     )
 
+    goal_event_context = goal_event_label(user.goal_event)
+
     system_content = PLAN_PROMPT.format(
         strava_context=strava_context,
         user_preferences=user_preferences,
@@ -522,6 +525,7 @@ async def generate_plan_with_ollama(user: User, db: Session) -> TrainingPlan:
         zone_distribution=zone_distribution,
         zone_boundaries=zone_boundaries,
         zone2_ceiling=z2_ceil,
+        goal_event_context=goal_event_context,
     )
 
     payload = {
