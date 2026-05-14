@@ -269,6 +269,21 @@ def build_analysis_context(
             f"Karvonen: MHR {derived_mhr} bpm {mhr_source}, RHR {resting_hr} bpm {rhr_source})"
         )
 
+        hrr = derived_mhr - resting_hr
+        zone_ceilings = [
+            round(resting_hr + upper_pct * hrr)
+            for _, upper_pct, _, _ in _HR_ZONE_PCTS[:-1]
+        ]
+        lines.append(
+            f"Zone boundaries for this runner "
+            f"(Karvonen, MHR {derived_mhr} bpm, RHR {resting_hr} bpm): "
+            f"Z1 <{zone_ceilings[0]} | "
+            f"Z2 {zone_ceilings[0]}–{zone_ceilings[1]} | "
+            f"Z3 {zone_ceilings[1]}–{zone_ceilings[2]} | "
+            f"Z4 {zone_ceilings[2]}–{zone_ceilings[3]} | "
+            f"Z5 >{zone_ceilings[3]} bpm"
+        )
+
         if activity.max_hr is not None:
             lines.append(f"Max heart rate: {activity.max_hr} bpm")
 
