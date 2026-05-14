@@ -165,7 +165,6 @@ export function SettingsPaper({
   ];
 
   const deliveryRows: Array<{ key: keyof DeliveryPreferences; label: string }> = [
-    { key: 'dispatchAfterRun', label: 'Dispatch after every run' },
     { key: 'weeklyPlanMonday', label: 'Weekly plan on Monday 05:00' },
     { key: 'weeklyReviewSunday', label: 'Weekly review on Sunday 20:00' },
   ];
