@@ -138,6 +138,8 @@ export interface UserProfile {
   weeks_on_plan: number
   goal_event: GoalEvent | null
   race_date: string | null
+  auto_plan_enabled: boolean
+  auto_review_enabled: boolean
   created_at: string
   updated_at: string
 }
@@ -151,6 +153,8 @@ export interface OnboardingRequest {
   max_hr?: number | null
   goal_event?: GoalEvent | null
   race_date?: string | null
+  auto_plan_enabled?: boolean
+  auto_review_enabled?: boolean
 }
 
 export interface OnboardingResponse {

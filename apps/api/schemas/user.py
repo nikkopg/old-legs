@@ -67,6 +67,8 @@ class UserRead(UserBase):
     max_hr_observed: int | None = None
     goal_event: Optional[str] = None
     race_date: Optional[date] = None
+    auto_plan_enabled: bool = True
+    auto_review_enabled: bool = True
     created_at: datetime
     updated_at: datetime
 
@@ -106,6 +108,14 @@ class OnboardingRequest(BaseModel):
             "Valid values: monday, tuesday, wednesday, thursday, friday, saturday, sunday. "
             "Must contain at least one day if provided."
         ),
+    )
+    auto_plan_enabled: bool = Field(
+        True,
+        description="If True, a new weekly plan is generated automatically every Monday 05:00 WIB.",
+    )
+    auto_review_enabled: bool = Field(
+        True,
+        description="If True, a weekly review is generated automatically every Sunday 20:00 WIB.",
     )
 
     @field_validator("available_days")

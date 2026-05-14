@@ -79,6 +79,8 @@ async def save_onboarding(
     current_user.race_date = body.race_date
     if body.available_days is not None:
         current_user.available_days = body.available_days
+    current_user.auto_plan_enabled = body.auto_plan_enabled
+    current_user.auto_review_enabled = body.auto_review_enabled
     current_user.onboarding_completed = True
 
     db.commit()
@@ -148,6 +150,8 @@ async def get_me(
         max_hr_observed=current_user.max_hr_observed,
         goal_event=current_user.goal_event,
         race_date=current_user.race_date,
+        auto_plan_enabled=current_user.auto_plan_enabled,
+        auto_review_enabled=current_user.auto_review_enabled,
         created_at=current_user.created_at,
         updated_at=current_user.updated_at,
         total_activities=total_activities,

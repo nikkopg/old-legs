@@ -1,9 +1,11 @@
 // READY FOR QA
-// Feature: Settings page — TASK-142 (SettingsPaper tabloid redesign) + TASK-152 (Reset Context)
+// Feature: Settings page — TASK-142 (SettingsPaper tabloid redesign) + TASK-152 (Reset Context) + TASK-177 (delivery preference persistence)
 // What was built:
 //   Settings page wired to the SettingsPaper tabloid component.
 //   - Loads getAuthStatus via React Query; redirects to / on 401 or !connected.
-//   - voice and deliveryPrefs are local-only state (no backend yet).
+//   - deliveryPrefs are seeded from userProfile.auto_plan_enabled / auto_review_enabled on first load.
+//   - handleToggleDelivery is async: optimistically flips local state, fires saveOnboarding with the
+//     new boolean values alongside the current Runner's Brief fields, reverts silently on API failure.
 //   - disconnectStrava() is called on onDisconnect, then redirects to /.
 //   - Dark-frame wrapper matches dashboard/plan/coach page pattern.
 //   - Loading → paper-coloured skeleton block with animate-pulse.
@@ -20,7 +22,9 @@
 //   - onDisconnect → disconnectStrava() called, then router.replace('/')
 //   - disconnectStrava() throws → error is swallowed, redirect still happens
 //   - voice toggle → active voice card updates visually, onVoiceChange fires
-//   - delivery toggles → knob animates, onToggleDelivery fires with correct key
+//   - delivery toggles → knob animates immediately (optimistic), then persists to API
+//   - delivery toggle API failure → toggle reverts to previous value silently
+//   - delivery prefs seed from userProfile → correct values shown after load (not hardcoded true/true)
 //   - onNav → pushes correct route for all 5 nav keys
 //   - Reset Context first click → state transitions to 'confirming'
 //   - Reset Context cancel → state returns to 'idle'
@@ -115,7 +119,7 @@ export default function SettingsPage() {
     }
   }, [isUnauthorized, isNotConnected, router])
 
-  // Seed Runner's Brief from userProfile (once)
+  // Seed Runner's Brief and delivery preferences from userProfile (once)
   useEffect(() => {
     if (userProfile && !prefSeeded) {
       setPreferences({
@@ -126,6 +130,10 @@ export default function SettingsPage() {
         maxHr: userProfile.max_hr !== null && userProfile.max_hr !== undefined ? String(userProfile.max_hr) : '',
         goalEvent: userProfile.goal_event ?? null,
         raceDate: userProfile.race_date ?? '',
+      })
+      setDeliveryPrefs({
+        weeklyPlanMonday: userProfile.auto_plan_enabled ?? true,
+        weeklyReviewSunday: userProfile.auto_review_enabled ?? true,
       })
       setPrefSeeded(true)
     }
@@ -153,9 +161,33 @@ export default function SettingsPage() {
     router.replace('/')
   }
 
-  // Delivery toggle handler
-  const handleToggleDelivery = (key: keyof DeliveryPreferences) => {
-    setDeliveryPrefs((prev) => ({ ...prev, [key]: !prev[key] }))
+  // Delivery toggle handler — optimistically flips local state, persists to backend,
+  // and reverts silently on failure.
+  const handleToggleDelivery = async (key: keyof DeliveryPreferences) => {
+    const next = !deliveryPrefs[key]
+    setDeliveryPrefs((prev) => ({ ...prev, [key]: next }))
+
+    const parsedKm = Number(preferences.weeklyKmTarget)
+    const parsedRestingHr = preferences.restingHr !== '' ? Number(preferences.restingHr) : null
+    const parsedMaxHr = preferences.maxHr !== '' ? Number(preferences.maxHr) : null
+
+    try {
+      await saveOnboarding({
+        weekly_km_target: parsedKm,
+        days_available: preferences.availableDays.length,
+        available_days: preferences.availableDays,
+        biggest_struggle: preferences.biggestStruggle.trim(),
+        resting_hr: parsedRestingHr,
+        max_hr: parsedMaxHr,
+        goal_event: preferences.goalEvent,
+        race_date: preferences.raceDate || null,
+        auto_plan_enabled: key === 'weeklyPlanMonday' ? next : deliveryPrefs.weeklyPlanMonday,
+        auto_review_enabled: key === 'weeklyReviewSunday' ? next : deliveryPrefs.weeklyReviewSunday,
+      })
+    } catch {
+      // Revert toggle on failure — no error UI, just silent rollback
+      setDeliveryPrefs((prev) => ({ ...prev, [key]: !next }))
+    }
   }
 
   // Runner's Brief preference handlers

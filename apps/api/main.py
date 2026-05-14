@@ -26,6 +26,7 @@ from alembic.config import Config as AlembicConfig
 from alembic import command as alembic_command
 
 from routers import auth, activities, plan, coach, review, insights, user
+from services.scheduler import scheduler
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -54,10 +55,15 @@ def _run_migrations() -> None:
 async def lifespan(app: FastAPI):
     _run_migrations()
 
+    scheduler.start()
+    logger.info("Scheduler started — weekly_plan_job and weekly_review_job active")
+
     logger.info(f"Old Legs API starting — port {settings.api_port}")
     logger.info(f"CORS origin: {settings.cors_origin}")
     yield
     # Shutdown
+    scheduler.shutdown()
+    logger.info("Scheduler stopped")
     logger.info("Old Legs API shutting down")
 
 

@@ -58,6 +58,10 @@ class User(Base):
     goal_event: Mapped[str | None] = mapped_column(String, nullable=True)
     race_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
+    # Delivery preference toggles (set via onboarding or settings)
+    auto_plan_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
+    auto_review_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(
