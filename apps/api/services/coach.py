@@ -1,6 +1,7 @@
 # READY FOR QA
 # Feature: HR zone interpretation for post-run analysis (TASK-109)
 #          + cardiac drift + efficiency factor trend signals (additive)
+#          + time-in-zone per-split breakdown
 # What was built:
 #   - classify_hr_zone(): maps average HR to a 5-zone label using derived MHR from activity history (fallback: 185 bpm)
 #   - build_analysis_context(): builds the full context string for the post-run analysis
@@ -9,8 +10,10 @@
 #   - HR context is omitted entirely when average_hr is null (do not speculate)
 #   - _compute_cardiac_drift(): detects HR climb relative to pace from per-km splits
 #   - _compute_efficiency_factor(): computes speed/HR ratio and trends it against recent runs
+#   - _compute_time_in_zones(): accumulates split moving_time per Karvonen zone from per-km splits;
+#     returns None when no HR data or when timed coverage is below 50% of total split time
 # Edge cases to test:
-#   - Activity with average_hr=None → no HR lines in context, no zone label, no mismatch flag
+#   - Activity with average_hr=None → no HR lines in context, no zone label, no mismatch flag, no TIZ
 #   - Activity with average_hr in zone 1 or 2 and name contains "easy" → no mismatch (correct effort)
 #   - Activity with average_hr in zone 3+ and name contains "easy" → mismatch flag included
 #   - Fewer than 3 comparable recent runs → hr_trend note omitted (not enough data)
@@ -21,6 +24,10 @@
 #   - cardiac drift 0–4.9% → None returned (unremarkable)
 #   - Fewer than 2 recent activities with HR → EF trend omitted
 #   - EF change -3% to +3% → None returned (stable)
+#   - All splits have hr=None or 0 → TIZ returns None (omitted from context)
+#   - Fewer than 50% of split seconds have HR data → TIZ returns None (insufficient coverage)
+#   - Mix of HR and null splits with ≥50% coverage → TIZ string included, total timed < moving time
+#   - All splits have valid HR → total timed = moving time
 
 """
 Coach service — builds analysis context for Pak Har's post-run feedback.
@@ -202,6 +209,76 @@ def _compute_hr_trend(
         )
 
     return None
+
+
+# ---------------------------------------------------------------------------
+# Time-in-zone helper
+# ---------------------------------------------------------------------------
+
+def _compute_time_in_zones(splits: list, rhr: int, mhr: int) -> str | None:
+    """
+    Compute time spent in each HR zone from per-km split data.
+
+    Each split's average HR is classified into a zone using the Karvonen
+    formula via classify_hr_zone(). The split's moving_time (seconds) is
+    accumulated per zone. This is an approximation — HR is averaged per split,
+    not per second — but it is the best available without second-by-second
+    streams.
+
+    Returns None (silently) when:
+    - No splits have HR data
+    - Total timed seconds cover less than 50% of the activity moving time
+      (too many HR-null splits — would mislead Pak Har about zone distribution)
+
+    The 50% threshold is computed against the sum of all split moving_time
+    values (not the Activity.moving_time_seconds field), because the splits
+    list may not represent the full activity.
+
+    Args:
+        splits: List of per-km split dicts with at minimum:
+                km (int), moving_time (int, seconds), hr (float | None).
+        rhr: Resting heart rate in bpm (Karvonen baseline).
+        mhr: Max heart rate in bpm (Karvonen ceiling).
+
+    Returns:
+        A plain-text multi-line string describing zone distribution,
+        or None when data is insufficient or coverage is below 50%.
+    """
+    zone_seconds: dict[int, int] = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+    timed_seconds: int = 0
+    total_split_seconds: int = 0
+
+    for split in splits:
+        mt = split.get("moving_time") or 0
+        total_split_seconds += mt
+        hr = split.get("hr")
+        if hr is None or hr == 0:
+            continue
+        zone_num, _ = classify_hr_zone(int(round(hr)), mhr, rhr)
+        zone_seconds[zone_num] += mt
+        timed_seconds += mt
+
+    if timed_seconds == 0:
+        return None
+
+    # Require at least 50% HR coverage to avoid misleading zone distribution
+    if total_split_seconds > 0 and timed_seconds / total_split_seconds < 0.50:
+        return None
+
+    def _fmt(seconds: int) -> str:
+        m, s = divmod(seconds, 60)
+        return f"{m}:{s:02d}"
+
+    zone_parts = " | ".join(
+        f"Z{z} {_fmt(zone_seconds[z])}" for z in range(1, 6)
+    )
+    total_moving_fmt = _fmt(total_split_seconds)
+    timed_fmt = _fmt(timed_seconds)
+
+    return (
+        f"Time in zone: {zone_parts}\n"
+        f"Total timed: {timed_fmt} (of {total_moving_fmt} moving time)"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -609,6 +686,12 @@ def build_analysis_context(
             f"Z4 {zone_ceilings[2]}–{zone_ceilings[3]} | "
             f"Z5 >{zone_ceilings[3]} bpm"
         )
+
+        # --- Time in zone — derived from split HR data, only when available ---
+        if splits:
+            tiz = _compute_time_in_zones(splits, resting_hr, derived_mhr)
+            if tiz:
+                lines.append(tiz)
 
         # --- RPE section — only when provided and HR data is present ---
         if rpe is not None:

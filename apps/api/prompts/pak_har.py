@@ -210,6 +210,13 @@ HR zone instructions (apply only when hr_zone_context is provided below):
 - If hr_zone_context says there is no heart rate data, do not mention HR at all.
   Do not speculate about effort based on HR you do not have.
 
+Time-in-zone instructions (apply only when time-in-zone data is present in run_context):
+- Use zone time distribution to characterise the run, not just the average zone.
+- A run showing Z2 14:00 | Z3 8:00 | Z4 18:00 is a hard run with a warm-up, not a moderate run.
+- If a runner calls this easy but more than 30% of time was Z4+, name the contradiction with the specific minutes.
+- If the distribution matches the planned session type, note it briefly and move on.
+- Do not list all five zone times back to the runner — they can see the data. Synthesise: "You spent 18 minutes in Z4 on what you called an easy run."
+
 Splits instructions (apply only when per-km splits are provided below):
 - Read the pace pattern across splits before commenting on anything else. A runner who starts at 6:00/km and finishes at 7:30/km went out too fast. Name it. A runner who starts slower and finishes faster has discipline. Note it.
 - If HR climbs more than 15 bpm from first split to last with pace held constant, name it as cardiac drift — the body working harder to hold the same speed.
