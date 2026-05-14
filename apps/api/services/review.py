@@ -111,6 +111,61 @@ def _format_km_target(user_weekly_km_target: float | None) -> str:
     return f"{user_weekly_km_target:.1f} km"
 
 
+def _compute_remaining_sessions(
+    active_plan: TrainingPlan | None,
+    week_activities: list[Activity],
+    week_start: date,
+    today: date,
+) -> str:
+    """
+    Return planned non-rest days from today onwards that haven't been run yet.
+
+    "Today onwards" means date >= today. If today has a planned session but
+    no run yet, it is included (the day isn't over).
+
+    Args:
+        active_plan: The user's active TrainingPlan, or None.
+        week_activities: Activity records for the current week.
+        week_start: Monday of the current week.
+        today: Today's date (UTC).
+
+    Returns:
+        A comma-separated string of day names (e.g. "Thursday, Saturday"),
+        "none" if all remaining days are rest or already have a run, or
+        "no plan on file" if no active plan exists.
+    """
+    if active_plan is None:
+        return "no plan on file"
+
+    plan_data: dict = active_plan.plan_data or {}
+
+    # Planned non-rest days — normalised to title-case (e.g. "Monday")
+    planned_days: list[str] = [
+        day.title()
+        for day, day_data in plan_data.items()
+        if isinstance(day_data, dict) and day_data.get("type", "rest") != "rest"
+    ]
+
+    if not planned_days:
+        return "none"
+
+    # Actual run day names from the current week
+    actual_day_names: set[str] = {
+        _WEEKDAY_NAMES[a.activity_date.weekday()]
+        for a in week_activities
+    }
+
+    # Include a day if its date is >= today AND it has no run yet
+    day_offset = {name: i for i, name in enumerate(_WEEKDAY_NAMES)}
+    remaining = [
+        day for day in planned_days
+        if day not in actual_day_names
+        and (week_start + timedelta(days=day_offset[day])) >= today
+    ]
+
+    return ", ".join(sorted(remaining, key=lambda d: _WEEKDAY_NAMES.index(d))) if remaining else "none"
+
+
 def _compute_missed_days(
     active_plan: TrainingPlan | None,
     week_activities: list[Activity],
@@ -381,6 +436,7 @@ async def generate_weekly_review(user: User, db: Session) -> WeeklyReview:
 
     # --- TASK-179: missed days ---
     missed_days = _compute_missed_days(active_plan, week_activities, week_start, today)
+    remaining_sessions = _compute_remaining_sessions(active_plan, week_activities, week_start, today)
 
     # --- TASK-180: prior week comparison ---
     prior_week_runs, prior_week_km, prior_week_avg_pace = _compute_prior_week_stats(
@@ -412,6 +468,7 @@ async def generate_weekly_review(user: User, db: Session) -> WeeklyReview:
         total_km=total_km,
         km_target=km_target,
         missed_days=missed_days,
+        remaining_sessions=remaining_sessions,
         prior_week_runs=prior_week_runs_str,
         prior_week_km=prior_week_km_str,
         prior_week_avg_pace=prior_week_avg_pace_str,
@@ -430,7 +487,8 @@ async def generate_weekly_review(user: User, db: Session) -> WeeklyReview:
                     "You give weekly assessments. You are blunt, specific, and direct. "
                     "No hollow affirmations. No exclamation points. No emojis. "
                     "You name the gap between what was planned and what happened, explain what it means, "
-                    "and give one concrete adjustment for next week. Then stop."
+                    "and give one concrete adjustment — for remaining sessions this week if any, "
+                    "otherwise for next week. Then stop."
                 ),
             },
             {

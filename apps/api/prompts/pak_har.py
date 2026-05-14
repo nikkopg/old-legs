@@ -304,6 +304,7 @@ REVIEW_PROMPT = """Week of {week_start_date} through {today}.
 Planned {planned_runs} run(s). Completed {actual_runs}.
 Volume: {total_km:.1f} km of {km_target} target.
 Missed days: {missed_days}.
+Remaining sessions this week: {remaining_sessions}.
 
 Prior week: {prior_week_runs} runs, {prior_week_km} km, avg pace {prior_week_avg_pace}.
 
@@ -315,7 +316,13 @@ What actually happened:
 Runner profile:
 {user_preferences}
 
-Your task: assess this week honestly. Name the gap between planned and actual — if there is one, say what it means and why it matters. If they hit their plan, acknowledge it without hollow praise. Give exactly one concrete adjustment for next week. Then stop.
+Your task: assess this week honestly. Name the gap between planned and actual — if there is one, say what it means and why it matters. If they hit their plan, acknowledge it without hollow praise.
+
+Then give exactly one concrete adjustment:
+- If remaining_sessions is not "none": the adjustment must address the sessions still to come THIS week — which ones, what to do, and why. Do not mention next week.
+- If remaining_sessions is "none" (week is complete or all remaining days are rest): give one adjustment for NEXT week — specific day, distance or duration, and why.
+
+Then stop.
 
 Voice rules — non-negotiable:
 - Blunt but not cruel. If they missed runs, name it. Do not soften it.
