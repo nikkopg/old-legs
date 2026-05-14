@@ -6,6 +6,7 @@ Covers:
 - _fetch_splits_metric_fallback: happy path, HTTP errors
 - _derive_splits_from_streams: splits derivation and pace math
 - sync_activities sentinel guard: activities with streams={} are never re-fetched
+- BUG-017: sport_type filter — Run via sport_type included, Run via type included, Ride excluded
 
 Strava HTTP calls are mocked via respx. Database is real SQLite in-memory.
 """
@@ -724,3 +725,133 @@ async def test_sync_activities_fallback_sets_sentinel_and_splits(
     assert saved is not None
     assert saved.streams == {}, f"Expected sentinel streams={{}}, got {saved.streams!r}"
     assert saved.splits == mock_splits
+
+
+# ---------------------------------------------------------------------------
+# BUG-017 — sport_type filter fallback
+# ---------------------------------------------------------------------------
+#
+# Strava deprecated the "type" field in favour of "sport_type" for newer
+# accounts.  fetch_activities must include runs identified by either field
+# and exclude non-running activities regardless of which field is used.
+# ---------------------------------------------------------------------------
+
+def _make_raw_activity(strava_id: int, sport_type: str | None, activity_type: str | None) -> dict:
+    """Build a minimal raw Strava activity dict with the given type fields."""
+    activity = {
+        "id": strava_id,
+        "name": f"Activity {strava_id}",
+        "distance": 5000.0,
+        "moving_time": 1800,
+        "average_speed": 2.78,
+        "total_elevation_gain": 10,
+        "start_date_local": "2026-05-10T07:00:00",
+    }
+    if sport_type is not None:
+        activity["sport_type"] = sport_type
+    if activity_type is not None:
+        activity["type"] = activity_type
+    return activity
+
+
+def _mock_http_client_returning(activities: list):
+    """
+    Build a mock AsyncClient context manager that returns the given activity list
+    from a GET request to the Strava activities endpoint.
+
+    Uses unittest.mock rather than respx because the activities endpoint URL
+    includes dynamic query params (?after=...&per_page=200) that vary per call.
+    """
+    mock_response = MagicMock()
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = activities
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_response)
+
+    mock_context = MagicMock()
+    mock_context.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_context.__aexit__ = AsyncMock(return_value=False)
+
+    return mock_context
+
+
+async def test_bug017_sport_type_run_included():
+    """
+    Activity with sport_type="Run" (no legacy type field) must be included
+    in the results returned by fetch_activities.
+
+    Regression: before BUG-017 fix, only activities with type="Run" were
+    returned; the newer sport_type field was ignored.
+    """
+    activities = [_make_raw_activity(101, sport_type="Run", activity_type=None)]
+    mock_ctx = _mock_http_client_returning(activities)
+
+    with patch("services.strava.httpx.AsyncClient", return_value=mock_ctx):
+        from services.strava import fetch_activities
+        result = await fetch_activities("any_token", days=90)
+
+    assert len(result) == 1
+    assert result[0]["id"] == 101
+
+
+async def test_bug017_legacy_type_run_included():
+    """
+    Activity with type="Run" only (no sport_type field) must also be included
+    for backwards compatibility with older Strava API responses.
+    """
+    activities = [_make_raw_activity(102, sport_type=None, activity_type="Run")]
+    mock_ctx = _mock_http_client_returning(activities)
+
+    with patch("services.strava.httpx.AsyncClient", return_value=mock_ctx):
+        from services.strava import fetch_activities
+        result = await fetch_activities("any_token", days=90)
+
+    assert len(result) == 1
+    assert result[0]["id"] == 102
+
+
+async def test_bug017_sport_type_ride_excluded():
+    """
+    Activity with sport_type="Ride" must be excluded from fetch_activities results.
+
+    Before the fix, a Ride with no legacy type field would pass through the
+    type=="Run" guard because the guard only checked the "type" key.
+    """
+    activities = [
+        _make_raw_activity(103, sport_type="Ride", activity_type=None),
+    ]
+    mock_ctx = _mock_http_client_returning(activities)
+
+    with patch("services.strava.httpx.AsyncClient", return_value=mock_ctx):
+        from services.strava import fetch_activities
+        result = await fetch_activities("any_token", days=90)
+
+    assert len(result) == 0, (
+        f"Expected 0 runs for a Ride activity, got {len(result)}"
+    )
+
+
+async def test_bug017_mixed_activities_only_runs_returned():
+    """
+    A mixed response — Run (sport_type), Run (type), Ride, Walk — must return
+    only the two Run entries.
+    """
+    activities = [
+        _make_raw_activity(201, sport_type="Run", activity_type=None),   # in
+        _make_raw_activity(202, sport_type=None, activity_type="Run"),    # in (legacy)
+        _make_raw_activity(203, sport_type="Ride", activity_type=None),   # out
+        _make_raw_activity(204, sport_type="Walk", activity_type=None),   # out
+        _make_raw_activity(205, sport_type=None, activity_type="Ride"),   # out
+    ]
+    mock_ctx = _mock_http_client_returning(activities)
+
+    with patch("services.strava.httpx.AsyncClient", return_value=mock_ctx):
+        from services.strava import fetch_activities
+        result = await fetch_activities("any_token", days=90)
+
+    assert len(result) == 2
+    returned_ids = {r["id"] for r in result}
+    assert returned_ids == {201, 202}, (
+        f"Expected only Run activities (201, 202), got {returned_ids}"
+    )
