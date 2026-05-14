@@ -112,6 +112,14 @@ export interface ApiError {
   status?: number
 }
 
+export type GoalEvent =
+  | 'general_fitness'
+  | '5k'
+  | '10k'
+  | 'half_marathon'
+  | 'marathon'
+  | 'ultra'
+
 export interface UserProfile {
   id: number
   name: string
@@ -127,6 +135,7 @@ export interface UserProfile {
   total_activities: number
   total_distance_km: number
   weeks_on_plan: number
+  goal_event: GoalEvent | null
   created_at: string
   updated_at: string
 }
@@ -137,6 +146,7 @@ export interface OnboardingRequest {
   biggest_struggle: string
   resting_hr?: number | null
   max_hr?: number | null
+  goal_event?: GoalEvent | null
 }
 
 export interface OnboardingResponse {

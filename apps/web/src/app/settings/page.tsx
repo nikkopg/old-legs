@@ -35,10 +35,10 @@ import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { SettingsPaper } from '@/components/redesign/SettingsPaper'
 import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton'
-import { getAuthStatus, disconnectStrava, resetPakHarContext, saveOnboarding } from '@/lib/api'
+import { getAuthStatus, disconnectStrava, resetPakHarContext, saveGoalEvent, saveOnboarding } from '@/lib/api'
 import { useUser } from '@/hooks/useUser'
 import { useChatStore } from '@/store/chat'
-import type { ApiError } from '@/types/api'
+import type { ApiError, GoalEvent } from '@/types/api'
 import { useTheme } from '@/hooks/useTheme'
 
 // ---------------------------------------------------------------------------
@@ -98,6 +98,7 @@ export default function SettingsPage() {
     biggestStruggle: '',
     restingHr: '',
     maxHr: '',
+    goalEvent: null as GoalEvent | null,
   })
   const [prefSeeded, setPrefSeeded] = useState(false)
   const [isSavingPreferences, setIsSavingPreferences] = useState(false)
@@ -126,6 +127,7 @@ export default function SettingsPage() {
         biggestStruggle: userProfile.biggest_struggle ?? '',
         restingHr: userProfile.resting_hr !== null && userProfile.resting_hr !== undefined ? String(userProfile.resting_hr) : '',
         maxHr: userProfile.max_hr !== null && userProfile.max_hr !== undefined ? String(userProfile.max_hr) : '',
+        goalEvent: userProfile.goal_event ?? null,
       })
       setPrefSeeded(true)
     }
@@ -167,6 +169,18 @@ export default function SettingsPage() {
     setPreferences((prev) => ({ ...prev, [field]: value }))
   }
 
+  const handleGoalEventChange = async (value: GoalEvent | null) => {
+    setPreferences((prev) => ({ ...prev, goalEvent: value }))
+    setPreferencesSaved(false)
+    try {
+      await saveGoalEvent(value)
+      setPreferencesSaved(true)
+    } catch (err) {
+      const apiErr = err as ApiError
+      setPreferencesError(apiErr?.detail ?? 'Something went wrong.')
+    }
+  }
+
   const handleSavePreferences = async () => {
     const parsedKm = Number(preferences.weeklyKmTarget)
     const parsedDays = Number(preferences.daysAvailable)
@@ -185,6 +199,7 @@ export default function SettingsPage() {
         biggest_struggle: preferences.biggestStruggle.trim(),
         resting_hr: parsedRestingHr,
         max_hr: parsedMaxHr,
+        goal_event: preferences.goalEvent,
       })
       setPreferencesSaved(true)
     } catch (err) {
@@ -266,6 +281,7 @@ export default function SettingsPage() {
       onResetContextCancel={handleResetContextCancel}
       preferences={preferences}
       onPreferenceChange={handlePreferenceChange}
+      onGoalEventChange={handleGoalEventChange}
       onSavePreferences={handleSavePreferences}
       isSavingPreferences={isSavingPreferences}
       preferencesSaved={preferencesSaved}

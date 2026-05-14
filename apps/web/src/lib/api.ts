@@ -10,7 +10,7 @@
 //   - analyzeActivity on an already-analyzed activity (overwrites — should still return 200)
 //   - getCurrentPlan when no plan exists (404 — ApiError thrown)
 
-import type { Activity, ActivityListResponse, ApiError, Insights, TrainingPlan, WeeklyReview, UserProfile, OnboardingRequest, OnboardingResponse } from '@/types/api'
+import type { Activity, ActivityListResponse, ApiError, GoalEvent, Insights, TrainingPlan, WeeklyReview, UserProfile, OnboardingRequest, OnboardingResponse } from '@/types/api'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -55,6 +55,13 @@ export async function saveOnboarding(body: OnboardingRequest): Promise<Onboardin
   return apiFetch<OnboardingResponse>('/user/onboarding', {
     method: 'POST',
     body: JSON.stringify(body),
+  })
+}
+
+export async function saveGoalEvent(goalEvent: GoalEvent | null): Promise<OnboardingResponse> {
+  return apiFetch<OnboardingResponse>('/user/onboarding', {
+    method: 'POST',
+    body: JSON.stringify({ goal_event: goalEvent }),
   })
 }
 

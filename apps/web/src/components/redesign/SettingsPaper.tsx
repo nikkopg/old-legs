@@ -1,6 +1,20 @@
 "use client";
 
 // READY FOR QA
+// Feature: goal_event field in Runner's Brief (Settings) + Onboarding step 6
+// What was built: GoalEvent pill selector in SettingsPaper Runner's Brief section.
+//   - 6 goal options rendered as compact pills (hard corners, Space Mono labels)
+//   - Selected pill: ink bg, paper text. Unselected: transparent bg, ink border.
+//   - Clicking a selected pill deselects it (sets null). Clicking a new pill selects it.
+//   - goalEvent prop added to SettingsPaperProps and preferences object.
+//   - onPreferenceChange extended to accept 'goalEvent' field.
+// Edge cases to test:
+//   - null goalEvent (nothing selected) — no pill highlighted
+//   - toggling same pill off sets goalEvent back to null
+//   - saving with null goalEvent sends goal_event: null to backend
+//   - long sub-labels don't break pill layout
+
+// READY FOR QA
 // Component: SettingsPaper (TASK-142 + TASK-152)
 // What was built: Full "The Desk" settings page in the tabloid newspaper layout.
 //   Renders subscriber record, editor's voice selector, delivery preferences toggles,
@@ -29,6 +43,20 @@ import {
   FooterRail,
   NewspaperChrome,
 } from './NewspaperChrome';
+import type { GoalEvent } from '@/types/api';
+
+// ---------------------------------------------------------------------------
+// Goal event options
+// ---------------------------------------------------------------------------
+
+const GOAL_OPTIONS: Array<{ value: GoalEvent; label: string }> = [
+  { value: 'general_fitness', label: 'General fitness' },
+  { value: '5k',              label: '5K' },
+  { value: '10k',             label: '10K' },
+  { value: 'half_marathon',   label: 'Half marathon' },
+  { value: 'marathon',        label: 'Marathon' },
+  { value: 'ultra',           label: 'Ultra' },
+];
 
 // ---------- interfaces ----------
 
@@ -79,8 +107,10 @@ interface SettingsPaperProps {
     biggestStruggle: string;
     restingHr: string;
     maxHr: string;
+    goalEvent: GoalEvent | null;
   };
   onPreferenceChange: (field: 'weeklyKmTarget' | 'daysAvailable' | 'biggestStruggle' | 'restingHr' | 'maxHr', value: string) => void;
+  onGoalEventChange: (value: GoalEvent | null) => void;
   onSavePreferences: () => void;
   isSavingPreferences: boolean;
   preferencesSaved: boolean;
@@ -106,6 +136,7 @@ export function SettingsPaper({
   onResetContextCancel,
   preferences,
   onPreferenceChange,
+  onGoalEventChange,
   onSavePreferences,
   isSavingPreferences,
   preferencesSaved,
@@ -333,6 +364,38 @@ export function SettingsPaper({
                     boxSizing: 'border-box' as const,
                   }}
                 />
+              </div>
+            </div>
+            {/* Goal event pills */}
+            <div style={{ marginBottom: 14 }}>
+              <Caps size={8} ls={2} opacity={0.6}>Training goal</Caps>
+              <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 6, marginTop: 6 }}>
+                {GOAL_OPTIONS.map(({ value, label }) => {
+                  const active = preferences.goalEvent === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => onGoalEventChange(active ? null : value)}
+                      style={{
+                        fontFamily: OL.sans,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        textTransform: 'uppercase' as const,
+                        letterSpacing: 3,
+                        padding: '5px 10px',
+                        border: `1px solid ${OL.ink}`,
+                        background: active ? OL.ink : 'transparent',
+                        color: active ? OL.paper : OL.ink,
+                        cursor: 'pointer',
+                        borderRadius: 0,
+                        outline: 'none',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             {/* Save row */}
