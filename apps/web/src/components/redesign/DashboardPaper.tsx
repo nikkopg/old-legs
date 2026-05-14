@@ -241,11 +241,36 @@ export function DashboardPaper({
                 }}
               >
                 {weeklyReview.review_text.split('\n\n').filter(Boolean).map((para, i) => (
-                  <p key={i} style={{ margin: i === 0 ? '0 0 10px' : '0 0 10px' }}>
+                  <p key={i} style={{ margin: '0 0 10px' }}>
                     {para}
                   </p>
                 ))}
               </div>
+              {reviewGenerating ? (
+                <span style={{ fontFamily: OL.mono, fontSize: 12, color: OL.muted }}>
+                  Filing...
+                </span>
+              ) : (
+                <a
+                  href="#"
+                  onClick={(e) => { e.preventDefault(); onGenerateReview(); }}
+                  style={{
+                    fontFamily: OL.body,
+                    fontSize: 13,
+                    fontStyle: 'italic',
+                    color: OL.accent,
+                    cursor: 'pointer',
+                    textDecoration: 'none',
+                  }}
+                >
+                  Refresh his take →
+                </a>
+              )}
+              {reviewError && (
+                <div style={{ marginTop: 6, fontFamily: OL.body, fontSize: 13, color: OL.accent }}>
+                  {reviewError}
+                </div>
+              )}
             </>
           ) : (
             <>
