@@ -22,9 +22,10 @@ type ConnectState = 'idle' | 'connecting' | 'error';
 interface LandingPageProps {
   onConnect: () => void;
   connectState?: ConnectState;
+  errorMessage?: string;
 }
 
-export function LandingPage({ onConnect, connectState = 'idle' }: LandingPageProps) {
+export function LandingPage({ onConnect, connectState = 'idle', errorMessage }: LandingPageProps) {
   return (
     <div
       style={{
@@ -171,7 +172,7 @@ export function LandingPage({ onConnect, connectState = 'idle' }: LandingPagePro
                     marginTop: 4,
                   }}
                 >
-                  Strava did not answer. Try once more.
+                  {errorMessage ?? 'Strava did not answer. Try once more.'}
                 </div>
               </div>
               <button
