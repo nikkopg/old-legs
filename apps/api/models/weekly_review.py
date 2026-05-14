@@ -10,7 +10,7 @@
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import Base
@@ -39,6 +39,11 @@ class WeeklyReview(Base):
 
     # Pak Har's written assessment of the gap, patterns, and one concrete adjustment
     review_text: Mapped[str] = mapped_column(Text)
+
+    # Structured verdict fields — populated by a second Ollama call after review_text
+    headline: Mapped[str | None] = mapped_column(String, nullable=True)
+    verdict_tag: Mapped[str | None] = mapped_column(String, nullable=True)
+    tone: Mapped[str | None] = mapped_column(String, nullable=True)  # 'critical' | 'good' | 'neutral'
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(

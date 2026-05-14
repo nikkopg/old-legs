@@ -8,6 +8,7 @@
 #   - created_at reflects DB insertion time in UTC
 
 from datetime import date, datetime
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -27,3 +28,6 @@ class WeeklyReviewRead(BaseModel):
     actual_runs: int
     review_text: str
     created_at: datetime
+    headline: Optional[str] = None
+    verdict_tag: Optional[str] = None
+    tone: Optional[str] = None

@@ -6,6 +6,10 @@
 //   - weeklyReview != null → "Filed week of X" metadata + review_text paragraphs (split \n\n)
 //   - weeklyReview == null → heroHeadline() formula + existing body + "No weekly assessment yet" link
 //   - onGenerateReview fires when the link is clicked
+// New (headline + ToneBadge on weekly review):
+//   - weeklyReview.verdict_tag != null → ToneBadge rendered above headline
+//   - weeklyReview.headline != null → Abril Fatface 36px headline rendered above "Filed week of X"
+//   - Both null (review generated before this feature shipped) → layout unchanged
 // Previous edge cases (TASK-136) still apply:
 //   - todayPlan=null shows "No plan filed yet." fallback
 //   - lastRun=null shows "No run dispatched yet." fallback
@@ -224,11 +228,32 @@ export function DashboardPaper({
 
           {weeklyReview ? (
             <>
+              {weeklyReview.verdict_tag !== null && (
+                <div style={{ marginTop: 8, marginBottom: 6 }}>
+                  <ToneBadge tone={weeklyReview.tone ?? 'neutral'}>
+                    {weeklyReview.verdict_tag}
+                  </ToneBadge>
+                </div>
+              )}
+              {weeklyReview.headline !== null && (
+                <h2
+                  style={{
+                    fontFamily: OL.display,
+                    fontWeight: 400,
+                    fontSize: 36,
+                    lineHeight: 1.05,
+                    letterSpacing: -0.3,
+                    margin: '8px 0 10px',
+                  }}
+                >
+                  {weeklyReview.headline}
+                </h2>
+              )}
               <Caps
                 size={9}
                 ls={2}
                 opacity={0.6}
-                style={{ display: 'block', marginTop: 8, marginBottom: 6 }}
+                style={{ display: 'block', marginTop: weeklyReview.headline !== null || weeklyReview.verdict_tag !== null ? 0 : 8, marginBottom: 6 }}
               >
                 Filed week of {fmtWeekOf(weeklyReview.week_start_date)}
               </Caps>

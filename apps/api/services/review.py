@@ -6,6 +6,7 @@ Queries the active TrainingPlan for planned run count, counts Activity records
 for actual runs this week, calls Ollama non-streaming, and persists the result.
 """
 
+import json as _json
 import logging
 from datetime import date, datetime, timedelta, timezone
 
@@ -35,6 +36,14 @@ _DEFAULT_RHR: int = 60
 _WEEKDAY_NAMES = [
     "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
 ]
+
+# Fixed verdict tag set for weekly reviews — only these values are accepted.
+_WEEKLY_VERDICT_TAGS = frozenset({
+    "STRONG WEEK", "ON PLAN", "BUILDING", "LIGHT WEEK",
+    "FADING", "MISSED RUNS", "CONSISTENT", "NO RUNS",
+})
+
+_TONES = frozenset({"critical", "good", "neutral"})
 
 logger = logging.getLogger(__name__)
 
@@ -458,6 +467,94 @@ async def generate_weekly_review(user: User, db: Session) -> WeeklyReview:
     if not review_text:
         raise RuntimeError("Ollama returned an empty response for weekly review generation.")
 
+    # --- Second Ollama call — structured verdict extraction (best-effort) ---
+    headline: str | None = None
+    verdict_tag: str | None = None
+    tone: str | None = None
+
+    if review_text:
+        verdict_payload = {
+            "model": settings.get_ollama_model(),
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are Pak Har. Extract a structured summary from a weekly running assessment.\n"
+                        "Output only valid JSON. No markdown. No explanation.\n"
+                        "Voice rules: no exclamation points, no hollow praise, be specific and direct."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Weekly assessment:\n{review_text}\n\n"
+                        "Return JSON with exactly these fields:\n"
+                        '- "headline": one sentence summarising this week, 12 words or fewer, Pak Har voice\n'
+                        '- "verdict_tag": one value from this exact list: '
+                        "STRONG WEEK, ON PLAN, BUILDING, LIGHT WEEK, FADING, MISSED RUNS, CONSISTENT, NO RUNS\n"
+                        '- "tone": one of: critical, good, neutral\n\n'
+                        "Return only the JSON object."
+                    ),
+                },
+            ],
+            "stream": False,
+        }
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(
+                    connect=_CONNECT_TIMEOUT,
+                    read=_READ_TIMEOUT,
+                    write=10.0,
+                    pool=5.0,
+                )
+            ) as verdict_client:
+                verdict_response = await verdict_client.post(url, json=verdict_payload)
+                verdict_response.raise_for_status()
+                verdict_data = verdict_response.json()
+
+            raw_verdict_content: str = (
+                verdict_data.get("message", {}).get("content", "")
+                or verdict_data.get("response", "")
+            ).strip()
+
+            parsed_verdict = _json.loads(raw_verdict_content)
+
+            raw_headline = parsed_verdict.get("headline")
+            raw_tag = parsed_verdict.get("verdict_tag")
+            raw_tone = parsed_verdict.get("tone")
+
+            headline = str(raw_headline).strip() if raw_headline else None
+            verdict_tag = (
+                str(raw_tag).strip().upper()
+                if raw_tag and str(raw_tag).strip().upper() in _WEEKLY_VERDICT_TAGS
+                else None
+            )
+            tone = (
+                str(raw_tone).strip().lower()
+                if raw_tone and str(raw_tone).strip().lower() in _TONES
+                else None
+            )
+
+            logger.info(
+                "generate_weekly_review: verdict extracted for user_id=%d, week=%s: tag=%r tone=%r",
+                user.id,
+                week_start.isoformat(),
+                verdict_tag,
+                tone,
+            )
+
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "generate_weekly_review: verdict extraction failed for user_id=%d, week=%s: %s",
+                user.id,
+                week_start.isoformat(),
+                exc,
+            )
+            headline = None
+            verdict_tag = None
+            tone = None
+
     # --- Persist new WeeklyReview (always insert — GET /review/current returns most recent) ---
     new_review = WeeklyReview(
         user_id=user.id,
@@ -465,6 +562,9 @@ async def generate_weekly_review(user: User, db: Session) -> WeeklyReview:
         planned_runs=planned_runs,
         actual_runs=actual_runs,
         review_text=review_text,
+        headline=headline,
+        verdict_tag=verdict_tag,
+        tone=tone,
     )
     db.add(new_review)
     db.commit()

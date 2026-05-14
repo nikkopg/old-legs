@@ -105,6 +105,9 @@ export interface WeeklyReview {
   actual_runs: number
   review_text: string
   created_at: string
+  headline: string | null
+  verdict_tag: string | null
+  tone: 'critical' | 'good' | 'neutral' | null
 }
 
 export interface ApiError {
