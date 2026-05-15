@@ -25,6 +25,7 @@ from services.ollama import (
     _CONNECT_TIMEOUT,
     _READ_TIMEOUT,
     build_user_preferences_context,
+    build_voice_modifier,
     format_pace,
 )
 
@@ -475,6 +476,7 @@ async def generate_weekly_review(user: User, db: Session) -> WeeklyReview:
         hr_zone_summary=hr_zone_summary,
         activity_summary=activity_summary,
         user_preferences=user_preferences,
+        voice_modifier=build_voice_modifier(user.coach_voice),
     )
 
     payload = {
