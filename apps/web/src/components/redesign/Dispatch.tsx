@@ -167,11 +167,6 @@ function toSentenceCase(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 }
 
-function getPullQuote(analysis: string): string {
-  const sentences = analysis.split(/(?<=[.!?])\s+/);
-  const second = sentences[1] ?? sentences[0] ?? '';
-  return `"${second.trim()}"`;
-}
 
 function getAnalysisParagraphs(analysis: string): string[] {
   const rawParas = analysis.split(/\n\n|\n/).filter((p) => p.trim().length > 0);
@@ -501,10 +496,6 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
   const dateInfo = formatActivityDate(activity.activity_date);
   const headline = getVerdictHeadline(activity);
   const paragraphs = activity.analysis ? getAnalysisParagraphs(activity.analysis) : [];
-  const pullQuote = activity.analysis && paragraphs.length >= 2
-    ? getPullQuote(activity.analysis)
-    : null;
-
   // At-a-glance: first 2 sentences
   const atAGlance = activity.analysis
     ? (() => {
@@ -1530,13 +1521,6 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                           {para}
                         </p>
                       ))}
-
-                      {/* Pull-quote after 2nd paragraph */}
-                      {pullQuote !== null && (
-                        <div className="border-y-2 border-[var(--color-accent)] py-[10px] my-4 font-display text-[20px] italic text-center text-[var(--color-accent)]">
-                          {pullQuote}
-                        </div>
-                      )}
 
                       {/* Sign-off */}
                       <div className="font-sans text-[9px] uppercase tracking-widest opacity-70 text-right mt-4">
