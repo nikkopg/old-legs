@@ -21,6 +21,15 @@
 //   - connected=false → router.replace('/') called
 //   - onDisconnect → disconnectStrava() called, then router.replace('/')
 //   - disconnectStrava() throws → error is swallowed, redirect still happens
+// READY FOR QA
+// Feature: Auto-save voice card selection
+// What was built: handleVoiceChange — optimistic update + silent rollback on failure,
+//   matching the delivery toggle pattern. Voice is now persisted on card click via
+//   POST /user/onboarding with the full current preferences payload.
+// Edge cases to test:
+//   - Card click → voice state updates immediately, POST fires
+//   - POST succeeds → voice stays at new value
+//   - POST fails → voice silently reverts to previous card
 //   - voice toggle → active voice card updates visually, onVoiceChange fires
 //   - delivery toggles → knob animates immediately (optimistic), then persists to API
 //   - delivery toggle API failure → toggle reverts to previous value silently
@@ -190,6 +199,36 @@ export default function SettingsPage() {
     }
   }
 
+  // Voice card handler — optimistically updates local state, persists to backend,
+  // and reverts silently on failure (no error UI).
+  const handleVoiceChange = async (newVoice: VoiceLevel) => {
+    const previous = voice
+    setVoice(newVoice)
+
+    const parsedKm = Number(preferences.weeklyKmTarget)
+    const parsedRestingHr = preferences.restingHr !== '' ? Number(preferences.restingHr) : null
+    const parsedMaxHr = preferences.maxHr !== '' ? Number(preferences.maxHr) : null
+
+    try {
+      await saveOnboarding({
+        weekly_km_target: parsedKm,
+        days_available: preferences.availableDays.length,
+        available_days: preferences.availableDays,
+        biggest_struggle: preferences.biggestStruggle.trim(),
+        resting_hr: parsedRestingHr,
+        max_hr: parsedMaxHr,
+        goal_event: preferences.goalEvent,
+        race_date: preferences.raceDate || null,
+        auto_plan_enabled: deliveryPrefs.weeklyPlanMonday,
+        auto_review_enabled: deliveryPrefs.weeklyReviewSunday,
+        coach_voice: newVoice,
+      })
+    } catch {
+      // Revert to previous voice on failure — silent rollback, no error UI
+      setVoice(previous)
+    }
+  }
+
   // Runner's Brief preference handlers
   const handlePreferenceChange = (
     field: 'weeklyKmTarget' | 'biggestStruggle' | 'restingHr' | 'maxHr' | 'raceDate',
@@ -306,7 +345,7 @@ export default function SettingsPage() {
       voice={voice}
       deliveryPrefs={deliveryPrefs}
       theme={theme}
-      onVoiceChange={setVoice}
+      onVoiceChange={handleVoiceChange}
       onToggleDelivery={handleToggleDelivery}
       onThemeChange={setTheme}
       onDisconnect={handleDisconnect}
