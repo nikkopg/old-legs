@@ -1,14 +1,18 @@
 """
-Tests for activity list + detail endpoints, plus normalize_activity unit tests.
+Tests for activity list + detail endpoints, plus normalize_activity unit tests,
+and POST /activities/{id}/analyze (SSE stream).
 
 Endpoints covered:
 - GET /activities              — list (triggers sync on load)
 - GET /activities/{id}         — single activity detail
+- POST /activities/{id}/analyze — SSE streaming analysis
 
 Strava HTTP calls are mocked via respx. Database is real SQLite in-memory.
 """
 
+import json
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 import pytest
 import respx
@@ -19,7 +23,92 @@ from sqlalchemy.orm import Session
 from models.activity import Activity
 from models.user import User
 from services.encryption import encrypt_token
+from services.streaming import complete_event, error_event, progress_event
 from services.strava import normalize_activity
+
+
+# ---------------------------------------------------------------------------
+# SSE parsing helpers (mirrors test_review.py and test_plan.py)
+# ---------------------------------------------------------------------------
+
+def _parse_sse_events(text: str) -> list[dict]:
+    """Parse a text/event-stream body into a list of decoded JSON payloads."""
+    events = []
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("data: "):
+            payload = line[len("data: "):]
+            try:
+                events.append(json.loads(payload))
+            except json.JSONDecodeError:
+                pass
+    return events
+
+
+def _find_event(events: list[dict], event_type: str) -> dict | None:
+    """Return the first event dict whose 'type' matches event_type, or None."""
+    return next((e for e in events if e.get("type") == event_type), None)
+
+
+# ---------------------------------------------------------------------------
+# Fake generator helpers for analyze endpoint
+# ---------------------------------------------------------------------------
+
+FAKE_ANALYSIS_TEXT = (
+    "You held your pace through the last three kilometres. That took discipline. "
+    "The HR drift in the final km is worth watching — do not ignore it."
+)
+
+_ANALYZE_STEPS = [
+    "Pulling your splits",
+    "Reading the zones",
+    "Checking your history",
+    "Writing the dispatch",
+    "Filing the verdict",
+]
+
+
+def _fake_analyze_complete(
+    analysis: str = FAKE_ANALYSIS_TEXT,
+    verdict_short: str | None = "Held pace but HR drifted in the last km.",
+    verdict_tag: str | None = "FADED LATE",
+    tone: str | None = "critical",
+):
+    """Return an async generator callable that yields a single complete event."""
+    async def _fake(activity_id, user, db):
+        yield complete_event({
+            "analysis": analysis,
+            "verdict_short": verdict_short,
+            "verdict_tag": verdict_tag,
+            "tone": tone,
+        })
+    return _fake
+
+
+def _fake_analyze_with_progress(
+    analysis: str = FAKE_ANALYSIS_TEXT,
+):
+    """Return an async generator callable that yields 5 progress events then a complete event."""
+    import time as _time
+
+    async def _fake(activity_id, user, db):
+        started_at = _time.monotonic()
+        for step in _ANALYZE_STEPS:
+            yield progress_event(step, started_at)
+        yield complete_event({
+            "analysis": analysis,
+            "verdict_short": None,
+            "verdict_tag": None,
+            "tone": None,
+        })
+    return _fake
+
+
+def _fake_analyze_error(message: str):
+    """Return an async generator callable that yields a single error event."""
+    async def _fake(activity_id, user, db):
+        yield error_event(message)
+    return _fake
 
 
 # ---------------------------------------------------------------------------
@@ -238,3 +327,251 @@ def test_normalize_activity_no_hr():
     assert result["average_hr"] is None
     assert result["max_hr"] is None
     assert result["distance_km"] == pytest.approx(5.0, abs=0.01)
+
+
+# ---------------------------------------------------------------------------
+# POST /activities/{id}/analyze — SSE stream
+# ---------------------------------------------------------------------------
+
+class TestAnalyzeActivity:
+    """Tests for the SSE-streaming analyze endpoint (TASK-190)."""
+
+    def test_unauthenticated_returns_401(self, test_app: TestClient) -> None:
+        """No session cookie → 401 before stream starts."""
+        response = test_app.post("/activities/1/analyze")
+        assert response.status_code == 401
+
+    def test_activity_not_found_returns_404(
+        self,
+        authenticated_client: TestClient,
+    ) -> None:
+        """Valid auth, non-existent activity ID → 404 before stream starts."""
+        response = authenticated_client.post("/activities/99999/analyze")
+        assert response.status_code == 404
+
+    def test_rate_limit_returns_429(
+        self,
+        authenticated_client: TestClient,
+        test_activity: Activity,
+    ) -> None:
+        """Rate limit exceeded → 429 before stream starts."""
+        with patch("routers.activities.check_rate_limit", return_value=False):
+            response = authenticated_client.post(f"/activities/{test_activity.id}/analyze")
+        assert response.status_code == 429
+        assert "Too many requests" in response.json()["detail"]
+
+    def test_happy_path_returns_sse_stream(
+        self,
+        authenticated_client: TestClient,
+        test_activity: Activity,
+    ) -> None:
+        """Valid auth + own activity → 200 text/event-stream with complete event."""
+        with patch(
+            "routers.activities.run_analysis_for_activity",
+            side_effect=_fake_analyze_complete(),
+        ):
+            response = authenticated_client.post(f"/activities/{test_activity.id}/analyze")
+
+        assert response.status_code == 200
+        assert "text/event-stream" in response.headers.get("content-type", "")
+
+        events = _parse_sse_events(response.text)
+        complete = _find_event(events, "complete")
+        assert complete is not None, f"No complete event found. Events: {events}"
+        data = complete["data"]
+        assert "analysis" in data
+        assert data["analysis"] == FAKE_ANALYSIS_TEXT
+
+    def test_complete_event_has_all_verdict_fields(
+        self,
+        authenticated_client: TestClient,
+        test_activity: Activity,
+    ) -> None:
+        """Complete event data must contain analysis, verdict_short, verdict_tag, tone."""
+        with patch(
+            "routers.activities.run_analysis_for_activity",
+            side_effect=_fake_analyze_complete(
+                verdict_short="Held pace but HR drifted in the last km.",
+                verdict_tag="FADED LATE",
+                tone="critical",
+            ),
+        ):
+            response = authenticated_client.post(f"/activities/{test_activity.id}/analyze")
+
+        assert response.status_code == 200
+        events = _parse_sse_events(response.text)
+        complete = _find_event(events, "complete")
+        assert complete is not None
+        data = complete["data"]
+        assert data["analysis"] == FAKE_ANALYSIS_TEXT
+        assert data["verdict_short"] == "Held pace but HR drifted in the last km."
+        assert data["verdict_tag"] == "FADED LATE"
+        assert data["tone"] == "critical"
+
+    def test_verdict_fields_can_be_null(
+        self,
+        authenticated_client: TestClient,
+        test_activity: Activity,
+    ) -> None:
+        """Verdict fields are null when extraction fails — complete event still emitted."""
+        with patch(
+            "routers.activities.run_analysis_for_activity",
+            side_effect=_fake_analyze_complete(
+                verdict_short=None,
+                verdict_tag=None,
+                tone=None,
+            ),
+        ):
+            response = authenticated_client.post(f"/activities/{test_activity.id}/analyze")
+
+        assert response.status_code == 200
+        events = _parse_sse_events(response.text)
+        complete = _find_event(events, "complete")
+        assert complete is not None
+        data = complete["data"]
+        assert "analysis" in data
+        assert data["verdict_short"] is None
+        assert data["verdict_tag"] is None
+        assert data["tone"] is None
+
+    def test_ollama_offline_emits_error_event(
+        self,
+        authenticated_client: TestClient,
+        test_activity: Activity,
+    ) -> None:
+        """Ollama offline → HTTP 200 with an SSE error event (error is in-stream)."""
+        with patch(
+            "routers.activities.run_analysis_for_activity",
+            side_effect=_fake_analyze_error(
+                "Pak Har is unavailable right now. Make sure Ollama is running."
+            ),
+        ):
+            response = authenticated_client.post(f"/activities/{test_activity.id}/analyze")
+
+        assert response.status_code == 200
+        events = _parse_sse_events(response.text)
+        err = _find_event(events, "error")
+        assert err is not None, f"No error event found. Events: {events}"
+        assert "Pak Har is unavailable" in err["message"]
+
+    def test_ollama_timeout_emits_error_event(
+        self,
+        authenticated_client: TestClient,
+        test_activity: Activity,
+    ) -> None:
+        """Ollama timeout → HTTP 200 with an SSE error event."""
+        with patch(
+            "routers.activities.run_analysis_for_activity",
+            side_effect=_fake_analyze_error("Pak Har took too long to respond."),
+        ):
+            response = authenticated_client.post(f"/activities/{test_activity.id}/analyze")
+
+        assert response.status_code == 200
+        events = _parse_sse_events(response.text)
+        err = _find_event(events, "error")
+        assert err is not None
+        assert "too long" in err["message"]
+
+    def test_progress_events_emitted_in_order(
+        self,
+        authenticated_client: TestClient,
+        test_activity: Activity,
+    ) -> None:
+        """5 progress events must precede the complete event, in the correct order."""
+        with patch(
+            "routers.activities.run_analysis_for_activity",
+            side_effect=_fake_analyze_with_progress(),
+        ):
+            response = authenticated_client.post(f"/activities/{test_activity.id}/analyze")
+
+        assert response.status_code == 200
+        events = _parse_sse_events(response.text)
+
+        progress_events = [e for e in events if e.get("type") == "progress"]
+        assert len(progress_events) == 5, (
+            f"Expected 5 progress events, got: {progress_events}"
+        )
+
+        actual_steps = [e["step"] for e in progress_events]
+        assert actual_steps == _ANALYZE_STEPS
+
+        # complete event must follow all progress events
+        complete = _find_event(events, "complete")
+        assert complete is not None
+        complete_idx = events.index(complete)
+        for p in progress_events:
+            assert events.index(p) < complete_idx
+
+    def test_progress_events_have_elapsed_ms(
+        self,
+        authenticated_client: TestClient,
+        test_activity: Activity,
+    ) -> None:
+        """Each progress event must carry an elapsed_ms integer."""
+        with patch(
+            "routers.activities.run_analysis_for_activity",
+            side_effect=_fake_analyze_with_progress(),
+        ):
+            response = authenticated_client.post(f"/activities/{test_activity.id}/analyze")
+
+        events = _parse_sse_events(response.text)
+        progress_events = [e for e in events if e.get("type") == "progress"]
+        for evt in progress_events:
+            assert "elapsed_ms" in evt
+            assert isinstance(evt["elapsed_ms"], int)
+
+    def test_response_headers_for_sse(
+        self,
+        authenticated_client: TestClient,
+        test_activity: Activity,
+    ) -> None:
+        """SSE response must include Cache-Control and X-Accel-Buffering headers."""
+        with patch(
+            "routers.activities.run_analysis_for_activity",
+            side_effect=_fake_analyze_complete(),
+        ):
+            response = authenticated_client.post(f"/activities/{test_activity.id}/analyze")
+
+        assert response.status_code == 200
+        assert response.headers.get("cache-control") == "no-cache"
+        assert response.headers.get("x-accel-buffering") == "no"
+
+    def test_other_users_activity_returns_404(
+        self,
+        authenticated_client: TestClient,
+        db_session: Session,
+    ) -> None:
+        """Authenticated as user A — analyzing user B's activity returns 404 (not 403)."""
+        from services.encryption import encrypt_token as _enc
+
+        other_user = User(
+            strava_athlete_id="other_athlete_analyze_test",
+            strava_access_token=_enc("other_access_token"),
+            strava_refresh_token=_enc("other_refresh_token"),
+            strava_token_expires_at=datetime.now(timezone.utc) + timedelta(hours=6),
+            name="Other Runner",
+            avatar_url=None,
+        )
+        db_session.add(other_user)
+        db_session.commit()
+        db_session.refresh(other_user)
+
+        other_activity = Activity(
+            user_id=other_user.id,
+            strava_activity_id="strava_other_analyze_001",
+            name="Other User Run",
+            distance_km=8.0,
+            moving_time_seconds=2800,
+            average_pace_min_per_km=5.83,
+            average_hr=None,
+            max_hr=None,
+            elevation_gain_m=12,
+            activity_date=datetime.now(timezone.utc) - timedelta(days=2),
+            sync_status="synced",
+        )
+        db_session.add(other_activity)
+        db_session.commit()
+        db_session.refresh(other_activity)
+
+        response = authenticated_client.post(f"/activities/{other_activity.id}/analyze")
+        assert response.status_code == 404

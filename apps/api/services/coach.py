@@ -41,6 +41,8 @@ Responsible for:
 
 import json as _json
 import logging
+import time
+from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -49,6 +51,7 @@ from sqlalchemy.orm import Session
 
 from models.activity import Activity
 from services.ollama import build_voice_modifier, format_pace
+from services.streaming import complete_event, error_event, progress_event
 
 logger = logging.getLogger(__name__)
 
@@ -801,28 +804,37 @@ _VERDICT_TAGS = frozenset({
 _TONES = frozenset({"critical", "good", "neutral"})
 
 
-async def run_analysis_for_activity(activity_id: int, user, db: Session) -> bool:
+async def run_analysis_for_activity(
+    activity_id: int, user, db: Session
+) -> AsyncGenerator[str, None]:
     """
-    Run Pak Har's full post-run analysis for a single activity.
+    Run Pak Har's full post-run analysis for a single activity as an SSE async generator.
 
-    Performs the complete analysis pipeline: builds context, calls Ollama for
-    the long-form analysis (streaming, collected), persists it, then makes a
-    second non-streaming call to extract verdict_short, verdict_tag, and tone.
-    Both results are committed to the Activity row.
+    Yields SSE-formatted strings (progress, complete, or error events) that the
+    router passes directly to StreamingResponse. Callers must NOT await this
+    function — iterate over it instead.
 
-    Designed to be called from background contexts (e.g. sync pipeline) as well
-    as from the HTTP route handler. Does NOT call check_rate_limit() — rate
-    limiting is the caller's responsibility for user-facing requests.
+    Stages (a progress event is yielded before each stage's work):
+    1. "Pulling your splits"   — fetch activity record, splits, streams, build splits context
+    2. "Reading the zones"     — build HR zone context, compute time-in-zones
+    3. "Checking your history" — fetch prior analyses, fetch weekly review, fetch planned session
+    4. "Writing the dispatch"  — format ANALYSIS_PROMPT + main Ollama streaming call (collected)
+    5. "Filing the verdict"    — second non-streaming Ollama call for verdict_short/verdict_tag/tone
+
+    On success: yields complete_event with analysis, verdict_short, verdict_tag, tone.
+    DB write (saving to the Activity row) happens after the complete_event yield.
+
+    On any exception: yields error_event(str(exc)) and returns.
+
+    Does NOT call check_rate_limit() — rate limiting is the caller's responsibility.
 
     Args:
         activity_id: Primary key of the Activity to analyze.
         user: User ORM instance owning the activity.
         db: Active database session.
 
-    Returns:
-        True on success (analysis persisted). False on any exception — all
-        exceptions are swallowed so a failed analysis never propagates to the
-        caller (critical for background sync jobs).
+    Yields:
+        SSE-formatted strings ready to be sent over text/event-stream.
     """
     # Lazy imports to avoid circular dependencies at module load time.
     from config import settings
@@ -836,8 +848,14 @@ async def run_analysis_for_activity(activity_id: int, user, db: Session) -> bool
         _READ_TIMEOUT,
     )
 
+    started_at = time.monotonic()
+
     try:
-        # 1. Fetch activity (must belong to the supplied user).
+        # -----------------------------------------------------------------
+        # Stage 1 — Pulling your splits
+        # -----------------------------------------------------------------
+        yield progress_event("Pulling your splits", started_at)
+
         activity = (
             db.query(Activity)
             .filter(
@@ -852,9 +870,10 @@ async def run_analysis_for_activity(activity_id: int, user, db: Session) -> bool
                 activity_id,
                 user.id,
             )
-            return False
+            yield error_event(f"Activity {activity_id} not found.")
+            return
 
-        # 2. Fetch recent activities for HR trend detection (excluding current).
+        # Fetch recent activities for HR trend detection (excluding current).
         recent_activities = (
             db.query(Activity)
             .filter(
@@ -868,8 +887,44 @@ async def run_analysis_for_activity(activity_id: int, user, db: Session) -> bool
         )
 
         splits = activity.splits or []
+        splits_context = _format_splits_context(splits) if splits else "(not available)"
 
-        # 3. Fetch last 3 previously-analyzed activities for historical context.
+        # -----------------------------------------------------------------
+        # Stage 2 — Reading the zones
+        # -----------------------------------------------------------------
+        yield progress_event("Reading the zones", started_at)
+
+        # Build run context string (includes HR zone classification + time-in-zones).
+        run_context = build_analysis_context(
+            activity,
+            recent_activities,
+            resting_hr=user.resting_hr or 60,
+            max_hr_observed=user.max_hr_observed,
+            max_hr=user.max_hr,
+            splits=splits,
+            # Analyses and plan data are added in stage 3 — pass None here so context
+            # is assembled incrementally. The full context is rebuilt in stage 4 once
+            # all data is in hand.
+        )
+
+        # HR zone context lines extracted from the run context.
+        if activity.average_hr is not None:
+            hr_zone_context = "\n".join(
+                line for line in run_context.splitlines()
+                if any(
+                    keyword in line.lower()
+                    for keyword in ("heart rate", "hr zone", "mismatch", "hr trend", "fatigue")
+                )
+            ) or "(HR data present but no zone lines extracted — check build_analysis_context)"
+        else:
+            hr_zone_context = "(no heart rate data for this run)"
+
+        # -----------------------------------------------------------------
+        # Stage 3 — Checking your history
+        # -----------------------------------------------------------------
+        yield progress_event("Checking your history", started_at)
+
+        # Fetch last 3 previously-analyzed activities for historical context.
         recent_analyzed = (
             db.query(Activity)
             .filter(
@@ -891,7 +946,7 @@ async def run_analysis_for_activity(activity_id: int, user, db: Session) -> bool
             if a.analysis
         ]
 
-        # 4. Fetch most recent weekly review.
+        # Fetch most recent weekly review.
         latest_review = (
             db.query(WeeklyReview)
             .filter(WeeklyReview.user_id == user.id)
@@ -900,7 +955,7 @@ async def run_analysis_for_activity(activity_id: int, user, db: Session) -> bool
         )
         weekly_review_text: str | None = latest_review.review_text if latest_review else None
 
-        # 5. Look up active training plan day matching this activity's date.
+        # Look up active training plan day matching this activity's date.
         active_plan = (
             db.query(TrainingPlan)
             .filter(
@@ -915,8 +970,13 @@ async def run_analysis_for_activity(activity_id: int, user, db: Session) -> bool
             activity_day = activity.activity_date.strftime("%A").lower()
             planned_session = active_plan.plan_data.get(activity_day)
 
-        # 6. Build run context string.
-        run_context = build_analysis_context(
+        # -----------------------------------------------------------------
+        # Stage 4 — Writing the dispatch (main Ollama streaming call)
+        # -----------------------------------------------------------------
+        yield progress_event("Writing the dispatch", started_at)
+
+        # Rebuild full context now that all data is in hand.
+        full_run_context = build_analysis_context(
             activity,
             recent_activities,
             resting_hr=user.resting_hr or 60,
@@ -929,20 +989,7 @@ async def run_analysis_for_activity(activity_id: int, user, db: Session) -> bool
             rpe=activity.rpe,
         )
 
-        # 7. Build HR zone context string.
-        if activity.average_hr is not None:
-            hr_zone_context = "\n".join(
-                line for line in run_context.splitlines()
-                if any(
-                    keyword in line.lower()
-                    for keyword in ("heart rate", "hr zone", "mismatch", "hr trend", "fatigue")
-                )
-            ) or "(HR data present but no zone lines extracted — check build_analysis_context)"
-        else:
-            hr_zone_context = "(no heart rate data for this run)"
-
-        # 8. Format context sections for prompt placeholders.
-        splits_context = _format_splits_context(splits) if splits else "(not available)"
+        # Format remaining context sections for prompt placeholders.
         historical_context = (
             _format_historical_context(recent_analyses) if recent_analyses else "(not available)"
         )
@@ -970,10 +1017,10 @@ async def run_analysis_for_activity(activity_id: int, user, db: Session) -> bool
         else:
             planned_session_context = "(no training plan active for this week)"
 
-        # 9. Assemble system prompt.
+        # Assemble system prompt.
         user_preferences = build_user_preferences_context(user)
         system_content = ANALYSIS_PROMPT.format(
-            run_context=run_context,
+            run_context=full_run_context,
             hr_zone_context=hr_zone_context,
             planned_session_context=planned_session_context,
             splits_context=splits_context,
@@ -999,7 +1046,7 @@ async def run_analysis_for_activity(activity_id: int, user, db: Session) -> bool
             user.id,
         )
 
-        # 10. Stream response from Ollama, collect into full_analysis.
+        # Stream response from Ollama, collect into full_analysis.
         chunks: list[str] = []
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(
@@ -1028,20 +1075,18 @@ async def run_analysis_for_activity(activity_id: int, user, db: Session) -> bool
 
         full_analysis = "".join(chunks)
 
-        # 11. Persist long-form analysis — always committed before verdict extraction.
-        activity.analysis = full_analysis
-        activity.analysis_generated_at = datetime.now(timezone.utc)
-        db.commit()
-        db.refresh(activity)
-
         logger.info(
-            "run_analysis_for_activity: analysis persisted for activity_id=%d user_id=%d (%d chars)",
+            "run_analysis_for_activity: analysis collected for activity_id=%d user_id=%d (%d chars)",
             activity_id,
             user.id,
             len(full_analysis),
         )
 
-        # 12. Second Ollama call — structured verdict extraction (best-effort).
+        # -----------------------------------------------------------------
+        # Stage 5 — Filing the verdict (structured extraction, best-effort)
+        # -----------------------------------------------------------------
+        yield progress_event("Filing the verdict", started_at)
+
         verdict_short: str | None = None
         verdict_tag: str | None = None
         tone: str | None = None
@@ -1131,14 +1176,30 @@ async def run_analysis_for_activity(activity_id: int, user, db: Session) -> bool
                 activity_id,
             )
 
-        # 13. Persist verdict fields.
+        # -----------------------------------------------------------------
+        # Emit complete event — DB write is fire-and-forget after yield
+        # -----------------------------------------------------------------
+        yield complete_event({
+            "analysis": full_analysis,
+            "verdict_short": verdict_short,
+            "verdict_tag": verdict_tag,
+            "tone": tone,
+        })
+
+        # Persist analysis + verdict fields after yielding the complete event.
+        activity.analysis = full_analysis
+        activity.analysis_generated_at = datetime.now(timezone.utc)
         activity.verdict_short = verdict_short
         activity.verdict_tag = verdict_tag
         activity.tone = tone
         db.commit()
         db.refresh(activity)
 
-        return True
+        logger.info(
+            "run_analysis_for_activity: persisted analysis+verdict for activity_id=%d user_id=%d",
+            activity_id,
+            user.id,
+        )
 
     except Exception as exc:  # noqa: BLE001
         logger.error(
@@ -1147,4 +1208,4 @@ async def run_analysis_for_activity(activity_id: int, user, db: Session) -> bool
             user.id,
             exc,
         )
-        return False
+        yield error_event(str(exc))

@@ -1,9 +1,17 @@
 // READY FOR QA
-// Component: Dispatch (TASK-130)
-// What was built: Tabloid broadsheet post-run analysis detail view.
-//   Shows Pak Har's verdict headline, stats strip, pace chart placeholder, dispatch prose with drop cap,
-//   splits table, HR zones placeholder, and weekly mileage rail.
-// Edge cases to test:
+// Component: Dispatch (TASK-190 — inline SSE progress strip for analysis)
+// What was built:
+//   - New props: analysisSteps (ProgressStep[]), analysisElapsedMs (number), analysisError (string | null)
+//   - isAnalyzing: boolean (kept same name — set to analysisStreaming from useProgressStream)
+//   - ProgressStep imported from @/hooks/useProgressStream (not redefined locally)
+//   - AnalysisProgressStrip sub-component: border 1px solid var(--color-ink), 12px 14px padding,
+//     Space Mono font, · pending / › running with ol-cursor / ✓ done, elapsed timer top-right M:SS
+//   - When isAnalyzing=true + analysisSteps.length > 0: shows AnalysisProgressStrip
+//   - When analysisError !== null: shows error in accent color + "Try again →" button
+//   - When idle + no analysis: shows "Get his take →" button
+//   - When idle + analysis exists: shows "Refresh his take →" button (right-aligned)
+//   - All three states handled in both the "no analysis" and "has analysis" code paths
+// Previous edge cases (TASK-130) still apply:
 //   - analysis is null: prose area shows "Pak Har hasn't seen this run yet."
 //   - splits prop is undefined or empty: shows "Splits unavailable" message; HR zones also unavailable
 //   - First and last split km pace cells rendered in accent/bold
@@ -20,6 +28,7 @@ import type React from 'react';
 import type { Activity, ActivityStreams } from '@/types/api';
 import type { WeeklyKmEntry } from './FrontPage';
 import { NewspaperChrome } from './NewspaperChrome';
+import type { ProgressStep } from '@/hooks/useProgressStream';
 
 export interface DispatchSplit {
   km: number;
@@ -42,6 +51,9 @@ export interface DispatchProps {
   onNav?: (key: string) => void;
   onAnalyze?: () => void;
   isAnalyzing?: boolean;
+  analysisSteps?: ProgressStep[];
+  analysisElapsedMs?: number;
+  analysisError?: string | null;
   rpe?: number | null;
   onRpeChange?: (rpe: number | null) => void;
   rpeSaveState?: 'idle' | 'saving' | 'saved';
@@ -270,6 +282,82 @@ function formatZoneTime(seconds: number): string {
   return `${m}m${s > 0 ? ` ${s}s` : ''}`;
 }
 
+// ---- Analysis progress strip ----
+
+function fmtElapsed(ms: number): string {
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+interface AnalysisProgressStripProps {
+  steps: ProgressStep[];
+  elapsedMs: number;
+}
+
+function AnalysisProgressStrip({ steps, elapsedMs }: AnalysisProgressStripProps) {
+  return (
+    <div
+      style={{
+        display: 'inline-block',
+        marginTop: 10,
+        border: '1px solid var(--color-ink)',
+        padding: '12px 14px',
+        fontFamily: 'var(--font-mono-tabloid)',
+        minWidth: 260,
+        position: 'relative',
+      }}
+    >
+      {/* Elapsed timer top-right */}
+      <span
+        style={{
+          position: 'absolute',
+          top: 10,
+          right: 12,
+          fontSize: 10,
+          fontFamily: 'var(--font-mono-tabloid)',
+          opacity: 0.55,
+        }}
+      >
+        {fmtElapsed(elapsedMs)}
+      </span>
+
+      {/* Step list */}
+      <div style={{ paddingRight: 40 }}>
+        {steps.map((step) => {
+          const isPending = step.status === 'pending';
+          const isRunning = step.status === 'running';
+          const isDone = step.status === 'done';
+
+          const prefix = isDone ? '✓' : isRunning ? '›' : '·';
+
+          return (
+            <div
+              key={step.label}
+              style={{
+                display: 'flex',
+                alignItems: 'baseline',
+                gap: 6,
+                fontSize: 11,
+                lineHeight: 1.7,
+                opacity: isPending ? 0.4 : 1,
+                color: isDone ? 'var(--color-muted)' : 'inherit',
+              }}
+            >
+              <span style={{ width: 10, flexShrink: 0 }}>{prefix}</span>
+              <span>
+                {step.label}
+                {isRunning && <span className="ol-cursor">_</span>}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ---- RPE helpers ----
 
 const RPE_LABELS: Record<number, string> = {
@@ -398,7 +486,7 @@ function RpeInput({ rpe, onRpeChange, rpeSaveState = 'idle' }: RpeInputProps) {
 
 // ---- Main component ----
 
-export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBack, onNav, onAnalyze, isAnalyzing, rpe = null, onRpeChange, rpeSaveState = 'idle' }: DispatchProps) {
+export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBack, onNav, onAnalyze, isAnalyzing, analysisSteps = [], analysisElapsedMs = 0, analysisError = null, rpe = null, onRpeChange, rpeSaveState = 'idle' }: DispatchProps) {
   const dateInfo = formatActivityDate(activity.activity_date);
   const headline = getVerdictHeadline(activity);
   const paragraphs = activity.analysis ? getAnalysisParagraphs(activity.analysis) : [];
@@ -1216,14 +1304,47 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                   <p className="font-body italic text-[13px] opacity-60">
                     Pak Har hasn&#39;t seen this run yet.
                   </p>
-                  {onAnalyze && (
+                  {isAnalyzing && analysisSteps.length > 0 ? (
+                    <AnalysisProgressStrip steps={analysisSteps} elapsedMs={analysisElapsedMs} />
+                  ) : analysisError !== null ? (
+                    <div style={{ marginTop: 12 }}>
+                      <p
+                        style={{
+                          fontFamily: 'var(--font-mono-tabloid)',
+                          fontSize: 11,
+                          color: 'var(--color-accent)',
+                          marginBottom: 8,
+                        }}
+                      >
+                        {analysisError}
+                      </p>
+                      {onAnalyze && (
+                        <button
+                          onClick={onAnalyze}
+                          style={{
+                            background: 'transparent',
+                            color: 'var(--color-accent)',
+                            border: '1px solid var(--color-accent)',
+                            padding: '10px 24px',
+                            fontFamily: 'var(--font-sans)',
+                            fontSize: 11,
+                            letterSpacing: 3,
+                            fontWeight: 700,
+                            textTransform: 'uppercase' as const,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Try again →
+                        </button>
+                      )}
+                    </div>
+                  ) : onAnalyze ? (
                     <button
                       onClick={onAnalyze}
-                      disabled={isAnalyzing}
                       style={{
                         marginTop: 12,
-                        background: isAnalyzing ? 'transparent' : 'var(--color-ink)',
-                        color: isAnalyzing ? 'var(--color-ink)' : 'var(--color-ink-on-ink)',
+                        background: 'var(--color-ink)',
+                        color: 'var(--color-ink-on-ink)',
                         border: '1px solid var(--color-ink)',
                         padding: '10px 24px',
                         fontFamily: 'var(--font-sans)',
@@ -1231,13 +1352,12 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                         letterSpacing: 3,
                         fontWeight: 700,
                         textTransform: 'uppercase' as const,
-                        cursor: isAnalyzing ? 'default' : 'pointer',
-                        opacity: isAnalyzing ? 0.5 : 1,
+                        cursor: 'pointer',
                       }}
                     >
-                      {isAnalyzing ? 'Filing dispatch_' : 'Get his take →'}
+                      Get his take →
                     </button>
-                  )}
+                  ) : null}
                 </>
               ) : (
                 <>
@@ -1268,28 +1388,62 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                     — PAK HAR · POST-RUN DISPATCH
                   </div>
 
-                  {/* Regenerate button */}
+                  {/* Regenerate button / progress strip */}
                   {onAnalyze && (
-                    <div className="text-right mt-3">
-                      <button
-                        onClick={onAnalyze}
-                        disabled={isAnalyzing}
-                        style={{
-                          background: isAnalyzing ? 'transparent' : 'var(--color-ink)',
-                          color: isAnalyzing ? 'var(--color-ink)' : 'var(--color-ink-on-ink)',
-                          border: '1px solid var(--color-ink)',
-                          padding: '10px 24px',
-                          fontFamily: 'var(--font-sans)',
-                          fontSize: 11,
-                          letterSpacing: 3,
-                          fontWeight: 700,
-                          textTransform: 'uppercase' as const,
-                          cursor: isAnalyzing ? 'default' : 'pointer',
-                          opacity: isAnalyzing ? 0.5 : 1,
-                        }}
-                      >
-                        {isAnalyzing ? 'Filing dispatch_' : 'Refresh his take →'}
-                      </button>
+                    <div className="mt-3">
+                      {isAnalyzing && analysisSteps.length > 0 ? (
+                        <AnalysisProgressStrip steps={analysisSteps} elapsedMs={analysisElapsedMs} />
+                      ) : analysisError !== null ? (
+                        <div>
+                          <p
+                            style={{
+                              fontFamily: 'var(--font-mono-tabloid)',
+                              fontSize: 11,
+                              color: 'var(--color-accent)',
+                              marginBottom: 8,
+                            }}
+                          >
+                            {analysisError}
+                          </p>
+                          <button
+                            onClick={onAnalyze}
+                            style={{
+                              background: 'transparent',
+                              color: 'var(--color-accent)',
+                              border: '1px solid var(--color-accent)',
+                              padding: '10px 24px',
+                              fontFamily: 'var(--font-sans)',
+                              fontSize: 11,
+                              letterSpacing: 3,
+                              fontWeight: 700,
+                              textTransform: 'uppercase' as const,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Try again →
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="text-right">
+                          <button
+                            onClick={onAnalyze}
+                            style={{
+                              background: 'var(--color-ink)',
+                              color: 'var(--color-ink-on-ink)',
+                              border: '1px solid var(--color-ink)',
+                              padding: '10px 24px',
+                              fontFamily: 'var(--font-sans)',
+                              fontSize: 11,
+                              letterSpacing: 3,
+                              fontWeight: 700,
+                              textTransform: 'uppercase' as const,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Refresh his take →
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </>

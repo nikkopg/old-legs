@@ -40,44 +40,37 @@
 #   - strava_activity_id deduplication — sync never creates duplicate rows
 
 # READY FOR QA
-# Feature: Post-run analysis with HR zone interpretation (TASK-007 + TASK-109)
-# Feature: Structured verdict extraction — verdict_short, verdict_tag, tone (TASK-133)
+# Feature: Post-run analysis — SSE streaming conversion (TASK-190)
 # What was built:
-#   - POST /activities/{activity_id}/analyze — triggers Pak Har's analysis for a specific run
-#   - Activity ownership guard: 404 if activity belongs to another user (no ID enumeration)
-#   - Rate limited (shared in-memory sliding window: 20 req/60s per user)
-#   - Full streamed response from Ollama collected first, then persisted and returned as JSON
-#   - Analysis stored in activity.analysis + activity.analysis_generated_at (UTC)
-#   - build_analysis_context() (services/coach.py) assembles run data + HR zone context:
-#       - average_hr classified into zone 1–5 (assumed max HR 185 bpm)
-#       - easy-run name + zone 3+ HR → mismatch flag injected into context
-#       - HR rising across last 3 comparable-distance runs → fatigue trend note injected
-#       - average_hr is None → HR section omitted entirely, no HR lines in prompt
-#   - ANALYSIS_PROMPT used (prompts/pak_har.py) — separate from SYSTEM_PROMPT used for chat
-#   - Second non-streaming Ollama call extracts structured verdict fields from the analysis text:
-#       - verdict_short: one-line summary ≤12 words (no praise, no fluff)
-#       - verdict_tag: one of PACED POORLY | ON PLAN | HELD THE LINE | FADED LATE |
-#                            FUELING | RESTRAINED | STEADY | NO SHOW
-#       - tone: one of critical | good | neutral
-#     Stored on the Activity row alongside the analysis. If the extraction call fails or
-#     Ollama returns malformed JSON / out-of-range values, all three fields are stored as
-#     null — the long-form analysis is always persisted regardless.
+#   - POST /activities/{activity_id}/analyze — now returns text/event-stream (StreamingResponse)
+#   - run_analysis_for_activity (services/coach.py) is now an async generator yielding SSE strings
+#   - Five progress events yielded before each stage's work:
+#       1. "Pulling your splits"   — fetch activity, recent activities, splits context
+#       2. "Reading the zones"     — build HR zone context via build_analysis_context()
+#       3. "Checking your history" — fetch prior analyses, weekly review, planned session
+#       4. "Writing the dispatch"  — format ANALYSIS_PROMPT + main Ollama streaming call (collected)
+#       5. "Filing the verdict"    — second non-streaming Ollama call for verdict fields
+#   - complete event: {"analysis": str, "verdict_short": str|null, "verdict_tag": str|null, "tone": str|null}
+#   - error event emitted on any exception — never raises HTTP 5xx from the stream
+#   - DB write (activity.analysis + verdict fields) happens after complete_event yield
+#   - Rate limit check and ownership guard still fire before the generator starts (HTTP 429/404)
 # Edge cases to test:
-#   - Unauthenticated → 401
-#   - Activity not found → 404
-#   - Activity belongs to different user → 404 (not 403)
-#   - Rate limit hit → 429
-#   - Ollama offline → 503
-#   - Ollama timeout (>60s) → 504
-#   - Activity with average_hr=None → no HR content in prompt or response
+#   - Unauthenticated → 401 (before stream)
+#   - Activity not found → 404 (before stream) for ownership guard
+#   - Rate limit hit → 429 (before stream)
+#   - Activity not found inside generator (edge case) → error event in stream
+#   - Ollama offline → error event in stream
+#   - Ollama timeout → error event in stream
+#   - Activity with average_hr=None → no HR content in prompt; complete event still emitted
 #   - Activity named "Easy Run" with zone 4 HR → mismatch flag in prompt
 #   - Fewer than 3 comparable recent runs → no fatigue trend note
 #   - HR rising across 3+ comparable runs at same distance → fatigue trend in prompt
 #   - Re-analyzing an already-analyzed activity — overwrites previous analysis (idempotent)
-#   - Verdict extraction: Ollama returns malformed JSON → verdict fields stored as null (no crash)
-#   - Verdict extraction: Ollama returns invalid verdict_tag or tone value → stored as null
-#   - Verdict extraction: Ollama offline on second call → verdict fields null, analysis still saved
-#   - Verdict extraction: empty full_analysis string → extraction skipped, fields stored as null
+#   - Verdict extraction: Ollama returns malformed JSON → verdict fields null, complete event emitted
+#   - Verdict extraction: Ollama returns invalid verdict_tag or tone → stored as null
+#   - Verdict extraction: empty full_analysis string → extraction skipped, complete event emitted
+#   - 5 progress events in order before complete event
+#   - Response headers: Cache-Control: no-cache, X-Accel-Buffering: no
 
 """
 Activities router.
@@ -93,6 +86,7 @@ from datetime import date, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 import httpx
@@ -300,34 +294,36 @@ async def analyze_activity(
     activity_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> dict:
+) -> StreamingResponse:
     """
-    POST /activities/{activity_id}/analyze — generate Pak Har's post-run analysis.
+    POST /activities/{activity_id}/analyze — generate Pak Har's post-run analysis as SSE.
 
-    Fetches the activity (ownership-guarded), builds a specific context string for
-    this single run, calls Ollama via stream_chat, collects the full response, then
-    persists it to activity.analysis and returns it as JSON.
-
-    The response is NOT streamed — the full analysis is assembled first, stored, then
-    returned so the frontend can treat it like any other JSON endpoint.
+    Streams progress events as each pipeline stage runs, then a complete event
+    containing the full analysis text and structured verdict fields. The Activity row
+    is updated after the complete event is emitted.
 
     Rate limited: shared in-memory sliding window, 20 req/60s per user.
 
     **Auth:** Requires `session_user_id` httpOnly cookie.
 
-    **Response (200):**
-    ```json
-    { "analysis": "<Pak Har's analysis text>" }
-    ```
+    **Response: text/event-stream**
+    - Progress events: ``{"type": "progress", "step": "<label>", "elapsed_ms": <int>}``
+    - Complete event: ``{"type": "complete", "data": {"analysis": str, "verdict_short": str|null, "verdict_tag": str|null, "tone": str|null}}``
+    - Error event: ``{"type": "error", "message": str}``
 
-    **Errors:**
+    Five progress step labels in order:
+    1. "Pulling your splits"
+    2. "Reading the zones"
+    3. "Checking your history"
+    4. "Writing the dispatch"
+    5. "Filing the verdict"
+
+    **Pre-stream errors (HTTP error codes, no SSE body):**
     - 401: Not authenticated
     - 404: Activity not found or does not belong to this user
     - 429: Rate limit exceeded
-    - 503: Ollama not running or unreachable
-    - 504: Ollama did not respond within 60 seconds
     """
-    # 1. Rate limit check (shared window with /coach/chat)
+    # 1. Rate limit check (shared window with /coach/chat) — fires before the stream starts.
     if not check_rate_limit(current_user.id):
         raise HTTPException(
             status_code=429,
@@ -335,6 +331,8 @@ async def analyze_activity(
         )
 
     # 2. Ownership guard — 404 if activity not found or belongs to another user.
+    #    This check fires before the stream starts so the client gets a real HTTP 404,
+    #    not an in-stream error event.
     activity = (
         db.query(Activity)
         .filter(
@@ -346,27 +344,12 @@ async def analyze_activity(
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
 
-    # 3. Delegate the full analysis pipeline to the shared service function.
-    #    run_analysis_for_activity() handles: context building, Ollama streaming,
-    #    analysis persistence, verdict extraction, and verdict persistence.
-    #    It swallows all internal exceptions and returns True/False.
-    success = await run_analysis_for_activity(activity_id, current_user, db)
-
-    if not success:
-        logger.error(
-            "analyze_activity: run_analysis_for_activity returned False for "
-            "activity_id=%d user_id=%d",
-            activity_id,
-            current_user.id,
-        )
-        raise HTTPException(
-            status_code=503,
-            detail="Pak Har is unavailable right now. Make sure Ollama is running.",
-        )
-
-    # 4. Re-fetch the persisted analysis text and return it.
-    db.refresh(activity)
-    return {"analysis": activity.analysis or ""}
+    # 3. Stream the full analysis pipeline via SSE.
+    return StreamingResponse(
+        run_analysis_for_activity(activity_id, current_user, db),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # READY FOR QA

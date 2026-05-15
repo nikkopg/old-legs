@@ -1,16 +1,14 @@
 // READY FOR QA
-// Feature: Activity detail page — Dispatch tabloid view (TASK-131) + RPE wiring
+// Feature: Activity detail page — inline SSE progress strip for analysis (TASK-190)
 // What was built:
-//   - /activities/[id] replaced with the Dispatch tabloid broadsheet component
-//   - Fetches single activity via GET /activities/{id} in parallel with all activities
-//   - Computes weeklyKm (last 4 ISO weeks, oldest-first) from the activity list
-//   - Passes activity, weeklyKm, splits (undefined — placeholder shown), and onBack to <Dispatch>
-//   - Loading state: dark frame with animated paper block (no spinner)
-//   - 404 error state: "Run not found."
-//   - Other error states: "Could not load this run."
-//   - 401 redirects to /
-//   - RPE input wired: handleRpeChange calls PATCH /activities/{id}/rpe, invalidates query, shows save state
-// Edge cases to test:
+//   - /activities/[id] replaced analyzeActivity mutation + isAnalyzing state with useProgressStream
+//   - ANALYSIS_STEPS define the 5 labeled stages (must match backend step labels exactly)
+//   - AnalysisStreamComplete interface: { analysis, verdict_short, verdict_tag, tone }
+//   - onComplete: sets streamedAnalysis state immediately, invalidates ['activity', id]
+//   - onError: sets analysisError state
+//   - analysisStreaming, analysisSteps, analysisElapsedMs, analysisError passed to Dispatch
+//   - Dispatch replaces button loading state with inline progress strip while streaming
+// Previous edge cases (TASK-131 + RPE wiring) still apply:
 //   - Activity ID that doesn't exist (404 → "Run not found.")
 //   - Activity with no analysis (Dispatch shows "Pak Har hasn't seen this run yet.")
 //   - Activity with no HR data (Dispatch stats strip shows "—" for AVG HR)
@@ -22,20 +20,44 @@
 //   - RPE save failure (silent — rpeSaveState resets to idle, optimistic UI value retained by component)
 //   - RPE null (no selection) — sends rpe: null to PATCH endpoint
 //   - rpeSaveState transitions: idle → saving → saved → idle (after 1500ms)
+//   - trigger() called while already streaming → no-op (hook guards double-trigger)
+//   - complete event → strip unmounts, analysis prose renders from streamedAnalysis immediately
+//   - ['activity', id] invalidation after complete → React Query refetches, activityData takes over
+//   - error event → inline error in accent + "Try again →" calls trigger()
 
 'use client';
 
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Dispatch } from '@/components/redesign';
 import type { DispatchSplit } from '@/components/redesign/Dispatch';
 import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton';
-import { getActivity, getActivities, analyzeActivity, saveRpe } from '@/lib/api';
+import { getActivity, getActivities, saveRpe } from '@/lib/api';
 import { formatPace } from '@/lib/formatters';
 import { computeWeeklyKm } from '@/lib/weeklyKm';
 import { useUser } from '@/hooks/useUser';
+import { useProgressStream } from '@/hooks/useProgressStream';
 import type { Activity, ApiError } from '@/types/api';
+
+// ---------------------------------------------------------------------------
+// Analysis stream types
+// ---------------------------------------------------------------------------
+
+interface AnalysisStreamComplete {
+  analysis: string;
+  verdict_short: string | null;
+  verdict_tag: string | null;
+  tone: string | null;
+}
+
+const ANALYSIS_STEPS = [
+  'Pulling your splits',
+  'Reading the zones',
+  'Checking your history',
+  'Writing the dispatch',
+  'Filing the verdict',
+]
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -78,9 +100,43 @@ export default function ActivityDetailPage() {
   const params = useParams();
   const id = Number(params.id);
   const queryClient = useQueryClient();
-  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [streamedAnalysis, setStreamedAnalysis] = useState<AnalysisStreamComplete | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [rpeSaveState, setRpeSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const { user } = useUser();
+
+  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+
+  const onAnalysisComplete = useCallback(
+    (data: AnalysisStreamComplete) => {
+      setStreamedAnalysis(data);
+      setAnalysisError(null);
+      queryClient.invalidateQueries({ queryKey: ['activity', id] });
+    },
+    [queryClient, id],
+  );
+
+  const onAnalysisError = useCallback((message: string) => {
+    setAnalysisError(message);
+  }, []);
+
+  const {
+    steps: analysisSteps,
+    elapsedMs: analysisElapsedMs,
+    isStreaming: analysisStreaming,
+    trigger: triggerAnalysis,
+  } = useProgressStream<AnalysisStreamComplete>({
+    url: `${apiBase}/activities/${id}/analyze`,
+    method: 'POST',
+    stepLabels: ANALYSIS_STEPS,
+    onComplete: onAnalysisComplete,
+    onError: onAnalysisError,
+  });
+
+  const handleAnalyze = useCallback(() => {
+    setAnalysisError(null);
+    triggerAnalysis();
+  }, [triggerAnalysis]);
 
   async function handleRpeChange(rpe: number | null): Promise<void> {
     setRpeSaveState('saving');
@@ -91,16 +147,6 @@ export default function ActivityDetailPage() {
       setTimeout(() => setRpeSaveState('idle'), 1500);
     } catch {
       setRpeSaveState('idle');
-    }
-  }
-
-  async function handleAnalyze(): Promise<void> {
-    setIsAnalyzing(true);
-    try {
-      await analyzeActivity(id);
-      await queryClient.invalidateQueries({ queryKey: ['activity', id] });
-    } finally {
-      setIsAnalyzing(false);
     }
   }
 
@@ -190,16 +236,30 @@ export default function ActivityDetailPage() {
       }))
     : undefined;
 
+  // Merge streamedAnalysis optimistic data into activity for immediate display
+  const effectiveActivity = streamedAnalysis !== null && !activity.analysis
+    ? {
+        ...activity,
+        analysis: streamedAnalysis.analysis,
+        verdict_short: streamedAnalysis.verdict_short ?? activity.verdict_short,
+        verdict_tag: streamedAnalysis.verdict_tag ?? activity.verdict_tag,
+        tone: streamedAnalysis.tone ?? activity.tone,
+      }
+    : activity;
+
   return (
     <Dispatch
-      activity={activity}
+      activity={effectiveActivity}
       weeklyKm={weeklyKm}
       splits={splits}
       userMaxHr={user?.max_hr ?? user?.max_hr_observed ?? null}
       userRhr={user?.resting_hr ?? null}
       onBack={() => router.push('/activities')}
       onAnalyze={handleAnalyze}
-      isAnalyzing={isAnalyzing}
+      isAnalyzing={analysisStreaming}
+      analysisSteps={analysisSteps}
+      analysisElapsedMs={analysisElapsedMs}
+      analysisError={analysisError}
       rpe={activity?.rpe ?? null}
       onRpeChange={handleRpeChange}
       rpeSaveState={rpeSaveState}
