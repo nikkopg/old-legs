@@ -77,6 +77,7 @@ interface DashboardPaperProps {
   weeklyReview: WeeklyReview | null;
   onGenerateReview: () => void;
   reviewStreaming: boolean;
+  reviewStreamedText: string;
   reviewSteps: ProgressStep[];
   reviewElapsedMs: number;
   reviewError: string | null;
@@ -226,6 +227,7 @@ export function DashboardPaper({
   weeklyReview,
   onGenerateReview,
   reviewStreaming,
+  reviewStreamedText = '',
   reviewSteps,
   reviewElapsedMs,
   reviewError,
@@ -304,54 +306,47 @@ export function DashboardPaper({
               >
                 Filed week of {fmtWeekOf(weeklyReview.week_start_date)}
               </Caps>
-              <div
-                style={{
-                  fontFamily: OL.body,
-                  fontSize: 14,
-                  lineHeight: 1.6,
-                  maxWidth: 560,
-                }}
-              >
-                {weeklyReview.review_text.split('\n\n').filter(Boolean).map((para, i) => (
-                  <p key={i} style={{ margin: '0 0 10px' }}>
-                    {para}
-                  </p>
-                ))}
-              </div>
               {reviewStreaming ? (
-                <ReviewProgressStrip steps={reviewSteps} elapsedMs={reviewElapsedMs} />
-              ) : reviewError ? (
-                <div style={{ marginTop: 10, fontFamily: OL.body, fontSize: 13 }}>
-                  <span style={{ color: OL.accent }}>Pak Har could not file this week.</span>
-                  {' '}
-                  <a
-                    href="#"
-                    onClick={(e) => { e.preventDefault(); onGenerateReview(); }}
-                    style={{
-                      color: OL.accent,
-                      fontStyle: 'italic',
-                      textDecoration: 'none',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Try again →
-                  </a>
-                </div>
+                <>
+                  {reviewStreamedText.length > 0 && reviewStreamedText.split('\n\n').filter(Boolean).map((para, i, arr) => {
+                    const isLast = i === arr.length - 1;
+                    const filingStep = reviewSteps.find((s) => s.label === 'Filing the headline');
+                    const filingStarted = filingStep !== undefined && filingStep.status !== 'pending';
+                    return (
+                      <p key={i} style={{ fontFamily: OL.body, fontSize: 14, lineHeight: 1.6, maxWidth: 560, margin: '0 0 10px' }}>
+                        {para}
+                        {isLast && !filingStarted && <span className="ol-cursor">_</span>}
+                        {isLast && filingStarted && (
+                          <span style={{ display: 'block', marginTop: 8, fontFamily: OL.mono, fontSize: 10, opacity: 0.55 }}>
+                            Filing the headline...
+                          </span>
+                        )}
+                      </p>
+                    );
+                  })}
+                  <ReviewProgressStrip steps={reviewSteps} elapsedMs={reviewElapsedMs} />
+                </>
               ) : (
-                <a
-                  href="#"
-                  onClick={(e) => { e.preventDefault(); onGenerateReview(); }}
-                  style={{
-                    fontFamily: OL.body,
-                    fontSize: 13,
-                    fontStyle: 'italic',
-                    color: OL.accent,
-                    cursor: 'pointer',
-                    textDecoration: 'none',
-                  }}
-                >
-                  Refresh his take →
-                </a>
+                <>
+                  <div style={{ fontFamily: OL.body, fontSize: 14, lineHeight: 1.6, maxWidth: 560 }}>
+                    {weeklyReview.review_text.split('\n\n').filter(Boolean).map((para, i) => (
+                      <p key={i} style={{ margin: '0 0 10px' }}>{para}</p>
+                    ))}
+                  </div>
+                  {reviewError ? (
+                    <div style={{ marginTop: 10, fontFamily: OL.body, fontSize: 13 }}>
+                      <span style={{ color: OL.accent }}>Pak Har could not file this week.</span>
+                      {' '}
+                      <a href="#" onClick={(e) => { e.preventDefault(); onGenerateReview(); }} style={{ color: OL.accent, fontStyle: 'italic', textDecoration: 'none', cursor: 'pointer' }}>
+                        Try again →
+                      </a>
+                    </div>
+                  ) : (
+                    <a href="#" onClick={(e) => { e.preventDefault(); onGenerateReview(); }} style={{ fontFamily: OL.body, fontSize: 13, fontStyle: 'italic', color: OL.accent, cursor: 'pointer', textDecoration: 'none' }}>
+                      Refresh his take →
+                    </a>
+                  )}
+                </>
               )}
             </>
           ) : (
@@ -380,41 +375,38 @@ export function DashboardPaper({
                 {totalRuns} run{totalRuns === 1 ? '' : 's'} filed so far this week.
               </div>
               {reviewStreaming ? (
-                <ReviewProgressStrip steps={reviewSteps} elapsedMs={reviewElapsedMs} />
+                <>
+                  {reviewStreamedText.length > 0 && reviewStreamedText.split('\n\n').filter(Boolean).map((para, i, arr) => {
+                    const isLast = i === arr.length - 1;
+                    const filingStep = reviewSteps.find((s) => s.label === 'Filing the headline');
+                    const filingStarted = filingStep !== undefined && filingStep.status !== 'pending';
+                    return (
+                      <p key={i} style={{ fontFamily: OL.body, fontSize: 14, lineHeight: 1.6, maxWidth: 560, margin: '0 0 10px' }}>
+                        {para}
+                        {isLast && !filingStarted && <span className="ol-cursor">_</span>}
+                        {isLast && filingStarted && (
+                          <span style={{ display: 'block', marginTop: 8, fontFamily: OL.mono, fontSize: 10, opacity: 0.55 }}>
+                            Filing the headline...
+                          </span>
+                        )}
+                      </p>
+                    );
+                  })}
+                  <ReviewProgressStrip steps={reviewSteps} elapsedMs={reviewElapsedMs} />
+                </>
               ) : reviewError ? (
                 <div style={{ marginTop: 10, fontFamily: OL.body, fontSize: 13 }}>
                   <span style={{ color: OL.accent }}>Pak Har could not file this week.</span>
                   {' '}
-                  <a
-                    href="#"
-                    onClick={(e) => { e.preventDefault(); onGenerateReview(); }}
-                    style={{
-                      color: OL.accent,
-                      fontStyle: 'italic',
-                      textDecoration: 'none',
-                      cursor: 'pointer',
-                    }}
-                  >
+                  <a href="#" onClick={(e) => { e.preventDefault(); onGenerateReview(); }} style={{ color: OL.accent, fontStyle: 'italic', textDecoration: 'none', cursor: 'pointer' }}>
                     Try again →
                   </a>
                 </div>
               ) : (
                 <a
                   href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    onGenerateReview();
-                  }}
-                  style={{
-                    display: 'inline-block',
-                    marginTop: 10,
-                    fontFamily: OL.body,
-                    fontSize: 13,
-                    fontStyle: 'italic',
-                    color: OL.accent,
-                    cursor: 'pointer',
-                    textDecoration: 'none',
-                  }}
+                  onClick={(e) => { e.preventDefault(); onGenerateReview(); }}
+                  style={{ display: 'inline-block', marginTop: 10, fontFamily: OL.body, fontSize: 13, fontStyle: 'italic', color: OL.accent, cursor: 'pointer', textDecoration: 'none' }}
                 >
                   No weekly assessment yet. File this week →
                 </a>
