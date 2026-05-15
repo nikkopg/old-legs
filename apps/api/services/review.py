@@ -33,7 +33,7 @@ from services.ollama import (
     build_voice_modifier,
     format_pace,
 )
-from services.streaming import complete_event, error_event, progress_event
+from services.streaming import complete_event, error_event, progress_event, token_event
 
 # Fallback max HR and resting HR constants (mirror coach.py defaults)
 _FALLBACK_MAX_HR: int = 185
@@ -526,7 +526,7 @@ async def generate_weekly_review(
                     "content": user_message,
                 },
             ],
-            "stream": False,
+            "stream": True,
         }
 
         url = f"{OLLAMA_BASE_URL}/api/chat"
@@ -539,6 +539,7 @@ async def generate_weekly_review(
             total_km,
         )
 
+        chunks: list[str] = []
         try:
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(
@@ -548,9 +549,22 @@ async def generate_weekly_review(
                     pool=5.0,
                 )
             ) as client:
-                response = await client.post(url, json=payload)
-                response.raise_for_status()
-                data = response.json()
+                async with client.stream("POST", url, json=payload) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if not line.strip():
+                            continue
+                        try:
+                            data = _json.loads(line)
+                        except _json.JSONDecodeError:
+                            logger.warning("generate_weekly_review: non-JSON line from Ollama — skipping")
+                            continue
+                        if data.get("done"):
+                            break
+                        content = data.get("message", {}).get("content")
+                        if content:
+                            chunks.append(content)
+                            yield token_event(content)
         except httpx.ConnectError as exc:
             logger.error("Ollama is unreachable at %s during weekly review generation", OLLAMA_BASE_URL)
             raise RuntimeError(
@@ -560,7 +574,7 @@ async def generate_weekly_review(
             logger.error("Ollama read timeout after %ss during weekly review generation", _READ_TIMEOUT)
             raise TimeoutError("Pak Har took too long to respond.") from exc
 
-        review_text: str = data.get("message", {}).get("content", "").strip()
+        review_text: str = "".join(chunks).strip()
         if not review_text:
             raise RuntimeError("Ollama returned an empty response for weekly review generation.")
 
