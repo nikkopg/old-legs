@@ -166,6 +166,27 @@ Endpoints in place: `/auth/*`, `/activities`, `/activities/{id}/analyze`, `/plan
 
 ---
 
+### ✅ Done (2026-05-15 — Streaming text in prose area + unified progress strip)
+
+**TASK-192: Unify analysis progress strip in activity dispatch**
+- Two different progress UIs were shown during analysis — a bordered step list before tokens arrived, then a compact horizontal inline strip once streaming started
+- Root cause: when streamed text was moved to the prose area, a second "compact" strip was added inline — two different visual languages for the same operation
+- Fixed: compact inline strip removed entirely; `AnalysisProgressStrip` (bordered box) used throughout
+- Streamed text renders above it in the prose area regardless of state — no layout jump mid-stream
+- Dead code in the regenerate button area removed (`isAnalyzing` check that could never be true in that branch)
+- 154/154 frontend tests passing
+
+**TASK-193: Stream weekly review text into prose area on dashboard**
+- Backend: `generate_weekly_review()` Stage 4 ("Writing the assessment") converted from blocking `stream=False` Ollama call to streaming — yields `token_event(content)` per chunk, assembles `review_text` from chunks; Stage 5 ("Filing the headline") remains non-streaming
+- Added `logger.warning` on `JSONDecodeError` (flagged by backend review — matches `coach.py` pattern)
+- Frontend: `reviewStreamedText` prop added to `DashboardPaper`; wired from `useProgressStream` in `dashboard/page.tsx`
+- Both "review exists" and "no review yet" branches now render streamed text in the prose area with `ReviewProgressStrip` below — same pattern as activity dispatch
+- "Filing the headline..." indicator appears on last streamed paragraph when that step starts
+- Old review prose hidden during a refresh stream (replaced by streamed text)
+- 157/157 backend, 154/154 frontend tests passing
+
+---
+
 ### ✅ Done (2026-05-15 — UI polish: remove activity dispatch pull-quote)
 
 **TASK-191: Remove pull-quote from activity dispatch**

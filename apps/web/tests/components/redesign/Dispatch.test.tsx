@@ -337,6 +337,83 @@ describe('Dispatch', () => {
     })
   })
 
+  describe('analysisStreamedText — streaming prose rendering', () => {
+    it('does not render streamed text when isAnalyzing is false', () => {
+      render(
+        <Dispatch
+          {...defaultProps}
+          activity={makeActivity({ analysis: null })}
+          isAnalyzing={false}
+          analysisStreamedText="Some streamed text"
+          analysisSteps={[]}
+        />,
+      )
+      // isAnalyzing=false → streamed text branch is not entered
+      expect(screen.queryByText('Some streamed text')).toBeNull()
+    })
+
+    it('renders streamed text in the main prose area when isAnalyzing and text is present', () => {
+      const steps = [
+        { label: 'Pulling your splits', status: 'done' as const },
+        { label: 'Reading the zones', status: 'done' as const },
+        { label: 'Checking your history', status: 'done' as const },
+        { label: 'Writing the dispatch', status: 'running' as const },
+        { label: 'Filing the verdict', status: 'pending' as const },
+      ]
+      render(
+        <Dispatch
+          {...defaultProps}
+          activity={makeActivity({ analysis: null })}
+          isAnalyzing={true}
+          analysisSteps={steps}
+          analysisStreamedText="That was a decent tempo effort."
+        />,
+      )
+      // Streamed text renders in the main prose area (not inside the progress strip)
+      expect(screen.getByText(/That was a decent tempo effort\./i)).toBeDefined()
+    })
+
+    it('renders "Filing the verdict..." indicator in prose area when verdict step is running', () => {
+      const steps = [
+        { label: 'Pulling your splits', status: 'done' as const },
+        { label: 'Reading the zones', status: 'done' as const },
+        { label: 'Checking your history', status: 'done' as const },
+        { label: 'Writing the dispatch', status: 'done' as const },
+        { label: 'Filing the verdict', status: 'running' as const },
+      ]
+      render(
+        <Dispatch
+          {...defaultProps}
+          activity={makeActivity({ analysis: null })}
+          isAnalyzing={true}
+          analysisSteps={steps}
+          analysisStreamedText="The pace held but the form started going."
+        />,
+      )
+      expect(screen.getByText(/Filing the verdict\.\.\./i)).toBeDefined()
+    })
+
+    it('does not show "Filing the verdict..." when verdict step is still pending', () => {
+      const steps = [
+        { label: 'Pulling your splits', status: 'done' as const },
+        { label: 'Reading the zones', status: 'done' as const },
+        { label: 'Checking your history', status: 'done' as const },
+        { label: 'Writing the dispatch', status: 'running' as const },
+        { label: 'Filing the verdict', status: 'pending' as const },
+      ]
+      render(
+        <Dispatch
+          {...defaultProps}
+          activity={makeActivity({ analysis: null })}
+          isAnalyzing={true}
+          analysisSteps={steps}
+          analysisStreamedText="Good effort in difficult conditions."
+        />,
+      )
+      expect(screen.queryByText(/Filing the verdict\.\.\./i)).toBeNull()
+    })
+  })
+
   describe('weekly km rail', () => {
     it('renders the LAST 4 WEEKS · KM section', () => {
       render(<Dispatch {...defaultProps} />)
