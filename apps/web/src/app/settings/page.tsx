@@ -42,14 +42,12 @@ import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton'
 import { getAuthStatus, disconnectStrava, resetPakHarContext, saveOnboarding } from '@/lib/api'
 import { useUser } from '@/hooks/useUser'
 import { useChatStore } from '@/store/chat'
-import type { ApiError, GoalEvent } from '@/types/api'
+import type { ApiError, GoalEvent, VoiceLevel } from '@/types/api'
 import { useTheme } from '@/hooks/useTheme'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-type VoiceLevel = 'gentle' | 'standard' | 'unfiltered'
 
 interface DeliveryPreferences {
   weeklyPlanMonday: boolean
@@ -135,6 +133,7 @@ export default function SettingsPage() {
         weeklyPlanMonday: userProfile.auto_plan_enabled ?? true,
         weeklyReviewSunday: userProfile.auto_review_enabled ?? true,
       })
+      setVoice(userProfile.coach_voice ?? 'standard')
       setPrefSeeded(true)
     }
   }, [userProfile, prefSeeded])
@@ -183,6 +182,7 @@ export default function SettingsPage() {
         race_date: preferences.raceDate || null,
         auto_plan_enabled: key === 'weeklyPlanMonday' ? next : deliveryPrefs.weeklyPlanMonday,
         auto_review_enabled: key === 'weeklyReviewSunday' ? next : deliveryPrefs.weeklyReviewSunday,
+        coach_voice: voice,
       })
     } catch {
       // Revert toggle on failure — no error UI, just silent rollback
@@ -229,6 +229,9 @@ export default function SettingsPage() {
         max_hr: parsedMaxHr,
         goal_event: preferences.goalEvent,
         race_date: preferences.raceDate || null,
+        auto_plan_enabled: deliveryPrefs.weeklyPlanMonday,
+        auto_review_enabled: deliveryPrefs.weeklyReviewSunday,
+        coach_voice: voice,
       })
       setPreferencesSaved(true)
       // Invalidate cache so the next visit seeds from fresh data, then allow

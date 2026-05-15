@@ -48,7 +48,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from models.activity import Activity
-from services.ollama import format_pace
+from services.ollama import build_voice_modifier, format_pace
 
 logger = logging.getLogger(__name__)
 
@@ -980,6 +980,7 @@ async def run_analysis_for_activity(activity_id: int, user, db: Session) -> bool
             historical_context=historical_context,
             weekly_review_context=weekly_review_context,
             user_preferences=user_preferences,
+            voice_modifier=build_voice_modifier(user.coach_voice),
         )
 
         payload = {

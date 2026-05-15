@@ -123,6 +123,8 @@ export type GoalEvent =
   | 'marathon'
   | 'ultra'
 
+export type VoiceLevel = 'gentle' | 'standard' | 'unfiltered'
+
 export interface UserProfile {
   id: number
   name: string
@@ -143,6 +145,7 @@ export interface UserProfile {
   race_date: string | null
   auto_plan_enabled: boolean
   auto_review_enabled: boolean
+  coach_voice: VoiceLevel
   created_at: string
   updated_at: string
 }
@@ -158,6 +161,7 @@ export interface OnboardingRequest {
   race_date?: string | null
   auto_plan_enabled?: boolean
   auto_review_enabled?: boolean
+  coach_voice?: VoiceLevel
 }
 
 export interface OnboardingResponse {

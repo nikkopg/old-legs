@@ -131,7 +131,7 @@ async def coach_chat(
         accumulated: list[str] = []
 
         try:
-            async for chunk in stream_chat(body.message, strava_context, user_preferences, plan_context, chat_history):
+            async for chunk in stream_chat(body.message, strava_context, user_preferences, plan_context, chat_history, coach_voice=current_user.coach_voice):
                 accumulated.append(chunk)
                 yield f"data: {chunk}\n\n"
 

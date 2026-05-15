@@ -44,7 +44,7 @@ import {
   FooterRail,
   NewspaperChrome,
 } from './NewspaperChrome';
-import type { GoalEvent } from '@/types/api';
+import type { GoalEvent, VoiceLevel } from '@/types/api';
 
 // ---------------------------------------------------------------------------
 // Goal event options
@@ -75,8 +75,6 @@ interface UserStats {
   weeklyPlans: number;
   lettersExchanged: number;
 }
-
-type VoiceLevel = 'gentle' | 'standard' | 'unfiltered';
 
 type Theme = 'light' | 'dark';
 

@@ -27,6 +27,8 @@ _VALID_GOAL_EVENTS: set[str] = {
     "ultra",
 }
 
+_VALID_COACH_VOICES: set[str] = {"gentle", "standard", "unfiltered"}
+
 
 class UserBase(BaseModel):
     name: str
@@ -39,6 +41,7 @@ class UserBase(BaseModel):
     resting_hr: int | None = None
     goal_event: Optional[str] = None
     race_date: Optional[date] = None
+    coach_voice: str = "standard"
 
 
 class UserCreate(UserBase):
@@ -69,6 +72,7 @@ class UserRead(UserBase):
     race_date: Optional[date] = None
     auto_plan_enabled: bool = True
     auto_review_enabled: bool = True
+    coach_voice: str
     created_at: datetime
     updated_at: datetime
 
@@ -117,6 +121,24 @@ class OnboardingRequest(BaseModel):
         True,
         description="If True, a weekly review is generated automatically every Sunday 20:00 WIB.",
     )
+    coach_voice: str = Field(
+        "standard",
+        description=(
+            "Controls how blunt Pak Har's responses are. "
+            "One of: gentle, standard, unfiltered."
+        ),
+    )
+
+    @field_validator("coach_voice")
+    @classmethod
+    def validate_coach_voice(cls, v: str) -> str:
+        """Reject unrecognised coach_voice values with a 422."""
+        if v not in _VALID_COACH_VOICES:
+            raise ValueError(
+                f"Invalid coach_voice '{v}'. "
+                f"Must be one of: {', '.join(sorted(_VALID_COACH_VOICES))}."
+            )
+        return v
 
     @field_validator("available_days")
     @classmethod

@@ -62,6 +62,15 @@ class User(Base):
     auto_plan_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
     auto_review_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, server_default="true")
 
+    # Coach voice preference — controls how blunt Pak Har is
+    # Values: "gentle" | "standard" | "unfiltered"
+    coach_voice: Mapped[str] = mapped_column(
+        String(16),
+        default="standard",
+        nullable=False,
+        server_default="standard",
+    )
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(

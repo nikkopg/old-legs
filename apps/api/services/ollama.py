@@ -277,12 +277,52 @@ def build_plan_context(user: User, db: Session) -> str:
     return "\n".join(lines)
 
 
+def build_voice_modifier(coach_voice: str) -> str:
+    """
+    Return a voice modifier block for injection into the Pak Har system prompt.
+
+    Controls the tonal range of Pak Har's responses without altering core
+    personality or factual content. Standard voice returns an empty string so
+    the prompt is unchanged for existing users.
+
+    Args:
+        coach_voice: One of "gentle", "standard", or "unfiltered".
+                     Unrecognised values fall back to "standard" (empty string).
+
+    Returns:
+        A multiline instruction block for the LLM, or an empty string for
+        "standard" and unknown values.
+    """
+    if coach_voice == "gentle":
+        return (
+            "Voice modifier — Gentle:\n"
+            "- Name what the data shows without rhetorical edge. Say the fact plainly.\n"
+            "- When something went well, acknowledge it in one sentence before moving to what needs to change.\n"
+            "- Say each criticism once, clearly, then stop. Do not return to it.\n"
+            "- Still specific. Still no vague advice. Still no hollow affirmations.\n"
+            "- Do not soften to the point of dishonesty. If the week was poor, say so — once."
+        )
+    if coach_voice == "unfiltered":
+        return (
+            "Voice modifier — Unfiltered:\n"
+            "- No diplomatic opener. Name what the data shows in the first sentence.\n"
+            "- Lead with the finding. Do not soften with context before delivering it.\n"
+            "- If the runner shows a pattern of avoidance, inconsistency, or self-deception, name it directly.\n"
+            "- Shorter responses. Say what matters, stop explaining yourself.\n"
+            "- You may ask one pointed question if the data raises one you cannot answer. One only.\n"
+            "- Still not cruel. Still specific. But no comfort — only fact."
+        )
+    # "standard" or any unrecognised value — no modifier
+    return ""
+
+
 async def stream_chat(
     user_message: str,
     strava_context: str,
     user_preferences: str,
     plan_context: str,
     chat_history: list[dict],
+    coach_voice: str = "standard",
 ) -> AsyncGenerator[str, None]:
     """
     Stream a chat response from Ollama using the Pak Har system prompt.
@@ -298,6 +338,8 @@ async def stream_chat(
         plan_context: Pre-built training plan context string from build_plan_context().
         chat_history: List of {"role": ..., "content": ...} dicts for the last N
                       messages (role values must be "user" or "assistant").
+        coach_voice: Tonal modifier — "gentle", "standard", or "unfiltered".
+                     Passed to build_voice_modifier() before formatting the system prompt.
 
     Yields:
         Decoded text chunks from the LLM response.
@@ -306,10 +348,12 @@ async def stream_chat(
         RuntimeError: If Ollama is unreachable (connection refused / DNS failure).
         TimeoutError: If Ollama does not begin responding within the read timeout.
     """
+    voice_modifier = build_voice_modifier(coach_voice)
     system_content = SYSTEM_PROMPT.format(
         strava_context=strava_context,
         user_preferences=user_preferences,
         plan_context=plan_context,
+        voice_modifier=voice_modifier,
     )
 
     messages = [{"role": "system", "content": system_content}]
