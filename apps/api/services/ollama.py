@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from models.activity import Activity
+from models.training_plan import TrainingPlan
 from models.user import User
 from prompts.pak_har import SYSTEM_PROMPT
 
@@ -158,7 +159,8 @@ def build_user_preferences_context(user: User) -> str:
 
     Returns:
         A multi-line string describing the user's weekly target, available days,
-        biggest struggle, and goal event. Falls back gracefully for unset fields.
+        biggest struggle, goal event, and heart rate data. Falls back gracefully
+        for unset fields; resting HR and max HR are omitted entirely when not set.
     """
     target = f"{user.weekly_km_target:.1f} km/week" if user.weekly_km_target else "not set"
     struggle = user.biggest_struggle if user.biggest_struggle else "not specified"
@@ -199,6 +201,79 @@ def build_user_preferences_context(user: User) -> str:
             race_context = f"Race date: {user.race_date} ({weeks_to_race} weeks away)"
         lines.append(f"- {race_context}")
 
+    if user.resting_hr is not None:
+        lines.append(f"- Resting HR: {user.resting_hr} bpm")
+
+    if user.max_hr is not None:
+        lines.append(f"- Max HR: {user.max_hr} bpm (user-set)")
+    elif user.max_hr_observed is not None:
+        lines.append(f"- Max HR: {user.max_hr_observed} bpm (observed)")
+
+    return "\n".join(lines)
+
+
+_DAY_ORDER = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+
+
+def build_plan_context(user: User, db: Session) -> str:
+    """
+    Build a plain-text summary of the user's most recent active training plan.
+
+    Queries TrainingPlan for the user's most recent active plan and formats
+    each day's session into a compact, LLM-friendly string. Injected into the
+    Pak Har chat system prompt so Pak Har can answer questions like "what am
+    I supposed to run today?" with plan-specific detail.
+
+    Args:
+        user: The authenticated User ORM object.
+        db: Active database session.
+
+    Returns:
+        A multi-line plain-text summary of the plan, or "No training plan on file."
+        if no active plan exists for the user.
+    """
+    plan = (
+        db.query(TrainingPlan)
+        .filter(
+            TrainingPlan.user_id == user.id,
+            TrainingPlan.is_active == True,  # noqa: E712
+        )
+        .order_by(TrainingPlan.week_start_date.desc())
+        .first()
+    )
+
+    if plan is None:
+        return "No training plan on file."
+
+    week_start = plan.week_start_date
+    week_end = week_start + timedelta(days=6)
+    plan_data: dict = plan.plan_data or {}
+    pak_har_notes: dict = plan.pak_har_notes or {}
+
+    lines = [
+        f"Current training plan (week of {week_start.isoformat()} to {week_end.isoformat()}):",
+    ]
+
+    for day_key in _DAY_ORDER:
+        day_label = day_key.capitalize()
+        day = plan_data.get(day_key, {})
+        session_type = day.get("type", "rest")
+        description = day.get("description", "").strip()
+        target = day.get("target", "").strip() if day.get("target") else ""
+
+        if session_type == "rest":
+            entry = f"- {day_label}: Rest"
+        else:
+            entry = f"- {day_label}: {description}"
+            if target:
+                entry += f" | Target: {target}"
+
+        lines.append(entry)
+
+    week_summary = pak_har_notes.get("week_summary", "").strip()
+    if week_summary:
+        lines.append(f"Week summary: {week_summary}")
+
     return "\n".join(lines)
 
 
@@ -206,6 +281,7 @@ async def stream_chat(
     user_message: str,
     strava_context: str,
     user_preferences: str,
+    plan_context: str,
     chat_history: list[dict],
 ) -> AsyncGenerator[str, None]:
     """
@@ -219,6 +295,7 @@ async def stream_chat(
         user_message: The raw message from the user.
         strava_context: Pre-built activity context string from build_strava_context().
         user_preferences: Pre-built preferences string from build_user_preferences_context().
+        plan_context: Pre-built training plan context string from build_plan_context().
         chat_history: List of {"role": ..., "content": ...} dicts for the last N
                       messages (role values must be "user" or "assistant").
 
@@ -232,6 +309,7 @@ async def stream_chat(
     system_content = SYSTEM_PROMPT.format(
         strava_context=strava_context,
         user_preferences=user_preferences,
+        plan_context=plan_context,
     )
 
     messages = [{"role": "system", "content": system_content}]
