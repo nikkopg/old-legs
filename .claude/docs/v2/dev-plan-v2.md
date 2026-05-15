@@ -176,6 +176,11 @@ Endpoints in place: `/auth/*`, `/activities`, `/activities/{id}/analyze`, `/plan
 - Dead code in the regenerate button area removed (`isAnalyzing` check that could never be true in that branch)
 - 154/154 frontend tests passing
 
+**TASK-194: Stream Stage 5 headline and verdict_short tokens to frontend**
+- Backend: Stage 5 in `review.py` and `coach.py` now outputs labeled plain text instead of JSON — headline/verdict_short first, then `TAG:` and `TONE:` lines. Yields `token_event()` per chunk. Parsing switches from `json.loads()` to line-splitting on `TAG:`/`TONE:` markers; all validation guards and fallbacks preserved.
+- Frontend: `useProgressStream` gains `stage5StreamedText` — tokens arriving while the last step is "running" route there instead of `streamedText`. `DashboardPaper` renders streaming headline in Abril Fatface 36px with `_` cursor during "Filing the headline". `Dispatch` renders streaming `verdict_short` below the sign-off line during "Filing the verdict".
+- 157/157 backend, 154/154 frontend tests passing
+
 **TASK-193: Stream weekly review text into prose area on dashboard**
 - Backend: `generate_weekly_review()` Stage 4 ("Writing the assessment") converted from blocking `stream=False` Ollama call to streaming — yields `token_event(content)` per chunk, assembles `review_text` from chunks
 - Stage 5 ("Filing the headline") also converted to streaming (`stream=True` + `aiter_lines()` loop, `verdict_chunks` collected, no `token_event` — output is JSON, not user-facing prose); adds `logger.warning` on `JSONDecodeError` and explicit `ConnectError`/`ReadTimeout` handlers to match Stage 4
