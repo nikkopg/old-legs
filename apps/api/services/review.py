@@ -611,10 +611,11 @@ async def generate_weekly_review(
                     ),
                 },
             ],
-            "stream": False,
+            "stream": True,
         }
 
         try:
+            verdict_chunks: list[str] = []
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(
                     connect=_CONNECT_TIMEOUT,
@@ -623,14 +624,23 @@ async def generate_weekly_review(
                     pool=5.0,
                 )
             ) as verdict_client:
-                verdict_response = await verdict_client.post(url, json=verdict_payload)
-                verdict_response.raise_for_status()
-                verdict_data = verdict_response.json()
+                async with verdict_client.stream("POST", url, json=verdict_payload) as verdict_response:
+                    verdict_response.raise_for_status()
+                    async for line in verdict_response.aiter_lines():
+                        if not line.strip():
+                            continue
+                        try:
+                            data = _json.loads(line)
+                        except _json.JSONDecodeError:
+                            logger.warning("generate_weekly_review stage 5: non-JSON line from Ollama — skipping")
+                            continue
+                        if data.get("done"):
+                            break
+                        content = data.get("message", {}).get("content")
+                        if content:
+                            verdict_chunks.append(content)
 
-            raw_verdict_content: str = (
-                verdict_data.get("message", {}).get("content", "")
-                or verdict_data.get("response", "")
-            ).strip()
+            raw_verdict_content: str = "".join(verdict_chunks).strip()
 
             parsed_verdict = _json.loads(raw_verdict_content)
 
@@ -658,6 +668,18 @@ async def generate_weekly_review(
                 tone,
             )
 
+        except httpx.ConnectError as exc:
+            logger.error(
+                "Ollama is unreachable at %s during weekly review stage 5 (headline)", OLLAMA_BASE_URL
+            )
+            raise RuntimeError(
+                "Pak Har is unavailable right now. Make sure Ollama is running."
+            ) from exc
+        except httpx.ReadTimeout as exc:
+            logger.error(
+                "Ollama read timeout after %ss during weekly review stage 5 (headline)", _READ_TIMEOUT
+            )
+            raise TimeoutError("Pak Har took too long to respond.") from exc
         except Exception as exc:  # noqa: BLE001
             logger.error(
                 "generate_weekly_review: verdict extraction failed for user_id=%d, week=%s: %s",
