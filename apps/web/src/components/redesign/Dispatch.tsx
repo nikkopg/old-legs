@@ -1305,76 +1305,26 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                 <>
                   {isAnalyzing && analysisSteps.length > 0 ? (
                     <>
-                      {analysisStreamedText.length > 0 ? (
-                        <>
-                          {/* Streamed analysis text in main prose area */}
-                          {getAnalysisParagraphs(analysisStreamedText).map((para, i) => {
-                            const isLast = i === getAnalysisParagraphs(analysisStreamedText).length - 1;
-                            const verdictStep = analysisSteps.find((s) => s.label === VERDICT_STEP);
-                            const verdictStarted = verdictStep !== undefined && verdictStep.status !== 'pending';
-                            return (
-                              <p
-                                key={i}
-                                className={`font-body text-[13px] leading-relaxed text-justify hyphens-auto ${i === 0 ? 'mt-[6px]' : ''} mb-[10px]`}
-                              >
-                                {para}
-                                {isLast && !verdictStarted && <span className="ol-cursor">_</span>}
-                                {isLast && verdictStarted && (
-                                  <span
-                                    style={{
-                                      display: 'block',
-                                      marginTop: 8,
-                                      fontFamily: 'var(--font-mono-tabloid)',
-                                      fontSize: 10,
-                                      opacity: 0.55,
-                                    }}
-                                  >
-                                    Filing the verdict...
-                                  </span>
-                                )}
-                              </p>
-                            );
-                          })}
-                          {/* Compact progress strip below streamed text — no border */}
-                          <div
-                            style={{
-                              marginTop: 6,
-                              fontFamily: 'var(--font-mono-tabloid)',
-                            }}
+                      {analysisStreamedText.length > 0 && getAnalysisParagraphs(analysisStreamedText).map((para, i, arr) => {
+                        const isLast = i === arr.length - 1;
+                        const verdictStep = analysisSteps.find((s) => s.label === VERDICT_STEP);
+                        const verdictStarted = verdictStep !== undefined && verdictStep.status !== 'pending';
+                        return (
+                          <p
+                            key={i}
+                            className={`font-body text-[13px] leading-relaxed text-justify hyphens-auto ${i === 0 ? 'mt-[6px]' : ''} mb-[10px]`}
                           >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                              <span style={{ fontSize: 9, textTransform: 'uppercase' as const, letterSpacing: '0.08em', opacity: 0.5 }}>
-                                Processing
+                            {para}
+                            {isLast && !verdictStarted && <span className="ol-cursor">_</span>}
+                            {isLast && verdictStarted && (
+                              <span style={{ display: 'block', marginTop: 8, fontFamily: 'var(--font-mono-tabloid)', fontSize: 10, opacity: 0.55 }}>
+                                Filing the verdict...
                               </span>
-                              <span style={{ fontSize: 10, opacity: 0.55 }}>
-                                {fmtElapsed(analysisElapsedMs)}
-                              </span>
-                            </div>
-                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' as const }}>
-                              {analysisSteps.map((step) => {
-                                const isDone = step.status === 'done';
-                                const isRunning = step.status === 'running';
-                                const prefix = isDone ? '✓' : isRunning ? '›' : '·';
-                                return (
-                                  <span
-                                    key={step.label}
-                                    style={{
-                                      fontSize: 10,
-                                      opacity: step.status === 'pending' ? 0.4 : isDone ? 0.6 : 1,
-                                      color: isDone ? 'var(--color-muted)' : 'inherit',
-                                    }}
-                                  >
-                                    {prefix} {step.label}
-                                  </span>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        </>
-                      ) : (
-                        /* No streamed text yet — show full progress strip */
-                        <AnalysisProgressStrip steps={analysisSteps} elapsedMs={analysisElapsedMs} />
-                      )}
+                            )}
+                          </p>
+                        );
+                      })}
+                      <AnalysisProgressStrip steps={analysisSteps} elapsedMs={analysisElapsedMs} />
                     </>
                   ) : analysisError !== null ? (
                     <div style={{ marginTop: 12 }}>
@@ -1438,12 +1388,10 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                 </>
               ) : (
                 <>
-                  {/* When refreshing analysis and streamed text is flowing: show streamed text in prose area */}
-                  {isAnalyzing && analysisSteps.length > 0 && analysisStreamedText.length > 0 ? (
+                  {isAnalyzing && analysisSteps.length > 0 ? (
                     <>
-                      {getAnalysisParagraphs(analysisStreamedText).map((para, i) => {
-                        const streamParas = getAnalysisParagraphs(analysisStreamedText);
-                        const isLast = i === streamParas.length - 1;
+                      {analysisStreamedText.length > 0 && getAnalysisParagraphs(analysisStreamedText).map((para, i, arr) => {
+                        const isLast = i === arr.length - 1;
                         const verdictStep = analysisSteps.find((s) => s.label === VERDICT_STEP);
                         const verdictStarted = verdictStep !== undefined && verdictStep.status !== 'pending';
                         return (
@@ -1454,56 +1402,14 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                             {para}
                             {isLast && !verdictStarted && <span className="ol-cursor">_</span>}
                             {isLast && verdictStarted && (
-                              <span
-                                style={{
-                                  display: 'block',
-                                  marginTop: 8,
-                                  fontFamily: 'var(--font-mono-tabloid)',
-                                  fontSize: 10,
-                                  opacity: 0.55,
-                                }}
-                              >
+                              <span style={{ display: 'block', marginTop: 8, fontFamily: 'var(--font-mono-tabloid)', fontSize: 10, opacity: 0.55 }}>
                                 Filing the verdict...
                               </span>
                             )}
                           </p>
                         );
                       })}
-                      {/* Compact progress strip below streamed text — no border */}
-                      <div
-                        style={{
-                          marginTop: 6,
-                          fontFamily: 'var(--font-mono-tabloid)',
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                          <span style={{ fontSize: 9, textTransform: 'uppercase' as const, letterSpacing: '0.08em', opacity: 0.5 }}>
-                            Processing
-                          </span>
-                          <span style={{ fontSize: 10, opacity: 0.55 }}>
-                            {fmtElapsed(analysisElapsedMs)}
-                          </span>
-                        </div>
-                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' as const }}>
-                          {analysisSteps.map((step) => {
-                            const isDone = step.status === 'done';
-                            const isRunning = step.status === 'running';
-                            const prefix = isDone ? '✓' : isRunning ? '›' : '·';
-                            return (
-                              <span
-                                key={step.label}
-                                style={{
-                                  fontSize: 10,
-                                  opacity: step.status === 'pending' ? 0.4 : isDone ? 0.6 : 1,
-                                  color: isDone ? 'var(--color-muted)' : 'inherit',
-                                }}
-                              >
-                                {prefix} {step.label}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </div>
+                      <AnalysisProgressStrip steps={analysisSteps} elapsedMs={analysisElapsedMs} />
                     </>
                   ) : (
                     <>
@@ -1527,13 +1433,10 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                         — PAK HAR · POST-RUN DISPATCH
                       </div>
 
-                      {/* Regenerate button / progress strip */}
+                      {/* Regenerate button */}
                       {onAnalyze && (
                         <div className="mt-3">
-                          {isAnalyzing && analysisSteps.length > 0 ? (
-                            /* Analyzing but no streamed text yet — show full progress strip */
-                            <AnalysisProgressStrip steps={analysisSteps} elapsedMs={analysisElapsedMs} />
-                          ) : analysisError !== null ? (
+                          {analysisError !== null ? (
                             <div>
                               <p
                                 style={{
