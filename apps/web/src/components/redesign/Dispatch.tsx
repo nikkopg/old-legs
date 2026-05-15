@@ -564,8 +564,11 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
               <div className="font-sans text-[10px] uppercase tracking-widest opacity-70 mb-2">
                 FRONT PAGE · VERDICT
               </div>
-              <h1 className="font-display text-[44px] leading-[1.1] tracking-[-0.015em] mb-3">
-                {toSentenceCase(headline)}
+              <h1 className="font-display text-[36px] leading-[1.05] tracking-[-0.015em] mb-3">
+                {isAnalyzing && verdictStreamedText.length > 0
+                  ? <>{extractStage5Text(verdictStreamedText)}<span className="ol-cursor">_</span></>
+                  : toSentenceCase(headline)
+                }
               </h1>
               <div className="font-sans text-[10px] uppercase tracking-widest opacity-70">
                 BY PAK HAR · SENIOR COACH · FILED {dateInfo.time} WIB
@@ -1441,16 +1444,6 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                       <div className="font-sans text-[9px] uppercase tracking-widest opacity-70 text-right mt-4">
                         — PAK HAR · POST-RUN DISPATCH
                       </div>
-
-                      {/* Verdict streaming preview — shown while isAnalyzing with stage5 content */}
-                      {isAnalyzing && verdictStreamedText.length > 0 && (() => {
-                        const extracted = extractStage5Text(verdictStreamedText)
-                        return extracted.length > 0 ? (
-                          <div style={{ marginTop: 8, fontFamily: 'var(--font-mono-tabloid)', fontSize: 11, opacity: 0.7 }}>
-                            {extracted}<span className="ol-cursor">_</span>
-                          </div>
-                        ) : null
-                      })()}
 
                       {/* Regenerate button */}
                       {onAnalyze && (

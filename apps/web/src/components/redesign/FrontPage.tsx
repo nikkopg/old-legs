@@ -196,7 +196,7 @@ export function FrontPage({
                     return `${d.dow} ${d.day} ${d.mon} · ${lead.name}`;
                   })()}
                 </div>
-                <div className="font-display text-[64px] leading-none tracking-[-0.03em] mb-3">
+                <div className="font-display text-[36px] leading-[1.05] tracking-[-0.015em] mb-3">
                   {toSentenceCase(getVerdictHeadline(lead))}
                 </div>
                 <div className="font-body text-[14px] leading-relaxed mb-3">

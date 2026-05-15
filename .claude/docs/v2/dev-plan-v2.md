@@ -178,7 +178,8 @@ Endpoints in place: `/auth/*`, `/activities`, `/activities/{id}/analyze`, `/plan
 
 **TASK-194: Stream Stage 5 headline and verdict_short tokens to frontend**
 - Backend: Stage 5 in `review.py` and `coach.py` now outputs labeled plain text instead of JSON — headline/verdict_short first, then `TAG:` and `TONE:` lines. Yields `token_event()` per chunk. Parsing switches from `json.loads()` to line-splitting on `TAG:`/`TONE:` markers; all validation guards and fallbacks preserved.
-- Frontend: `useProgressStream` gains `stage5StreamedText` — tokens arriving while the last step is "running" route there instead of `streamedText`. `DashboardPaper` renders streaming headline in Abril Fatface 36px with `_` cursor during "Filing the headline". `Dispatch` renders streaming `verdict_short` below the sign-off line during "Filing the verdict".
+- Frontend: `useProgressStream` gains `stage5StreamedText` — tokens arriving while the last step is "running" route there instead of `streamedText`. `DashboardPaper` renders streaming headline in Abril Fatface 36px with `_` cursor during "Filing the headline". `Dispatch` renders streaming `verdict_short` live in the `<h1>` verdict headline during "Filing the verdict" (fixed: was incorrectly placed near progress strip — moved to headline field where it belongs).
+- Bug fix: `verdict_short` `<h1>` in `Dispatch.tsx` resized from 44px → 36px; lead verdict headline in `FrontPage.tsx` resized from 64px → 36px — both now match the dashboard headline size.
 - 157/157 backend, 154/154 frontend tests passing
 
 **TASK-193: Stream weekly review text into prose area on dashboard**
