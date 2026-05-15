@@ -47,6 +47,7 @@ interface UseProgressStreamResult {
   elapsedMs: number
   isStreaming: boolean
   streamedText: string
+  stage5StreamedText: string
   trigger: () => void
   reset: () => void
 }
@@ -72,6 +73,13 @@ export function useProgressStream<T>(
   const [elapsedMs, setElapsedMs] = useState(0)
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamedText, setStreamedText] = useState('')
+  const [stage5StreamedText, setStage5StreamedText] = useState('')
+
+  // Stable ref so the stream reader closure always sees the latest steps
+  const stepsRef = useRef<ProgressStep[]>(initialSteps())
+  useEffect(() => {
+    stepsRef.current = steps
+  }, [steps])
 
   // Stable refs so the stream reader closure always has current callbacks
   const onCompleteRef = useRef(onComplete)
@@ -116,10 +124,13 @@ export function useProgressStream<T>(
   // ---------------------------------------------------------------------------
   const reset = useCallback(() => {
     stopStream()
-    setSteps(stepLabels.map((label) => ({ label, status: 'pending' })))
+    const freshSteps = stepLabels.map((label) => ({ label, status: 'pending' as const }))
+    setSteps(freshSteps)
+    stepsRef.current = freshSteps
     setElapsedMs(0)
     setIsStreaming(false)
     setStreamedText('')
+    setStage5StreamedText('')
   }, [stopStream, stepLabels])
 
   // ---------------------------------------------------------------------------
@@ -133,10 +144,13 @@ export function useProgressStream<T>(
     abortControllerRef.current = controller
 
     // Reset steps and start streaming state
-    setSteps(stepLabels.map((label) => ({ label, status: 'pending' })))
+    const freshSteps = stepLabels.map((label) => ({ label, status: 'pending' as const }))
+    setSteps(freshSteps)
+    stepsRef.current = freshSteps
     setElapsedMs(0)
     setIsStreaming(true)
     setStreamedText('')
+    setStage5StreamedText('')
 
     // Start elapsed-time ticker (100 ms resolution)
     const startedAt = Date.now()
@@ -215,14 +229,24 @@ export function useProgressStream<T>(
                   (s) => s.label === receivedStep
                 )
                 if (targetIndex === -1) return prev
-                return prev.map((s, i) => {
-                  if (i < targetIndex) return { ...s, status: 'done' }
-                  if (i === targetIndex) return { ...s, status: 'running' }
+                const next = prev.map((s, i) => {
+                  if (i < targetIndex) return { ...s, status: 'done' as const }
+                  if (i === targetIndex) return { ...s, status: 'running' as const }
                   return s
                 })
+                stepsRef.current = next
+                return next
               })
             } else if (event.type === 'token') {
-              setStreamedText((prev) => prev + event.content)
+              // Route token to the correct accumulator:
+              // If the last step is 'running', this is a Stage 5 token.
+              const lastStep = stepsRef.current[stepsRef.current.length - 1]
+              const isStage5 = lastStep?.status === 'running'
+              if (isStage5) {
+                setStage5StreamedText((prev) => prev + event.content)
+              } else {
+                setStreamedText((prev) => prev + event.content)
+              }
             } else if (event.type === 'complete') {
               clearElapsedInterval()
               setSteps((prev) => prev.map((s) => ({ ...s, status: 'done' })))
@@ -253,5 +277,5 @@ export function useProgressStream<T>(
     })()
   }, [url, method, body, stepLabels, clearElapsedInterval])
 
-  return { steps, elapsedMs, isStreaming, streamedText, trigger, reset }
+  return { steps, elapsedMs, isStreaming, streamedText, stage5StreamedText, trigger, reset }
 }

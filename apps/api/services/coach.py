@@ -1098,7 +1098,11 @@ async def run_analysis_for_activity(
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a JSON extractor. Output only valid JSON, no markdown.",
+                        "content": (
+                            "You are Pak Har. Extract a structured verdict from a post-run analysis.\n"
+                            "Output only plain text in this exact format: first line(s) = verdict_short, "
+                            "then 'TAG: <value>', then 'TONE: <value>'. No JSON. No markdown. No explanation."
+                        ),
                     },
                     {
                         "role": "user",
@@ -1107,50 +1111,73 @@ async def run_analysis_for_activity(
                             "---\n"
                             f"{full_analysis}\n"
                             "---\n\n"
-                            "Extract three fields:\n"
-                            "1. verdict_short: One sentence, max 12 words, summarising what this run showed. "
-                            "No praise, no fluff.\n"
-                            "2. verdict_tag: Pick exactly one from this list: "
-                            "PACED POORLY | ON PLAN | HELD THE LINE | FADED LATE | "
-                            "FUELING | RESTRAINED | STEADY | NO SHOW\n"
-                            "3. tone: Pick exactly one: critical | good | neutral\n\n"
-                            'Respond with only valid JSON: {"verdict_short": "...", "verdict_tag": "...", "tone": "..."}'
+                            "Output plain text in exactly this format:\n"
+                            "<verdict_short — one or two sentences in Pak Har voice summarising what this run showed. No praise, no fluff.>\n"
+                            "TAG: <one of: PACED POORLY | ON PLAN | HELD THE LINE | FADED LATE | FUELING | RESTRAINED | STEADY | NO SHOW>\n"
+                            "TONE: <one of: critical, good, neutral>\n\n"
+                            "No JSON. No markdown. No extra lines."
                         ),
                     },
                 ],
-                "stream": False,
+                "stream": True,
             }
 
             try:
+                verdict_chunks: list[str] = []
                 async with httpx.AsyncClient(
                     timeout=httpx.Timeout(
                         connect=_CONNECT_TIMEOUT, read=_READ_TIMEOUT, write=10.0, pool=5.0
                     )
                 ) as client:
-                    extraction_response = await client.post(url, json=extraction_payload)
-                    extraction_response.raise_for_status()
-                    extraction_data = extraction_response.json()
+                    async with client.stream("POST", url, json=extraction_payload) as extraction_response:
+                        extraction_response.raise_for_status()
+                        async for line in extraction_response.aiter_lines():
+                            if not line.strip():
+                                continue
+                            try:
+                                data = _json.loads(line)
+                            except _json.JSONDecodeError:
+                                logger.warning(
+                                    "run_analysis_for_activity: non-JSON line from Ollama "
+                                    "in stage 5 (activity_id=%d) — skipping",
+                                    activity_id,
+                                )
+                                continue
+                            if data.get("done"):
+                                break
+                            content = data.get("message", {}).get("content")
+                            if content:
+                                verdict_chunks.append(content)
+                                yield token_event(content)
 
-                raw_content: str = (
-                    extraction_data.get("message", {}).get("content", "")
-                    or extraction_data.get("response", "")
-                ).strip()
+                raw_content: str = "".join(verdict_chunks).strip()
 
-                parsed = _json.loads(raw_content)
+                # Parse plain-text format: verdict_short\nTAG: <tag>\nTONE: <tone>
+                raw_verdict_short_str: str | None = None
+                raw_verdict_tag_str: str | None = None
+                raw_tone_str: str | None = None
 
-                raw_verdict_short = parsed.get("verdict_short")
-                raw_verdict_tag = parsed.get("verdict_tag")
-                raw_tone = parsed.get("tone")
+                if "\nTAG:" in raw_content:
+                    verdict_part, tag_rest = raw_content.split("\nTAG:", 1)
+                    raw_verdict_short_str = verdict_part.strip()
+                    if "\nTONE:" in tag_rest:
+                        tag_part, tone_part = tag_rest.split("\nTONE:", 1)
+                        raw_verdict_tag_str = tag_part.strip()
+                        raw_tone_str = tone_part.strip()
+                    else:
+                        raw_verdict_tag_str = tag_rest.strip()
+                else:
+                    raw_verdict_short_str = raw_content.strip()
 
-                verdict_short = str(raw_verdict_short).strip() if raw_verdict_short else None
+                verdict_short = raw_verdict_short_str if raw_verdict_short_str else None
                 verdict_tag = (
-                    str(raw_verdict_tag).strip().upper()
-                    if raw_verdict_tag and str(raw_verdict_tag).strip().upper() in _VERDICT_TAGS
+                    raw_verdict_tag_str.upper()
+                    if raw_verdict_tag_str and raw_verdict_tag_str.upper() in _VERDICT_TAGS
                     else None
                 )
                 tone = (
-                    str(raw_tone).strip().lower()
-                    if raw_tone and str(raw_tone).strip().lower() in _TONES
+                    raw_tone_str.lower()
+                    if raw_tone_str and raw_tone_str.lower() in _TONES
                     else None
                 )
 

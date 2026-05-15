@@ -78,6 +78,7 @@ interface DashboardPaperProps {
   onGenerateReview: () => void;
   reviewStreaming: boolean;
   reviewStreamedText: string;
+  reviewHeadlineStreamedText?: string;
   reviewSteps: ProgressStep[];
   reviewElapsedMs: number;
   reviewError: string | null;
@@ -219,6 +220,12 @@ function ReviewProgressStrip({ steps, elapsedMs }: ReviewProgressStripProps) {
 
 // ---------- component ----------
 
+function extractStage5Text(raw: string): string {
+  const lines = raw.split('\n')
+  const cutoff = lines.findIndex(l => l.startsWith('TAG:') || l.startsWith('TONE:'))
+  return (cutoff === -1 ? lines : lines.slice(0, cutoff)).join('\n').trim()
+}
+
 export function DashboardPaper({
   weeklyStats,
   todayPlan,
@@ -228,6 +235,7 @@ export function DashboardPaper({
   onGenerateReview,
   reviewStreaming,
   reviewStreamedText = '',
+  reviewHeadlineStreamedText = '',
   reviewSteps,
   reviewElapsedMs,
   reviewError,
@@ -284,7 +292,21 @@ export function DashboardPaper({
                   </ToneBadge>
                 </div>
               )}
-              {weeklyReview.headline !== null && (
+              {reviewStreaming && reviewHeadlineStreamedText.length > 0 ? (
+                <h2
+                  style={{
+                    fontFamily: OL.display,
+                    fontWeight: 400,
+                    fontSize: 36,
+                    lineHeight: 1.05,
+                    letterSpacing: -0.3,
+                    margin: '8px 0 10px',
+                  }}
+                >
+                  {extractStage5Text(reviewHeadlineStreamedText)}
+                  <span className="ol-cursor">_</span>
+                </h2>
+              ) : weeklyReview.headline !== null ? (
                 <h2
                   style={{
                     fontFamily: OL.display,
@@ -297,7 +319,7 @@ export function DashboardPaper({
                 >
                   {weeklyReview.headline}
                 </h2>
-              )}
+              ) : null}
               <Caps
                 size={9}
                 ls={2}

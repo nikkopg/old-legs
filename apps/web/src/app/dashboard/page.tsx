@@ -111,7 +111,7 @@ export default function DashboardPage() {
     setReviewError(message)
   }, [])
 
-  const { steps: reviewSteps, elapsedMs: reviewElapsedMs, isStreaming: reviewStreaming, streamedText: reviewStreamedText, trigger } =
+  const { steps: reviewSteps, elapsedMs: reviewElapsedMs, isStreaming: reviewStreaming, streamedText: reviewStreamedText, stage5StreamedText: reviewHeadlineStreamedText, trigger } =
     useProgressStream<ReviewStreamComplete>({
       url: `${apiBase}/review/generate`,
       method: 'POST',
@@ -237,6 +237,7 @@ export default function DashboardPage() {
         onGenerateReview={onGenerateReview}
         reviewStreaming={reviewStreaming}
         reviewStreamedText={reviewStreamedText}
+        reviewHeadlineStreamedText={reviewHeadlineStreamedText}
         reviewSteps={reviewSteps}
         reviewElapsedMs={reviewElapsedMs}
         reviewError={reviewError}

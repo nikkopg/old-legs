@@ -63,6 +63,7 @@ export interface DispatchProps {
   analysisSteps?: ProgressStep[];
   analysisElapsedMs?: number;
   analysisStreamedText?: string;
+  verdictStreamedText?: string;
   analysisError?: string | null;
   rpe?: number | null;
   onRpeChange?: (rpe: number | null) => void;
@@ -364,6 +365,14 @@ function AnalysisProgressStrip({ steps, elapsedMs }: AnalysisProgressStripProps)
   );
 }
 
+// ---- Stage 5 text extractor ----
+
+function extractStage5Text(raw: string): string {
+  const lines = raw.split('\n')
+  const cutoff = lines.findIndex(l => l.startsWith('TAG:') || l.startsWith('TONE:'))
+  return (cutoff === -1 ? lines : lines.slice(0, cutoff)).join('\n').trim()
+}
+
 // ---- RPE helpers ----
 
 const RPE_LABELS: Record<number, string> = {
@@ -492,7 +501,7 @@ function RpeInput({ rpe, onRpeChange, rpeSaveState = 'idle' }: RpeInputProps) {
 
 // ---- Main component ----
 
-export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBack, onNav, onAnalyze, isAnalyzing, analysisSteps = [], analysisElapsedMs = 0, analysisStreamedText = '', analysisError = null, rpe = null, onRpeChange, rpeSaveState = 'idle' }: DispatchProps) {
+export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBack, onNav, onAnalyze, isAnalyzing, analysisSteps = [], analysisElapsedMs = 0, analysisStreamedText = '', verdictStreamedText = '', analysisError = null, rpe = null, onRpeChange, rpeSaveState = 'idle' }: DispatchProps) {
   const dateInfo = formatActivityDate(activity.activity_date);
   const headline = getVerdictHeadline(activity);
   const paragraphs = activity.analysis ? getAnalysisParagraphs(activity.analysis) : [];
@@ -1432,6 +1441,16 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                       <div className="font-sans text-[9px] uppercase tracking-widest opacity-70 text-right mt-4">
                         — PAK HAR · POST-RUN DISPATCH
                       </div>
+
+                      {/* Verdict streaming preview — shown while isAnalyzing with stage5 content */}
+                      {isAnalyzing && verdictStreamedText.length > 0 && (() => {
+                        const extracted = extractStage5Text(verdictStreamedText)
+                        return extracted.length > 0 ? (
+                          <div style={{ marginTop: 8, fontFamily: 'var(--font-mono-tabloid)', fontSize: 11, opacity: 0.7 }}>
+                            {extracted}<span className="ol-cursor">_</span>
+                          </div>
+                        ) : null
+                      })()}
 
                       {/* Regenerate button */}
                       {onAnalyze && (

@@ -594,7 +594,8 @@ async def generate_weekly_review(
                     "role": "system",
                     "content": (
                         "You are Pak Har. Extract a structured summary from a weekly running assessment.\n"
-                        "Output only valid JSON. No markdown. No explanation.\n"
+                        "Output only plain text in this exact format: first line = headline, "
+                        "then 'TAG: <value>', then 'TONE: <value>'. No JSON. No markdown. No explanation.\n"
                         "Voice rules: no exclamation points, no hollow praise, be specific and direct."
                     ),
                 },
@@ -602,12 +603,11 @@ async def generate_weekly_review(
                     "role": "user",
                     "content": (
                         f"Weekly assessment:\n{review_text}\n\n"
-                        "Return JSON with exactly these fields:\n"
-                        '- "headline": one sentence summarising this week, 12 words or fewer, Pak Har voice\n'
-                        '- "verdict_tag": one value from this exact list: '
-                        "STRONG WEEK, ON PLAN, BUILDING, LIGHT WEEK, FADING, MISSED RUNS, CONSISTENT, NO RUNS\n"
-                        '- "tone": one of: critical, good, neutral\n\n'
-                        "Return only the JSON object."
+                        "Output plain text in exactly this format:\n"
+                        "<headline — one sentence summarising this week, 12 words or fewer, Pak Har voice>\n"
+                        "TAG: <one of: STRONG WEEK, ON PLAN, BUILDING, LIGHT WEEK, FADING, MISSED RUNS, CONSISTENT, NO RUNS>\n"
+                        "TONE: <one of: critical, good, neutral>\n\n"
+                        "No JSON. No markdown. No extra lines."
                     ),
                 },
             ],
@@ -639,24 +639,36 @@ async def generate_weekly_review(
                         content = data.get("message", {}).get("content")
                         if content:
                             verdict_chunks.append(content)
+                            yield token_event(content)
 
             raw_verdict_content: str = "".join(verdict_chunks).strip()
 
-            parsed_verdict = _json.loads(raw_verdict_content)
+            # Parse plain-text format: headline\nTAG: <tag>\nTONE: <tone>
+            raw_headline: str | None = None
+            raw_tag: str | None = None
+            raw_tone_str: str | None = None
 
-            raw_headline = parsed_verdict.get("headline")
-            raw_tag = parsed_verdict.get("verdict_tag")
-            raw_tone = parsed_verdict.get("tone")
+            if "\nTAG:" in raw_verdict_content:
+                headline_part, tag_rest = raw_verdict_content.split("\nTAG:", 1)
+                raw_headline = headline_part.strip()
+                if "\nTONE:" in tag_rest:
+                    tag_part, tone_part = tag_rest.split("\nTONE:", 1)
+                    raw_tag = tag_part.strip()
+                    raw_tone_str = tone_part.strip()
+                else:
+                    raw_tag = tag_rest.strip()
+            else:
+                raw_headline = raw_verdict_content.strip()
 
-            headline = str(raw_headline).strip() if raw_headline else None
+            headline = raw_headline if raw_headline else None
             verdict_tag = (
-                str(raw_tag).strip().upper()
-                if raw_tag and str(raw_tag).strip().upper() in _WEEKLY_VERDICT_TAGS
+                raw_tag.upper()
+                if raw_tag and raw_tag.upper() in _WEEKLY_VERDICT_TAGS
                 else None
             )
             tone = (
-                str(raw_tone).strip().lower()
-                if raw_tone and str(raw_tone).strip().lower() in _TONES
+                raw_tone_str.lower()
+                if raw_tone_str and raw_tone_str.lower() in _TONES
                 else None
             )
 

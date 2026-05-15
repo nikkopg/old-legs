@@ -125,6 +125,7 @@ export default function ActivityDetailPage() {
     elapsedMs: analysisElapsedMs,
     isStreaming: analysisStreaming,
     streamedText: analysisStreamedText,
+    stage5StreamedText: verdictStreamedText,
     trigger: triggerAnalysis,
   } = useProgressStream<AnalysisStreamComplete>({
     url: `${apiBase}/activities/${id}/analyze`,
@@ -261,6 +262,7 @@ export default function ActivityDetailPage() {
       analysisSteps={analysisSteps}
       analysisElapsedMs={analysisElapsedMs}
       analysisStreamedText={analysisStreamedText}
+      verdictStreamedText={verdictStreamedText}
       analysisError={analysisError}
       rpe={activity?.rpe ?? null}
       onRpeChange={handleRpeChange}
