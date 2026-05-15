@@ -1,31 +1,36 @@
 # READY FOR QA
-# Feature: Weekly training plan generation (TASK-008)
+# Feature: Weekly training plan generation — SSE streaming conversion (TASK-189)
 # What was built:
-#   - POST /plan/generate — generates a 7-day training plan via Ollama (Pak Har voice),
-#     deactivates any prior active plan, persists and returns the new plan.
-#   - GET /plan/current — returns the most recent active plan for the authenticated user.
+#   - POST /plan/generate — now returns text/event-stream (StreamingResponse).
+#     generate_plan_with_ollama is an async generator that yields SSE progress events before
+#     each stage, a complete event on success (with the serialised TrainingPlan dict under
+#     data.plan), and an error event on any failure. The TrainingPlan row is persisted to
+#     the DB before the complete event is sent.
+#   - GET /plan/current — unchanged. Returns the most recent active plan as JSON.
 # Edge cases to test:
-#   - No prior activity data: Ollama receives "no recent activity" context — plan should
-#     still be generated (conservative/beginner defaults expected from Pak Har).
-#   - Ollama offline: 503 returned, no DB writes occur.
-#   - Ollama returns malformed JSON: 500 returned with detail message.
-#   - Ollama wraps output in markdown code fences (```json): parser strips them correctly.
+#   - Rate limit exceeded (>20 req/60s): 429 returned before stream starts.
+#   - Unauthenticated requests: 401 returned before stream starts.
+#   - No prior activity data: stream completes with plan generated on sparse context.
+#   - Ollama offline: error event in stream with RuntimeError message.
+#   - Ollama timeout: error event in stream with TimeoutError message.
+#   - Ollama returns malformed JSON: error event in stream with ValueError message.
+#   - Ollama wraps output in markdown code fences: parser strips them correctly.
 #   - Multiple active plans before generate: all are deactivated, only new one is_active=True.
+#   - Happy path: 5 progress events followed by one complete event with plan data.
 #   - GET /plan/current with no plan: 404 returned.
-#   - Rate limit exceeded (>20 req/60s): 429 returned.
-#   - Unauthenticated requests: 401 returned on both endpoints.
 
 """
 Training plan router.
 
 Endpoints:
-    POST /plan/generate  — generate a new 7-day plan via Ollama
+    POST /plan/generate  — generate a new 7-day plan via Ollama (SSE stream)
     GET  /plan/current   — retrieve the current active plan
 """
 
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from dependencies import get_current_user
@@ -40,26 +45,30 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/generate", response_model=TrainingPlanRead)
+@router.post("/generate")
 async def generate_plan(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> TrainingPlanRead:
+) -> StreamingResponse:
     """
-    Generate a new 7-day training plan for the authenticated user.
+    Generate a new 7-day training plan for the authenticated user as an SSE stream.
 
     Calls Ollama with Pak Har's plan prompt and the user's last 4 weeks of
-    activity data. Deactivates any previously active plan, persists the new
-    one, and returns it.
+    activity data. Streams progress events as each stage completes, then a
+    complete event containing the serialised TrainingPlan. Deactivates any
+    previously active plan and persists the new one before emitting the
+    complete event.
 
     Rate limited: 20 requests/60s per user (shared sliding window).
 
+    Response: text/event-stream
+      progress events: {"type": "progress", "step": "<label>", "elapsed_ms": <int>}
+      complete event:  {"type": "complete", "data": {"plan": <TrainingPlanRead dict>}}
+      error event:     {"type": "error", "message": str}
+
     Raises:
         401: Not authenticated.
-        429: Rate limit exceeded.
-        503: Ollama is not running or unreachable.
-        504: Ollama did not respond within the timeout.
-        500: Ollama returned a response that could not be parsed as a valid plan.
+        429: Rate limit exceeded (before stream starts).
     """
     if not check_rate_limit(user.id):
         raise HTTPException(
@@ -67,22 +76,11 @@ async def generate_plan(
             detail="Too many requests. Wait a moment before generating another plan.",
         )
 
-    try:
-        plan = await generate_plan_with_ollama(user=user, db=db)
-    except RuntimeError as exc:
-        logger.error("Ollama unreachable during plan generation: %s", exc)
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except TimeoutError as exc:
-        logger.error("Ollama timeout during plan generation: %s", exc)
-        raise HTTPException(status_code=504, detail=str(exc)) from exc
-    except ValueError as exc:
-        logger.error("Plan parse error for user_id=%d: %s", user.id, exc)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Plan generation failed — Pak Har returned something unexpected. Try again.",
-        ) from exc
-
-    return TrainingPlanRead.model_validate(plan)
+    return StreamingResponse(
+        generate_plan_with_ollama(user=user, db=db),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/current", response_model=TrainingPlanRead)

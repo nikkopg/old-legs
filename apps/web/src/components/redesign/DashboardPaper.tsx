@@ -1,20 +1,24 @@
 "use client";
 
 // READY FOR QA
-// Component: DashboardPaper (TASK-184 — weekly review in Today's Lead)
-// What was built: weeklyReview prop replaces heroHeadline() formula when a review exists.
+// Component: DashboardPaper (TASK-188 — inline SSE progress strip for review generation)
+// What was built:
+//   - New props: reviewStreaming, reviewSteps, reviewElapsedMs (from useProgressStream)
+//   - Removed prop: reviewGenerating (replaced by reviewStreaming)
+//   - ReviewProgressStrip sub-component renders while reviewStreaming=true
+//     · step list: pending (·, opacity 0.4) / running (›, full opacity, ol-cursor) / done (✓)
+//     · elapsed timer top-right (Space Mono 10px, M:SS format)
+//     · border 1px solid var(--color-ink), padding 12px 14px, Space Mono font
+//   - When reviewStreaming ends and weeklyReview is set → strip unmounts, prose renders
+//   - Error state → "Pak Har could not file this week." + "Try again →" calls onGenerateReview
+// Previous edge cases (TASK-184) still apply:
 //   - weeklyReview != null → "Filed week of X" metadata + review_text paragraphs (split \n\n)
-//   - weeklyReview == null → heroHeadline() formula + existing body + "No weekly assessment yet" link
-//   - onGenerateReview fires when the link is clicked
-// New (headline + ToneBadge on weekly review):
+//   - weeklyReview == null → heroHeadline() formula + "No weekly assessment yet" link
 //   - weeklyReview.verdict_tag != null → ToneBadge rendered above headline
-//   - weeklyReview.headline != null → Abril Fatface 36px headline rendered above "Filed week of X"
-//   - Both null (review generated before this feature shipped) → layout unchanged
+//   - weeklyReview.headline != null → Abril Fatface 36px headline
 // Previous edge cases (TASK-136) still apply:
 //   - todayPlan=null shows "No plan filed yet." fallback
 //   - lastRun=null shows "No run dispatched yet." fallback
-//   - weeklyStats.totalKm < targetKm*0.5 → headline "Week is thin. Pick it up." (null review only)
-//   - weeklyStats.totalKm >= targetKm → headline "Target met. Don't stop now." (null review only)
 //   - lastRun.avgHr=null shows "—" in Box Score
 //   - onOpenRun, onOpenPlan, onNav callbacks fire correctly
 
@@ -31,6 +35,7 @@ import {
   ToneBadge,
 } from './NewspaperChrome';
 import type { WeeklyReview } from '@/types/api';
+import type { ProgressStep } from '@/hooks/useProgressStream';
 
 // ---------- interfaces ----------
 
@@ -71,7 +76,9 @@ interface DashboardPaperProps {
   lastSyncedAt: string | null;
   weeklyReview: WeeklyReview | null;
   onGenerateReview: () => void;
-  reviewGenerating: boolean;
+  reviewStreaming: boolean;
+  reviewSteps: ProgressStep[];
+  reviewElapsedMs: number;
   reviewError: string | null;
   onOpenRun: (id: number) => void;
   onOpenPlan: () => void;
@@ -133,6 +140,82 @@ function fmtWeekOf(dateStr: string): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
+// ---------- ReviewProgressStrip ----------
+
+function fmtElapsed(ms: number): string {
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+interface ReviewProgressStripProps {
+  steps: ProgressStep[];
+  elapsedMs: number;
+}
+
+function ReviewProgressStrip({ steps, elapsedMs }: ReviewProgressStripProps) {
+  return (
+    <div
+      style={{
+        display: 'inline-block',
+        marginTop: 10,
+        border: `1px solid var(--color-ink)`,
+        padding: '12px 14px',
+        fontFamily: OL.mono,
+        minWidth: 280,
+        position: 'relative',
+      }}
+    >
+      {/* Elapsed timer top-right */}
+      <span
+        style={{
+          position: 'absolute',
+          top: 10,
+          right: 12,
+          fontSize: 10,
+          fontFamily: OL.mono,
+          opacity: 0.55,
+        }}
+      >
+        {fmtElapsed(elapsedMs)}
+      </span>
+
+      {/* Step list */}
+      <div style={{ paddingRight: 40 }}>
+        {steps.map((step) => {
+          const isPending = step.status === 'pending';
+          const isRunning = step.status === 'running';
+          const isDone = step.status === 'done';
+
+          const prefix = isDone ? '✓' : isRunning ? '›' : '·';
+
+          return (
+            <div
+              key={step.label}
+              style={{
+                display: 'flex',
+                alignItems: 'baseline',
+                gap: 6,
+                fontSize: 11,
+                lineHeight: 1.7,
+                opacity: isPending ? 0.4 : 1,
+                color: isDone ? OL.muted : 'inherit',
+              }}
+            >
+              <span style={{ width: 10, flexShrink: 0 }}>{prefix}</span>
+              <span>
+                {step.label}
+                {isRunning && <span className="ol-cursor">_</span>}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ---------- component ----------
 
 export function DashboardPaper({
@@ -142,7 +225,9 @@ export function DashboardPaper({
   lastSyncedAt,
   weeklyReview,
   onGenerateReview,
-  reviewGenerating,
+  reviewStreaming,
+  reviewSteps,
+  reviewElapsedMs,
   reviewError,
   onOpenRun,
   onOpenPlan,
@@ -233,10 +318,25 @@ export function DashboardPaper({
                   </p>
                 ))}
               </div>
-              {reviewGenerating ? (
-                <span style={{ fontFamily: OL.mono, fontSize: 12, color: OL.muted }}>
-                  Filing...
-                </span>
+              {reviewStreaming ? (
+                <ReviewProgressStrip steps={reviewSteps} elapsedMs={reviewElapsedMs} />
+              ) : reviewError ? (
+                <div style={{ marginTop: 10, fontFamily: OL.body, fontSize: 13 }}>
+                  <span style={{ color: OL.accent }}>Pak Har could not file this week.</span>
+                  {' '}
+                  <a
+                    href="#"
+                    onClick={(e) => { e.preventDefault(); onGenerateReview(); }}
+                    style={{
+                      color: OL.accent,
+                      fontStyle: 'italic',
+                      textDecoration: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Try again →
+                  </a>
+                </div>
               ) : (
                 <a
                   href="#"
@@ -252,11 +352,6 @@ export function DashboardPaper({
                 >
                   Refresh his take →
                 </a>
-              )}
-              {reviewError && (
-                <div style={{ marginTop: 6, fontFamily: OL.body, fontSize: 13, color: OL.accent }}>
-                  {reviewError}
-                </div>
               )}
             </>
           ) : (
@@ -284,16 +379,25 @@ export function DashboardPaper({
                 <b>{totalKm.toFixed(1)} km</b> across{' '}
                 {totalRuns} run{totalRuns === 1 ? '' : 's'} filed so far this week.
               </div>
-              {reviewGenerating ? (
-                <span style={{
-                  display: 'inline-block',
-                  marginTop: 10,
-                  fontFamily: OL.mono,
-                  fontSize: 12,
-                  color: OL.muted,
-                }}>
-                  Filing...
-                </span>
+              {reviewStreaming ? (
+                <ReviewProgressStrip steps={reviewSteps} elapsedMs={reviewElapsedMs} />
+              ) : reviewError ? (
+                <div style={{ marginTop: 10, fontFamily: OL.body, fontSize: 13 }}>
+                  <span style={{ color: OL.accent }}>Pak Har could not file this week.</span>
+                  {' '}
+                  <a
+                    href="#"
+                    onClick={(e) => { e.preventDefault(); onGenerateReview(); }}
+                    style={{
+                      color: OL.accent,
+                      fontStyle: 'italic',
+                      textDecoration: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Try again →
+                  </a>
+                </div>
               ) : (
                 <a
                   href="#"
@@ -314,16 +418,6 @@ export function DashboardPaper({
                 >
                   No weekly assessment yet. File this week →
                 </a>
-              )}
-              {reviewError && (
-                <div style={{
-                  marginTop: 6,
-                  fontFamily: OL.body,
-                  fontSize: 13,
-                  color: OL.accent,
-                }}>
-                  {reviewError}
-                </div>
               )}
             </>
           )}

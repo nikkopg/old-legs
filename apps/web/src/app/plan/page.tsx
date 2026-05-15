@@ -1,28 +1,41 @@
 // READY FOR QA
-// Feature: Plan page tabloid redesign (TASK-139, updated TASK-148)
-// What was built: /plan — PlanPaper with REALIZATION column matching activities to plan days
+// Feature: Plan page SSE progress wiring (TASK-189, updated TASK-148)
+// What was built: /plan — PlanPaper with SSE progress strip during plan generation
 // Edge cases to test:
 //   - Loading state: dark frame + 980px parchment skeleton with animate-pulse
 //   - 401 response: redirected to /
 //   - 404 (no plan): PlanPaper receives plan={null}, shows empty state + generate button
-//   - Plan generation in progress: PlanPaper receives isGenerating=true, shows "Filing the plan..."
+//   - Plan generation in progress: PlanPaper receives isStreaming=true, shows inline progress strip
 //   - Plan exists: full fixtures table rendered with today's row highlighted
 //   - Other error (Ollama offline, 5xx): OfflinePage rendered with kind="api"
 //   - todayDow correctly derived from current locale date
 //   - activities still loading: realizations={} so plan renders immediately without blocking
 //   - activities loaded: each plan day matched by isoDate to first activity on that date
 //   - REST day where user ran anyway: ActivityMatch present, "RAN" label shown in accent
+//   - Generation complete: plan state updated from onComplete data (no refetch needed)
+//   - Generation error: inline error shown with retry link
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query'
 import { useRouter } from 'next/navigation'
 import { PlanPaper } from '@/components/redesign/PlanPaper'
 import { OfflinePage } from '@/components/redesign/OfflinePage'
 import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton'
-import { getCurrentPlan, generatePlan, getActivities, getPlanVerdict } from '@/lib/api'
+import { getCurrentPlan, getActivities, getPlanVerdict } from '@/lib/api'
+import { useProgressStream } from '@/hooks/useProgressStream'
 import type { ApiError, TrainingPlan as ApiTrainingPlan, PlanDay as ApiPlanDay, Activity } from '@/types/api'
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+
+const PLAN_STEPS = [
+  'Reading your last four weeks',
+  'Checking plan adherence',
+  'Assembling coaching signals',
+  'Drafting the plan',
+  'Filing',
+]
 
 // ---------- Local type aliases for PlanPaper's expected shape ----------
 
@@ -200,12 +213,42 @@ function isNotFound(err: unknown): boolean {
   return apiErr?.status === 404
 }
 
+// Complete event data shape from backend
+interface GeneratePlanCompleteData {
+  plan: ApiTrainingPlan
+}
+
 // ---------- Page ----------
 
 export default function PlanPage() {
   const router = useRouter()
   const queryClient = useQueryClient()
-  const [isGenerating, setIsGenerating] = useState(false)
+
+  // Override plan from SSE complete event (avoids a round-trip refetch)
+  const [streamedPlan, setStreamedPlan] = useState<ApiTrainingPlan | null>(null)
+  const [streamError, setStreamError] = useState<string | null>(null)
+
+  const onComplete = useCallback((data: GeneratePlanCompleteData) => {
+    if (data.plan) {
+      setStreamedPlan(data.plan)
+      setStreamError(null)
+      queryClient.removeQueries({ queryKey: ['plan-verdict'] })
+      // Invalidate so GET /plan/current returns the new plan on next load
+      queryClient.invalidateQueries({ queryKey: ['plan', 'current'] })
+    }
+  }, [queryClient])
+
+  const onError = useCallback((message: string) => {
+    setStreamError(message)
+  }, [])
+
+  const { steps, elapsedMs, isStreaming, trigger } = useProgressStream<GeneratePlanCompleteData>({
+    url: `${API_BASE}/plan/generate`,
+    method: 'POST',
+    stepLabels: PLAN_STEPS,
+    onComplete,
+    onError,
+  })
 
   const {
     data: rawPlan,
@@ -233,18 +276,9 @@ export default function PlanPage() {
     }
   }, [isError, error, router])
 
-  async function handleGenerate() {
-    setIsGenerating(true)
-    try {
-      await generatePlan()
-      queryClient.removeQueries({ queryKey: ['plan-verdict'] })
-      await queryClient.invalidateQueries({ queryKey: ['plan', 'current'] })
-    } catch {
-      // PlanPaper handles the empty/error state; generation errors surface via
-      // the re-fetch returning 404 again, which keeps plan={null}.
-    } finally {
-      setIsGenerating(false)
-    }
+  function handleGenerate() {
+    setStreamError(null)
+    trigger()
   }
 
   const onNav = (key: string) => {
@@ -261,11 +295,13 @@ export default function PlanPage() {
   const noPlanYet = isError && error && isNotFound(error)
   const otherError = isError && !noPlanYet && !isUnauthorized(error)
 
-  const mappedPlan: PlanPaperPlan | null = rawPlan ? mapPlan(rawPlan) : null
+  // Prefer the plan from the SSE complete event (no refetch latency)
+  const activePlan: ApiTrainingPlan | undefined = streamedPlan ?? rawPlan
+  const mappedPlan: PlanPaperPlan | null = activePlan ? mapPlan(activePlan) : null
 
   const realizations: Record<string, ActivityMatch | null> =
-    !activitiesLoading && activities && rawPlan
-      ? buildRealizations(activities, rawPlan.week_start_date.toString(), rawPlan.plan_data as Record<string, ApiPlanDay>)
+    !activitiesLoading && activities && activePlan
+      ? buildRealizations(activities, activePlan.week_start_date.toString(), activePlan.plan_data as Record<string, ApiPlanDay>)
       : {}
 
   const planDays: PlanPaperDay[] = mappedPlan?.days ?? []
@@ -309,7 +345,10 @@ export default function PlanPage() {
   return (
     <PlanPaper
       plan={mappedPlan}
-      isGenerating={isGenerating}
+      isStreaming={isStreaming}
+      steps={steps}
+      elapsedMs={elapsedMs}
+      streamError={streamError}
       onGeneratePlan={handleGenerate}
       onOpenCoach={() => router.push('/coach')}
       onNav={onNav}

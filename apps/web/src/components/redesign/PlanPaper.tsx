@@ -1,12 +1,15 @@
 "use client";
 
 // READY FOR QA
-// Component: PlanPaper (TASK-138, updated TASK-148)
+// Component: PlanPaper (TASK-138, updated TASK-148, TASK-189)
 // What was built: Tabloid weekly plan layout — fixtures table, editor's note, key/corrections.
 //   Uses NewspaperChrome chrome, Paper wrapper, and all shared primitives.
+//   TASK-189: replaced isGenerating boolean with isStreaming+steps+elapsedMs from useProgressStream.
+//   Inline progress strip shown when isStreaming=true (same visual pattern as dashboard).
 // Edge cases to test:
-//   - plan=null + isGenerating=false shows "no plan" state with generate button
-//   - plan=null + isGenerating=true shows "Filing the plan..." with blinking cursor
+//   - plan=null + isStreaming=false shows "no plan" state with generate button
+//   - plan=null + isStreaming=true shows inline SSE progress strip (5 steps, elapsed timer)
+//   - streamError non-null shows inline error in accent + retry link
 //   - todayDow correctly highlights one row with accent border + "Today" label
 //   - Rest rows are dimmed (opacity 0.55) and arrow col is transparent
 //   - Last table row gets 3px bottom border; others get 1px dotted
@@ -28,6 +31,7 @@ import {
   NewspaperChrome,
   ToneBadge,
 } from './NewspaperChrome';
+import type { ProgressStep } from '@/hooks/useProgressStream';
 
 // ---------- local type alias ----------
 
@@ -70,7 +74,14 @@ interface PlanVerdictResult {
 
 interface PlanPaperProps {
   plan: TrainingPlan | null;
-  isGenerating: boolean;
+  /** Replaces the old isGenerating boolean — true while the SSE stream is open. */
+  isStreaming: boolean;
+  /** Step labels + statuses from useProgressStream. */
+  steps: ProgressStep[];
+  /** Elapsed milliseconds since the stream started. */
+  elapsedMs: number;
+  /** Non-null when the stream emitted an error event. */
+  streamError?: string | null;
   onGeneratePlan: () => void;
   onOpenCoach: () => void;
   onNav: (key: string) => void;
@@ -122,7 +133,10 @@ function deriveH1(runCount: number): string {
 
 export function PlanPaper({
   plan,
-  isGenerating,
+  isStreaming,
+  steps,
+  elapsedMs,
+  streamError,
   onGeneratePlan,
   onOpenCoach,
   onNav,
@@ -153,24 +167,90 @@ export function PlanPaper({
         onNav={onNav}
       />
 
-      {/* ---- No plan / generating states ---- */}
+      {/* ---- No plan / generating / error states ---- */}
       {!plan && (
-        <div style={{ marginTop: 40, textAlign: 'center' }}>
-          {isGenerating ? (
-            <p
+        <div style={{ marginTop: 40 }}>
+          {isStreaming ? (
+            /* Inline SSE progress strip — same visual pattern as dashboard */
+            <div
               style={{
-                fontFamily: OL.body,
-                fontSize: 16,
-                fontStyle: 'italic',
-                color: OL.muted,
-                margin: 0,
+                border: `1px solid ${OL.ink}`,
+                padding: '12px 14px',
+                fontFamily: OL.mono,
+                position: 'relative',
               }}
             >
-              Filing the plan
-              <span className="ol-cursor" />
-            </p>
+              {/* Elapsed time top-right */}
+              <span
+                style={{
+                  position: 'absolute',
+                  top: 12,
+                  right: 14,
+                  fontFamily: OL.mono,
+                  fontSize: 11,
+                  color: OL.muted,
+                }}
+              >
+                {String(Math.floor(elapsedMs / 60000)).padStart(1, '0')}:
+                {String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, '0')}
+              </span>
+              {steps.map((s) => (
+                <div
+                  key={s.label}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    marginBottom: 4,
+                    fontSize: 12,
+                    color: s.status === 'pending' ? OL.muted : OL.ink,
+                  }}
+                >
+                  <span style={{ width: 12, display: 'inline-block', textAlign: 'center' }}>
+                    {s.status === 'done' ? '✓' : s.status === 'running' ? '›' : '·'}
+                  </span>
+                  <span className={s.status === 'running' ? 'ol-cursor-text' : undefined}>
+                    {s.label}
+                    {s.status === 'running' && <span className="ol-cursor" />}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : streamError ? (
+            /* Inline error state */
+            <div style={{ textAlign: 'center' }}>
+              <p
+                style={{
+                  fontFamily: OL.body,
+                  fontSize: 14,
+                  color: OL.accent,
+                  margin: '0 0 12px',
+                }}
+              >
+                {streamError}
+              </p>
+              <button
+                onClick={onGeneratePlan}
+                style={{
+                  fontFamily: OL.sans,
+                  fontSize: 11,
+                  letterSpacing: 3,
+                  textTransform: 'uppercase',
+                  fontWeight: 600,
+                  background: 'transparent',
+                  border: `1px solid ${OL.accent}`,
+                  padding: '8px 16px',
+                  cursor: 'pointer',
+                  color: OL.accent,
+                  borderRadius: 0,
+                }}
+              >
+                Try again
+              </button>
+            </div>
           ) : (
-            <>
+            /* Default no-plan state */
+            <div style={{ textAlign: 'center' }}>
               <p
                 style={{
                   fontFamily: OL.body,
@@ -200,7 +280,7 @@ export function PlanPaper({
               >
                 Generate Plan
               </button>
-            </>
+            </div>
           )}
         </div>
       )}
@@ -744,26 +824,54 @@ export function PlanPaper({
               marginTop: 26,
               display: 'flex',
               justifyContent: 'flex-end',
+              gap: 12,
+              alignItems: 'center',
             }}
           >
+            {isStreaming && (
+              /* Compact progress strip when plan already exists and regenerating */
+              <div
+                style={{
+                  border: `1px solid ${OL.ink}`,
+                  padding: '8px 12px',
+                  fontFamily: OL.mono,
+                  fontSize: 11,
+                  display: 'flex',
+                  gap: 14,
+                  alignItems: 'center',
+                  color: OL.muted,
+                }}
+              >
+                {steps.map((s) => (
+                  <span key={s.label} style={{ color: s.status === 'pending' ? OL.muted : OL.ink }}>
+                    {s.status === 'done' ? '✓' : s.status === 'running' ? '›' : '·'} {s.label}
+                    {s.status === 'running' && <span className="ol-cursor" />}
+                  </span>
+                ))}
+                <span style={{ marginLeft: 8, color: OL.muted }}>
+                  {String(Math.floor(elapsedMs / 60000)).padStart(1, '0')}:
+                  {String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, '0')}
+                </span>
+              </div>
+            )}
             <button
               onClick={onGeneratePlan}
-              disabled={isGenerating}
+              disabled={isStreaming}
               style={{
                 fontFamily: OL.sans,
                 fontSize: 11,
                 letterSpacing: 3,
                 textTransform: 'uppercase',
                 fontWeight: 600,
-                background: isGenerating ? 'var(--color-muted-soft)' : OL.ink,
+                background: isStreaming ? 'var(--color-muted-soft)' : OL.ink,
                 border: 'none',
                 padding: '10px 20px',
-                cursor: isGenerating ? 'not-allowed' : 'pointer',
+                cursor: isStreaming ? 'not-allowed' : 'pointer',
                 color: OL.paper,
                 borderRadius: 0,
               }}
             >
-              {isGenerating ? 'Filing...' : 'Regenerate Plan'}
+              {isStreaming ? 'Filing...' : 'Regenerate Plan'}
             </button>
           </div>
 
