@@ -1,15 +1,17 @@
 // READY FOR QA
-// Component: Dispatch (TASK-191 — render streamed analysis tokens in Dispatch)
+// Component: Dispatch (TASK-192 — move streamed text out of progress strip into prose area)
 // What was built:
-//   - New prop: analysisStreamedText?: string — passed from useProgressStream.streamedText
-//   - AnalysisProgressStrip now accepts streamedText?: string prop
-//   - When isAnalyzing=true + streamedText has content: step list compacts (10px, 1.5 lh)
-//     and streamed text renders below steps in Lora 13px with ol-cursor blink
-//   - Cursor shows while "Filing the verdict" step is still pending; stops once it starts
-//   - When "Filing the verdict" step is running (verdictStarted=true): ol-cursor removed,
-//     "Filing the verdict..." indicator shown below the text
-//   - On complete: full analysis prose from activity.analysis replaces streamed text seamlessly
-// Previous (TASK-190):
+//   - AnalysisProgressStrip no longer renders streamed text; it shows only steps + elapsed timer
+//   - streamedText prop removed from AnalysisProgressStripProps
+//   - When isAnalyzing=true + analysisStreamedText has content: streamed text renders in the
+//     MAIN prose area with same Lora 13px font-body styling as existing analysis paragraphs
+//   - ol-cursor blinks at end of last streamed paragraph; stops when "Filing the verdict" begins
+//   - "Filing the verdict..." indicator appears inline (display:block span) below last paragraph
+//   - Compact inline step indicator (no border, flex row) renders below the streamed text
+//   - When isAnalyzing=true + analysisStreamedText is empty: full AnalysisProgressStrip only
+//   - "Has analysis" branch: same streamed-text-in-prose logic when refreshing analysis
+//   - Idle states (get / refresh buttons) and error states unchanged
+// Previous (TASK-191):
 //   - New props: analysisSteps (ProgressStep[]), analysisElapsedMs (number), analysisError (string | null)
 //   - isAnalyzing: boolean (kept same name — set to analysisStreaming from useProgressStream)
 //   - ProgressStep imported from @/hooks/useProgressStream (not redefined locally)
@@ -302,19 +304,12 @@ function fmtElapsed(ms: number): string {
 interface AnalysisProgressStripProps {
   steps: ProgressStep[];
   elapsedMs: number;
-  streamedText?: string;
 }
 
 // The step label that signals text is complete and verdict is being filed
 const VERDICT_STEP = 'Filing the verdict';
 
-function AnalysisProgressStrip({ steps, elapsedMs, streamedText }: AnalysisProgressStripProps) {
-  const hasStreamedText = streamedText !== undefined && streamedText.length > 0;
-  // Cursor blinks while "Writing the dispatch" is running; stops once "Filing the verdict" begins
-  const verdictStep = steps.find((s) => s.label === VERDICT_STEP);
-  const verdictStarted = verdictStep !== undefined && verdictStep.status !== 'pending';
-  const showCursor = hasStreamedText && !verdictStarted;
-
+function AnalysisProgressStrip({ steps, elapsedMs }: AnalysisProgressStripProps) {
   return (
     <div
       style={{
@@ -339,7 +334,7 @@ function AnalysisProgressStrip({ steps, elapsedMs, streamedText }: AnalysisProgr
         {fmtElapsed(elapsedMs)}
       </span>
 
-      {/* Step list — compact when text is streaming */}
+      {/* Step list */}
       <div style={{ paddingRight: 40 }}>
         {steps.map((step) => {
           const isPending = step.status === 'pending';
@@ -347,9 +342,6 @@ function AnalysisProgressStrip({ steps, elapsedMs, streamedText }: AnalysisProgr
           const isDone = step.status === 'done';
 
           const prefix = isDone ? '✓' : isRunning ? '›' : '·';
-          // When streaming text is visible, collapse the step list to be more compact
-          const fontSize = hasStreamedText ? 10 : 11;
-          const lineHeight = hasStreamedText ? 1.5 : 1.7;
 
           return (
             <div
@@ -358,8 +350,8 @@ function AnalysisProgressStrip({ steps, elapsedMs, streamedText }: AnalysisProgr
                 display: 'flex',
                 alignItems: 'baseline',
                 gap: 6,
-                fontSize,
-                lineHeight,
+                fontSize: 11,
+                lineHeight: 1.7,
                 opacity: isPending ? 0.4 : isDone ? 0.6 : 1,
                 color: isDone ? 'var(--color-muted)' : 'inherit',
               }}
@@ -367,41 +359,12 @@ function AnalysisProgressStrip({ steps, elapsedMs, streamedText }: AnalysisProgr
               <span style={{ width: 10, flexShrink: 0 }}>{prefix}</span>
               <span>
                 {step.label}
-                {isRunning && !hasStreamedText && <span className="ol-cursor">_</span>}
+                {isRunning && <span className="ol-cursor">_</span>}
               </span>
             </div>
           );
         })}
       </div>
-
-      {/* Streamed analysis text — rendered progressively as tokens arrive */}
-      {hasStreamedText && (
-        <div
-          style={{
-            marginTop: 10,
-            borderTop: '1px solid var(--color-hairline)',
-            paddingTop: 10,
-            fontFamily: 'var(--font-body)',
-            fontSize: 13,
-            lineHeight: 1.6,
-          }}
-        >
-          {streamedText}
-          {showCursor && <span className="ol-cursor">_</span>}
-          {verdictStarted && !showCursor && (
-            <div
-              style={{
-                marginTop: 8,
-                fontFamily: 'var(--font-mono-tabloid)',
-                fontSize: 10,
-                opacity: 0.55,
-              }}
-            >
-              Filing the verdict...
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -1349,11 +1312,79 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
 
               {activity.analysis === null || paragraphs.length === 0 ? (
                 <>
-                  <p className="font-body italic text-[13px] opacity-60">
-                    Pak Har hasn&#39;t seen this run yet.
-                  </p>
                   {isAnalyzing && analysisSteps.length > 0 ? (
-                    <AnalysisProgressStrip steps={analysisSteps} elapsedMs={analysisElapsedMs} streamedText={analysisStreamedText} />
+                    <>
+                      {analysisStreamedText.length > 0 ? (
+                        <>
+                          {/* Streamed analysis text in main prose area */}
+                          {getAnalysisParagraphs(analysisStreamedText).map((para, i) => {
+                            const isLast = i === getAnalysisParagraphs(analysisStreamedText).length - 1;
+                            const verdictStep = analysisSteps.find((s) => s.label === VERDICT_STEP);
+                            const verdictStarted = verdictStep !== undefined && verdictStep.status !== 'pending';
+                            return (
+                              <p
+                                key={i}
+                                className={`font-body text-[13px] leading-relaxed text-justify hyphens-auto ${i === 0 ? 'mt-[6px]' : ''} mb-[10px]`}
+                              >
+                                {para}
+                                {isLast && !verdictStarted && <span className="ol-cursor">_</span>}
+                                {isLast && verdictStarted && (
+                                  <span
+                                    style={{
+                                      display: 'block',
+                                      marginTop: 8,
+                                      fontFamily: 'var(--font-mono-tabloid)',
+                                      fontSize: 10,
+                                      opacity: 0.55,
+                                    }}
+                                  >
+                                    Filing the verdict...
+                                  </span>
+                                )}
+                              </p>
+                            );
+                          })}
+                          {/* Compact progress strip below streamed text — no border */}
+                          <div
+                            style={{
+                              marginTop: 6,
+                              fontFamily: 'var(--font-mono-tabloid)',
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                              <span style={{ fontSize: 9, textTransform: 'uppercase' as const, letterSpacing: '0.08em', opacity: 0.5 }}>
+                                Processing
+                              </span>
+                              <span style={{ fontSize: 10, opacity: 0.55 }}>
+                                {fmtElapsed(analysisElapsedMs)}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' as const }}>
+                              {analysisSteps.map((step) => {
+                                const isDone = step.status === 'done';
+                                const isRunning = step.status === 'running';
+                                const prefix = isDone ? '✓' : isRunning ? '›' : '·';
+                                return (
+                                  <span
+                                    key={step.label}
+                                    style={{
+                                      fontSize: 10,
+                                      opacity: step.status === 'pending' ? 0.4 : isDone ? 0.6 : 1,
+                                      color: isDone ? 'var(--color-muted)' : 'inherit',
+                                    }}
+                                  >
+                                    {prefix} {step.label}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        /* No streamed text yet — show full progress strip */
+                        <AnalysisProgressStrip steps={analysisSteps} elapsedMs={analysisElapsedMs} />
+                      )}
+                    </>
                   ) : analysisError !== null ? (
                     <div style={{ marginTop: 12 }}>
                       <p
@@ -1386,113 +1417,192 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                         </button>
                       )}
                     </div>
-                  ) : onAnalyze ? (
-                    <button
-                      onClick={onAnalyze}
-                      style={{
-                        marginTop: 12,
-                        background: 'var(--color-ink)',
-                        color: 'var(--color-ink-on-ink)',
-                        border: '1px solid var(--color-ink)',
-                        padding: '10px 24px',
-                        fontFamily: 'var(--font-sans)',
-                        fontSize: 11,
-                        letterSpacing: 3,
-                        fontWeight: 700,
-                        textTransform: 'uppercase' as const,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Get his take →
-                    </button>
-                  ) : null}
+                  ) : (
+                    <>
+                      <p className="font-body italic text-[13px] opacity-60">
+                        Pak Har hasn&#39;t seen this run yet.
+                      </p>
+                      {onAnalyze && (
+                        <button
+                          onClick={onAnalyze}
+                          style={{
+                            marginTop: 12,
+                            background: 'var(--color-ink)',
+                            color: 'var(--color-ink-on-ink)',
+                            border: '1px solid var(--color-ink)',
+                            padding: '10px 24px',
+                            fontFamily: 'var(--font-sans)',
+                            fontSize: 11,
+                            letterSpacing: 3,
+                            fontWeight: 700,
+                            textTransform: 'uppercase' as const,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          Get his take →
+                        </button>
+                      )}
+                    </>
+                  )}
                 </>
               ) : (
                 <>
-                  {/* First paragraph with drop cap */}
-                  <p className="dispatch-drop-cap font-body text-[13px] leading-relaxed text-justify hyphens-auto mt-[6px] mb-[10px]">
-                    {paragraphs[0]}
-                  </p>
-
-                  {/* Remaining paragraphs */}
-                  {paragraphs.slice(1).map((para, i) => (
-                    <p
-                      key={i}
-                      className="font-body text-[13px] leading-relaxed text-justify hyphens-auto mb-[10px]"
-                    >
-                      {para}
-                    </p>
-                  ))}
-
-                  {/* Pull-quote after 2nd paragraph */}
-                  {pullQuote !== null && (
-                    <div className="border-y-2 border-[var(--color-accent)] py-[10px] my-4 font-display text-[20px] italic text-center text-[var(--color-accent)]">
-                      {pullQuote}
-                    </div>
-                  )}
-
-                  {/* Sign-off */}
-                  <div className="font-sans text-[9px] uppercase tracking-widest opacity-70 text-right mt-4">
-                    — PAK HAR · POST-RUN DISPATCH
-                  </div>
-
-                  {/* Regenerate button / progress strip */}
-                  {onAnalyze && (
-                    <div className="mt-3">
-                      {isAnalyzing && analysisSteps.length > 0 ? (
-                        <AnalysisProgressStrip steps={analysisSteps} elapsedMs={analysisElapsedMs} streamedText={analysisStreamedText} />
-                      ) : analysisError !== null ? (
-                        <div>
+                  {/* When refreshing analysis and streamed text is flowing: show streamed text in prose area */}
+                  {isAnalyzing && analysisSteps.length > 0 && analysisStreamedText.length > 0 ? (
+                    <>
+                      {getAnalysisParagraphs(analysisStreamedText).map((para, i) => {
+                        const streamParas = getAnalysisParagraphs(analysisStreamedText);
+                        const isLast = i === streamParas.length - 1;
+                        const verdictStep = analysisSteps.find((s) => s.label === VERDICT_STEP);
+                        const verdictStarted = verdictStep !== undefined && verdictStep.status !== 'pending';
+                        return (
                           <p
-                            style={{
-                              fontFamily: 'var(--font-mono-tabloid)',
-                              fontSize: 11,
-                              color: 'var(--color-accent)',
-                              marginBottom: 8,
-                            }}
+                            key={i}
+                            className={`font-body text-[13px] leading-relaxed text-justify hyphens-auto ${i === 0 ? 'dispatch-drop-cap mt-[6px]' : ''} mb-[10px]`}
                           >
-                            {analysisError}
+                            {para}
+                            {isLast && !verdictStarted && <span className="ol-cursor">_</span>}
+                            {isLast && verdictStarted && (
+                              <span
+                                style={{
+                                  display: 'block',
+                                  marginTop: 8,
+                                  fontFamily: 'var(--font-mono-tabloid)',
+                                  fontSize: 10,
+                                  opacity: 0.55,
+                                }}
+                              >
+                                Filing the verdict...
+                              </span>
+                            )}
                           </p>
-                          <button
-                            onClick={onAnalyze}
-                            style={{
-                              background: 'transparent',
-                              color: 'var(--color-accent)',
-                              border: '1px solid var(--color-accent)',
-                              padding: '10px 24px',
-                              fontFamily: 'var(--font-sans)',
-                              fontSize: 11,
-                              letterSpacing: 3,
-                              fontWeight: 700,
-                              textTransform: 'uppercase' as const,
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Try again →
-                          </button>
+                        );
+                      })}
+                      {/* Compact progress strip below streamed text — no border */}
+                      <div
+                        style={{
+                          marginTop: 6,
+                          fontFamily: 'var(--font-mono-tabloid)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                          <span style={{ fontSize: 9, textTransform: 'uppercase' as const, letterSpacing: '0.08em', opacity: 0.5 }}>
+                            Processing
+                          </span>
+                          <span style={{ fontSize: 10, opacity: 0.55 }}>
+                            {fmtElapsed(analysisElapsedMs)}
+                          </span>
                         </div>
-                      ) : (
-                        <div className="text-right">
-                          <button
-                            onClick={onAnalyze}
-                            style={{
-                              background: 'var(--color-ink)',
-                              color: 'var(--color-ink-on-ink)',
-                              border: '1px solid var(--color-ink)',
-                              padding: '10px 24px',
-                              fontFamily: 'var(--font-sans)',
-                              fontSize: 11,
-                              letterSpacing: 3,
-                              fontWeight: 700,
-                              textTransform: 'uppercase' as const,
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Refresh his take →
-                          </button>
+                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' as const }}>
+                          {analysisSteps.map((step) => {
+                            const isDone = step.status === 'done';
+                            const isRunning = step.status === 'running';
+                            const prefix = isDone ? '✓' : isRunning ? '›' : '·';
+                            return (
+                              <span
+                                key={step.label}
+                                style={{
+                                  fontSize: 10,
+                                  opacity: step.status === 'pending' ? 0.4 : isDone ? 0.6 : 1,
+                                  color: isDone ? 'var(--color-muted)' : 'inherit',
+                                }}
+                              >
+                                {prefix} {step.label}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* First paragraph with drop cap */}
+                      <p className="dispatch-drop-cap font-body text-[13px] leading-relaxed text-justify hyphens-auto mt-[6px] mb-[10px]">
+                        {paragraphs[0]}
+                      </p>
+
+                      {/* Remaining paragraphs */}
+                      {paragraphs.slice(1).map((para, i) => (
+                        <p
+                          key={i}
+                          className="font-body text-[13px] leading-relaxed text-justify hyphens-auto mb-[10px]"
+                        >
+                          {para}
+                        </p>
+                      ))}
+
+                      {/* Pull-quote after 2nd paragraph */}
+                      {pullQuote !== null && (
+                        <div className="border-y-2 border-[var(--color-accent)] py-[10px] my-4 font-display text-[20px] italic text-center text-[var(--color-accent)]">
+                          {pullQuote}
                         </div>
                       )}
-                    </div>
+
+                      {/* Sign-off */}
+                      <div className="font-sans text-[9px] uppercase tracking-widest opacity-70 text-right mt-4">
+                        — PAK HAR · POST-RUN DISPATCH
+                      </div>
+
+                      {/* Regenerate button / progress strip */}
+                      {onAnalyze && (
+                        <div className="mt-3">
+                          {isAnalyzing && analysisSteps.length > 0 ? (
+                            /* Analyzing but no streamed text yet — show full progress strip */
+                            <AnalysisProgressStrip steps={analysisSteps} elapsedMs={analysisElapsedMs} />
+                          ) : analysisError !== null ? (
+                            <div>
+                              <p
+                                style={{
+                                  fontFamily: 'var(--font-mono-tabloid)',
+                                  fontSize: 11,
+                                  color: 'var(--color-accent)',
+                                  marginBottom: 8,
+                                }}
+                              >
+                                {analysisError}
+                              </p>
+                              <button
+                                onClick={onAnalyze}
+                                style={{
+                                  background: 'transparent',
+                                  color: 'var(--color-accent)',
+                                  border: '1px solid var(--color-accent)',
+                                  padding: '10px 24px',
+                                  fontFamily: 'var(--font-sans)',
+                                  fontSize: 11,
+                                  letterSpacing: 3,
+                                  fontWeight: 700,
+                                  textTransform: 'uppercase' as const,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                Try again →
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="text-right">
+                              <button
+                                onClick={onAnalyze}
+                                style={{
+                                  background: 'var(--color-ink)',
+                                  color: 'var(--color-ink-on-ink)',
+                                  border: '1px solid var(--color-ink)',
+                                  padding: '10px 24px',
+                                  fontFamily: 'var(--font-sans)',
+                                  fontSize: 11,
+                                  letterSpacing: 3,
+                                  fontWeight: 700,
+                                  textTransform: 'uppercase' as const,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                Refresh his take →
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
                   )}
                 </>
               )}
