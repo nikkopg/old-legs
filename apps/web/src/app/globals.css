@@ -197,3 +197,113 @@ body {
   margin-left: 2px;
   animation: olblink 1s steps(2, end) infinite;
 }
+
+/* =============================================================
+   ANIMATION REEL — Exhibits I–VII (TASK-200)
+   Mechanical/physical motion. CSS-driven, no JS animation libs.
+   Every decorative animation respects prefers-reduced-motion below.
+   ============================================================= */
+
+/* Exhibit I — Typewriter entrance (Pak Har thinking) ------------ */
+@keyframes ol-tw-line-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.ol-tw-line {
+  opacity: 0;
+  animation: ol-tw-line-in 360ms cubic-bezier(.2,.7,.2,1) forwards;
+}
+
+/* Exhibit II — Paper drop (page load) --------------------------- */
+@keyframes ol-paper-drop {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes ol-rail-stretch {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+@keyframes ol-fade-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes ol-masthead-settle {
+  0%   { opacity: 0; transform: translateY(-6px) scale(1.04); letter-spacing: 0; }
+  60%  { opacity: 1; transform: translateY(0)    scale(1.005); }
+  100% { opacity: 1; transform: translateY(0)    scale(1); }
+}
+.ol-paper-drop          { animation: ol-paper-drop 600ms cubic-bezier(.2,.7,.2,1) both; }
+.ol-rail-stretch        { animation: ol-rail-stretch 420ms cubic-bezier(.2,.7,.2,1) 120ms both; transform-origin: left; }
+.ol-rail-stretch-center { animation: ol-rail-stretch 420ms cubic-bezier(.2,.7,.2,1) 120ms both; transform-origin: center; }
+.ol-fade-up             { animation: ol-fade-up 380ms cubic-bezier(.2,.7,.2,1) 320ms both; }
+.ol-masthead-settle     { animation: ol-masthead-settle 540ms cubic-bezier(.2,.7,.2,1) 480ms both; }
+
+/* Exhibit IV — Coach send (per-token reveal) -------------------- */
+@keyframes ol-coach-token-in {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.ol-coach-token {
+  display: inline-block;
+  opacity: 0;
+  animation: ol-coach-token-in 240ms cubic-bezier(.2,.7,.2,1) both;
+}
+
+/* Exhibit VI — Weekly km bar fill ------------------------------ */
+@keyframes ol-weekly-fill {
+  from { width: 0; }
+  to   { width: var(--ol-fill-target, 50%); }
+}
+.ol-weekly-fill {
+  width: 0;
+  animation: ol-weekly-fill 900ms cubic-bezier(.2,.7,.2,1) both;
+}
+
+/* Exhibit VII — Strava connect stamp + shake ------------------- */
+@keyframes ol-stamp-land {
+  0%   { opacity: 0; transform: rotate(0deg) scale(2.4); }
+  65%  { opacity: 1; transform: rotate(var(--ol-stamp-rot, -7deg)) scale(.94); }
+  80%  { transform: rotate(var(--ol-stamp-rot, -7deg)) scale(1.04); }
+  100% { opacity: 1; transform: rotate(var(--ol-stamp-rot, -7deg)) scale(1); }
+}
+.ol-stamp-land {
+  --ol-stamp-rot: -7deg;
+  animation: ol-stamp-land 360ms cubic-bezier(.4,1.4,.5,1) both;
+}
+@keyframes ol-stamp-shake {
+  0%, 100% { transform: translate(0, 0); }
+  20%      { transform: translate(-2px, 1px); }
+  40%      { transform: translate(2px, -1px); }
+  60%      { transform: translate(-1px, 2px); }
+  80%      { transform: translate(1px, 0); }
+}
+.ol-stamp-shake {
+  animation: ol-stamp-shake 360ms ease-out 240ms;
+}
+
+/* Reduced motion ------------------------------------------------
+   Kill decorative motion (typewriter, paper-drop, coach tokens, stamp).
+   Keep functional motion (theme transition, weekly bar fill, blink cursor)
+   but with shortened durations. */
+@media (prefers-reduced-motion: reduce) {
+  .ol-tw-line,
+  .ol-paper-drop,
+  .ol-rail-stretch,
+  .ol-rail-stretch-center,
+  .ol-fade-up,
+  .ol-masthead-settle,
+  .ol-coach-token,
+  .ol-stamp-land,
+  .ol-stamp-shake {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .ol-weekly-fill {
+    animation-duration: 200ms !important;
+  }
+  .ol-cursor {
+    animation: none !important;
+    opacity: 1;
+  }
+}

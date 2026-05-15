@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
       maxAge: 60 * 60 * 24 * 30,
     })
 
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+    return NextResponse.redirect(new URL('/auth/connected', request.url))
   } catch {
     return NextResponse.redirect(new URL('/?error=server_unreachable', request.url))
   }

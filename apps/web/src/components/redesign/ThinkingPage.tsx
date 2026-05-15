@@ -1,17 +1,26 @@
 "use client";
 
 // READY FOR QA
-// Component: ThinkingPage (TASK-146)
+// Component: ThinkingPage (TASK-146 + TASK-200 animation upgrade)
 // What was built: Full-page loading state shown while Ollama generates a dispatch or plan.
 //   Renders NewspaperChrome with section "Going To Press", a typewriter strip that advances
-//   through 4 steps at 900ms intervals, and a sidebar listing what's coming in this edition.
+//   through steps, and a sidebar listing what's coming in this edition.
+//
+//   TASK-200: Accepts optional `steps` prop (ProgressStep[] from useProgressStream).
+//   When provided, the step list is driven by real SSE progress instead of the 900ms timer fallback.
+//   Each line uses .ol-tw-line class for the staggered fade-up entrance (animation-delay
+//   set inline at i * 150ms). The active step's mono caret blinks via .ol-cursor.
+//
 //   Two contexts: 'dispatch' (activeNav='activities') and 'plan' (activeNav='plan').
 // Edge cases to test:
-//   - Context 'dispatch' shows dispatch steps and dispatch sidebar items
-//   - Context 'plan' shows plan steps and plan sidebar items
+//   - steps prop provided: drives step display directly (status mapped to pending/running/done)
+//   - steps prop omitted: falls back to fake 900ms interval over the context's default labels
+//   - Context 'dispatch' shows dispatch sidebar items
+//   - Context 'plan' shows plan sidebar items
+//   - prefers-reduced-motion: .ol-tw-line animation disabled; lines appear immediately
 //   - Step index clamps at steps.length - 1 (never overflows)
 //   - Interval is cleared on unmount (no memory leak)
-//   - ol-cursor class is applied only to the active step
+//   - ol-cursor class is applied only to the active/running step
 //   - Done steps show opacity 0.55, active=1, queued=0.3
 
 import React, { useState, useEffect } from 'react';
@@ -23,10 +32,13 @@ import {
   FooterRail,
   NewspaperChrome,
 } from './NewspaperChrome';
+import type { ProgressStep } from '@/hooks/useProgressStream';
 
 interface ThinkingPageProps {
   context: 'dispatch' | 'plan';
   onNav: (key: string) => void;
+  /** Real progress steps from useProgressStream. If omitted, falls back to a 900ms interval. */
+  steps?: ProgressStep[];
 }
 
 const DISPATCH_STEPS = [
@@ -69,19 +81,29 @@ const NAV = [
   { key: 'settings', label: 'Desk' },
 ];
 
-export function ThinkingPage({ context, onNav }: ThinkingPageProps) {
-  const steps = context === 'dispatch' ? DISPATCH_STEPS : PLAN_STEPS;
+export function ThinkingPage({ context, onNav, steps: realSteps }: ThinkingPageProps) {
+  const fallbackLabels = context === 'dispatch' ? DISPATCH_STEPS : PLAN_STEPS;
   const sidebarItems = context === 'dispatch' ? DISPATCH_ITEMS : PLAN_ITEMS;
   const activeNav = context === 'plan' ? 'plan' : 'activities';
 
-  const [idx, setIdx] = useState(0);
-
+  // Fallback timer-driven mode used when no real progress is plumbed through.
+  const [fakeIdx, setFakeIdx] = useState(0);
   useEffect(() => {
+    if (realSteps && realSteps.length > 0) return;
     const id = setInterval(() => {
-      setIdx((i) => Math.min(i + 1, steps.length - 1));
+      setFakeIdx((i) => Math.min(i + 1, fallbackLabels.length - 1));
     }, 900);
     return () => clearInterval(id);
-  }, [steps.length]);
+  }, [realSteps, fallbackLabels.length]);
+
+  // Unified step view — derived from either the real stream or the fake interval.
+  type DisplayStep = { label: string; status: 'pending' | 'running' | 'done' };
+  const displaySteps: DisplayStep[] = realSteps && realSteps.length > 0
+    ? realSteps
+    : fallbackLabels.map((label, i) => ({
+        label,
+        status: i < fakeIdx ? 'done' : i === fakeIdx ? 'running' : 'pending',
+      }));
 
   return (
     <Paper width={760} screenLabel="05 Thinking">
@@ -126,13 +148,15 @@ export function ThinkingPage({ context, onNav }: ThinkingPageProps) {
               background: 'var(--color-paper-soft)',
             }}
           >
-            {steps.map((step, i) => {
-              const active = i === idx;
-              const done = i < idx;
+            {displaySteps.map((step, i) => {
+              const active = step.status === 'running';
+              const done = step.status === 'done';
               return (
                 <div
-                  key={step}
+                  key={step.label}
+                  className="ol-tw-line"
                   style={{
+                    animationDelay: `${i * 150}ms`,
                     display: 'grid',
                     gridTemplateColumns: '24px 1fr 80px',
                     gap: 10,
@@ -153,7 +177,7 @@ export function ThinkingPage({ context, onNav }: ThinkingPageProps) {
                     {done ? '✓' : active ? '›' : '·'}
                   </span>
                   <span>
-                    {step}
+                    {step.label}
                     {active && <span className="ol-cursor">_</span>}
                   </span>
                   <Caps size={8} ls={2} opacity={0.55}>

@@ -6,12 +6,15 @@ import type { GoalEvent, OnboardingRequest } from '@/types/api'
 
 // ---------------------------------------------------------------------------
 // Design tokens (tabloid system)
+// Values are CSS-var refs so the modal themes correctly in dark mode.
 // ---------------------------------------------------------------------------
 
 const T = {
-  paper: '#f4efe4',
-  ink: '#141210',
-  accent: '#8a2a12',
+  paper: 'var(--color-paper)',
+  ink: 'var(--color-ink)',
+  accent: 'var(--color-accent)',
+  inkOnInk: 'var(--color-ink-on-ink)',
+  muted: 'var(--color-muted)',
   display: '"Abril Fatface", "Playfair Display", Didot, serif',
   body: '"Lora", Georgia, serif',
   sans: '"Work Sans", "Inter", sans-serif',
@@ -159,6 +162,7 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
     padding: 32,
     width: 480,
     maxWidth: 'calc(100vw - 32px)',
+    color: T.ink,
   }
 
   const inputStyle: React.CSSProperties = {
@@ -176,7 +180,7 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
 
   const primaryBtnStyle: React.CSSProperties = {
     background: T.ink,
-    color: T.paper,
+    color: T.inkOnInk,
     border: 'none',
     padding: '10px 24px',
     fontFamily: T.sans,
@@ -246,7 +250,7 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
 
   return (
     <div style={overlayStyle}>
-      <div style={boxStyle}>
+      <div style={boxStyle} className="ol-paper-drop">
         <span style={stepLabelStyle}>Step {step} of {TOTAL_STEPS}</span>
 
         {step === 1 && (
@@ -356,7 +360,7 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
 
         {step === 4 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <p style={{ fontFamily: 'Lora, serif', fontSize: 14, lineHeight: 1.6, margin: 0, color: 'rgba(20,18,16,0.7)' }}>
+            <p style={{ fontFamily: 'Lora, serif', fontSize: 14, lineHeight: 1.6, margin: 0, color: 'var(--color-muted)' }}>
               Optional — but it makes HR zones more accurate.
             </p>
             <label style={{ fontFamily: 'Work Sans, sans-serif', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', opacity: 0.6 }} htmlFor="resting-hr">
@@ -374,7 +378,7 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
                 fontFamily: 'Space Mono, monospace',
                 fontSize: 14,
                 padding: '10px 14px',
-                border: '1px solid #141210',
+                border: '1px solid var(--color-ink)',
                 background: 'transparent',
                 outline: 'none',
                 width: '100%',
@@ -398,7 +402,7 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
 
         {step === 5 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <p style={{ fontFamily: 'Lora, serif', fontSize: 14, lineHeight: 1.6, margin: 0, color: 'rgba(20,18,16,0.7)' }}>
+            <p style={{ fontFamily: 'Lora, serif', fontSize: 14, lineHeight: 1.6, margin: 0, color: 'var(--color-muted)' }}>
               Optional — skip if you don&apos;t know it. Pak Har will estimate from your activity history.
             </p>
             <label style={{ fontFamily: 'Work Sans, sans-serif', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', opacity: 0.6 }} htmlFor="max-hr">
@@ -416,7 +420,7 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
                 fontFamily: 'Space Mono, monospace',
                 fontSize: 14,
                 padding: '10px 14px',
-                border: '1px solid #141210',
+                border: '1px solid var(--color-ink)',
                 background: 'transparent',
                 outline: 'none',
                 width: '100%',
@@ -441,7 +445,7 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
         {step === 6 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={questionStyle}>What are you training for?</div>
-            <p style={{ fontFamily: T.body, fontSize: 13, lineHeight: 1.6, margin: 0, color: 'rgba(20,18,16,0.7)' }}>
+            <p style={{ fontFamily: T.body, fontSize: 13, lineHeight: 1.6, margin: 0, color: 'var(--color-muted)' }}>
               Optional. Pak Har will tailor his recommendations to your goal.
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>

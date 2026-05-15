@@ -28,6 +28,7 @@ interface LandingPageProps {
 export function LandingPage({ onConnect, connectState = 'idle', errorMessage }: LandingPageProps) {
   return (
     <div
+      className="ol-paper-drop"
       style={{
         background: OL.paper,
         color: OL.ink,

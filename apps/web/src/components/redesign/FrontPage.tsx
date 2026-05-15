@@ -346,7 +346,7 @@ export function FrontPage({
             </div>
 
             {/* Bar chart rows — oldest first: W-3, W-2, W-1, This */}
-            {[...weeklyKm].reverse().map((entry) => (
+            {[...weeklyKm].reverse().map((entry, i) => (
               <div
                 key={entry.label}
                 className="grid grid-cols-[44px_1fr_48px] gap-2 items-center mb-2"
@@ -356,13 +356,15 @@ export function FrontPage({
                 >
                   {entry.label}
                 </span>
-                <div className="h-[10px] bg-[var(--color-paper-soft-3)] border border-[var(--color-ink)] relative">
+                <div className="h-[10px] bg-[var(--color-paper-soft-3)] border border-[var(--color-ink)] relative overflow-hidden">
                   <div
-                    className="absolute inset-y-0 left-0"
+                    className="ol-weekly-fill absolute inset-y-0 left-0"
                     style={{
-                      width: `${Math.min((entry.km / 40) * 100, 100)}%`,
+                      // CSS custom property — typed via record cast to satisfy TS
+                      ['--ol-fill-target' as string]: `${Math.min((entry.km / 40) * 100, 100)}%`,
+                      animationDelay: `${i * 60}ms`,
                       backgroundColor: entry.current ? 'var(--color-accent)' : 'var(--color-ink)',
-                    }}
+                    } as Record<string, string>}
                   />
                 </div>
                 <span

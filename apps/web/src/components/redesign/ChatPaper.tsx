@@ -141,11 +141,39 @@ function TeletypeLine({ message, isStreamingThisLine }: TeletypeLineProps) {
         }}
       >
         <span style={{ opacity: 0.5 }}>{`> `}</span>
-        {message.content}
+        {isStreamingThisLine
+          ? renderStreamingTokens(message.content)
+          : message.content}
         {isStreamingThisLine && <span className="ol-cursor">_</span>}
       </div>
     </div>
   );
+}
+
+// Render each whitespace-bounded token with a fade-up animation.
+// Only used on the currently-streaming assistant line so token animations
+// don't replay every re-render after the message is complete.
+function renderStreamingTokens(content: string): React.ReactNode {
+  // Match runs of non-whitespace followed by their trailing whitespace.
+  // Animating only "word" tokens; whitespace passes through as text so it
+  // doesn't get collapsed by inline-block.
+  const tokens = content.match(/\S+\s*/g) ?? [content];
+  return tokens.map((tok, i) => {
+    // Split a word-with-trailing-space into the visible word + a plain whitespace tail.
+    const ws = tok.match(/\s+$/)?.[0] ?? '';
+    const word = ws ? tok.slice(0, -ws.length) : tok;
+    return (
+      <React.Fragment key={i}>
+        <span
+          className="ol-coach-token"
+          style={{ animationDelay: `${i * 18}ms` }}
+        >
+          {word}
+        </span>
+        {ws}
+      </React.Fragment>
+    );
+  });
 }
 
 // ---------- ChatPaper ----------

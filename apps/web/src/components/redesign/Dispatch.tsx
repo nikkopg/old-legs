@@ -1445,6 +1445,16 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                         — PAK HAR · POST-RUN DISPATCH
                       </div>
 
+                      {/* Verdict streaming preview — shown while isAnalyzing with stage5 content */}
+                      {isAnalyzing && verdictStreamedText.length > 0 && (() => {
+                        const extracted = extractStage5Text(verdictStreamedText)
+                        return extracted.length > 0 ? (
+                          <div style={{ marginTop: 8, fontFamily: 'var(--font-mono-tabloid)', fontSize: 11, opacity: 0.7 }}>
+                            {extracted}<span className="ol-cursor">_</span>
+                          </div>
+                        ) : null
+                      })()}
+
                       {/* Regenerate button */}
                       {onAnalyze && (
                         <div className="mt-3">
@@ -1630,7 +1640,7 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                 LAST 4 WEEKS · KM
               </div>
               <Hairline className="my-[6px]" />
-              {weeklyKm.map((entry) => (
+              {weeklyKm.map((entry, i) => (
                 <div
                   key={entry.label}
                   className="grid grid-cols-[44px_1fr_90px] items-center gap-2 my-1"
@@ -1640,13 +1650,14 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                   >
                     {entry.label}
                   </div>
-                  <div className="h-[10px] bg-[var(--color-paper-soft-3)] border border-[var(--color-hairline)] relative">
+                  <div className="h-[10px] bg-[var(--color-paper-soft-3)] border border-[var(--color-hairline)] relative overflow-hidden">
                     <div
-                      className="absolute inset-y-0 left-0"
+                      className="ol-weekly-fill absolute inset-y-0 left-0"
                       style={{
-                        width: `${Math.min((entry.km / 40) * 100, 100)}%`,
+                        ['--ol-fill-target' as string]: `${Math.min((entry.km / 40) * 100, 100)}%`,
+                        animationDelay: `${i * 60}ms`,
                         backgroundColor: entry.current ? 'var(--color-accent)' : 'var(--color-ink)',
-                      }}
+                      } as Record<string, string>}
                     />
                   </div>
                   <div
