@@ -177,8 +177,8 @@ Endpoints in place: `/auth/*`, `/activities`, `/activities/{id}/analyze`, `/plan
 - 154/154 frontend tests passing
 
 **TASK-193: Stream weekly review text into prose area on dashboard**
-- Backend: `generate_weekly_review()` Stage 4 ("Writing the assessment") converted from blocking `stream=False` Ollama call to streaming — yields `token_event(content)` per chunk, assembles `review_text` from chunks; Stage 5 ("Filing the headline") remains non-streaming
-- Added `logger.warning` on `JSONDecodeError` (flagged by backend review — matches `coach.py` pattern)
+- Backend: `generate_weekly_review()` Stage 4 ("Writing the assessment") converted from blocking `stream=False` Ollama call to streaming — yields `token_event(content)` per chunk, assembles `review_text` from chunks
+- Stage 5 ("Filing the headline") also converted to streaming (`stream=True` + `aiter_lines()` loop, `verdict_chunks` collected, no `token_event` — output is JSON, not user-facing prose); adds `logger.warning` on `JSONDecodeError` and explicit `ConnectError`/`ReadTimeout` handlers to match Stage 4
 - Frontend: `reviewStreamedText` prop added to `DashboardPaper`; wired from `useProgressStream` in `dashboard/page.tsx`
 - Both "review exists" and "no review yet" branches now render streamed text in the prose area with `ReviewProgressStrip` below — same pattern as activity dispatch
 - "Filing the headline..." indicator appears on last streamed paragraph when that step starts
