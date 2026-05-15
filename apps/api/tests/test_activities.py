@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from models.activity import Activity
 from models.user import User
 from services.encryption import encrypt_token
-from services.streaming import complete_event, error_event, progress_event
+from services.streaming import complete_event, error_event, progress_event, token_event
 from services.strava import normalize_activity
 
 
@@ -95,6 +95,41 @@ def _fake_analyze_with_progress(
         started_at = _time.monotonic()
         for step in _ANALYZE_STEPS:
             yield progress_event(step, started_at)
+        yield complete_event({
+            "analysis": analysis,
+            "verdict_short": None,
+            "verdict_tag": None,
+            "tone": None,
+        })
+    return _fake
+
+
+def _fake_analyze_with_tokens(
+    analysis: str = FAKE_ANALYSIS_TEXT,
+    tokens: list[str] | None = None,
+):
+    """Return an async generator that yields all 5 progress events with token events
+    between 'Writing the dispatch' and 'Filing the verdict', then a complete event.
+
+    This mirrors what run_analysis_for_activity produces when Ollama streams tokens
+    during stage 4.
+    """
+    import time as _time
+
+    if tokens is None:
+        tokens = ["You held ", "your pace. ", "HR drifted."]
+
+    async def _fake(activity_id, user, db):
+        started_at = _time.monotonic()
+        # Stages 1–3
+        for step in _ANALYZE_STEPS[:3]:
+            yield progress_event(step, started_at)
+        # Stage 4 — Writing the dispatch: progress then token stream
+        yield progress_event("Writing the dispatch", started_at)
+        for chunk in tokens:
+            yield token_event(chunk)
+        # Stage 5 — Filing the verdict
+        yield progress_event("Filing the verdict", started_at)
         yield complete_event({
             "analysis": analysis,
             "verdict_short": None,
@@ -575,3 +610,70 @@ class TestAnalyzeActivity:
 
         response = authenticated_client.post(f"/activities/{other_activity.id}/analyze")
         assert response.status_code == 404
+
+    def test_token_events_appear_between_dispatch_and_verdict(
+        self,
+        authenticated_client: TestClient,
+        test_activity: Activity,
+    ) -> None:
+        """Token events must appear after 'Writing the dispatch' progress and before
+        'Filing the verdict' progress in the SSE stream."""
+        tokens = ["You held ", "your pace. ", "HR drifted."]
+        with patch(
+            "routers.activities.run_analysis_for_activity",
+            side_effect=_fake_analyze_with_tokens(tokens=tokens),
+        ):
+            response = authenticated_client.post(f"/activities/{test_activity.id}/analyze")
+
+        assert response.status_code == 200
+        events = _parse_sse_events(response.text)
+
+        token_events = [e for e in events if e.get("type") == "token"]
+        assert len(token_events) == len(tokens), (
+            f"Expected {len(tokens)} token events, got: {token_events}"
+        )
+
+        # Locate the bounding progress events by step label.
+        dispatch_idx = next(
+            (i for i, e in enumerate(events)
+             if e.get("type") == "progress" and e.get("step") == "Writing the dispatch"),
+            None,
+        )
+        verdict_idx = next(
+            (i for i, e in enumerate(events)
+             if e.get("type") == "progress" and e.get("step") == "Filing the verdict"),
+            None,
+        )
+        assert dispatch_idx is not None, "No 'Writing the dispatch' progress event found"
+        assert verdict_idx is not None, "No 'Filing the verdict' progress event found"
+
+        for tok_evt in token_events:
+            tok_idx = events.index(tok_evt)
+            assert dispatch_idx < tok_idx < verdict_idx, (
+                f"Token event at index {tok_idx} is not between "
+                f"dispatch ({dispatch_idx}) and verdict ({verdict_idx})"
+            )
+
+    def test_token_event_payload_shape(
+        self,
+        authenticated_client: TestClient,
+        test_activity: Activity,
+    ) -> None:
+        """Each token event must have type='token' and a string 'content' field."""
+        tokens = ["First chunk.", " Second chunk."]
+        with patch(
+            "routers.activities.run_analysis_for_activity",
+            side_effect=_fake_analyze_with_tokens(tokens=tokens),
+        ):
+            response = authenticated_client.post(f"/activities/{test_activity.id}/analyze")
+
+        assert response.status_code == 200
+        events = _parse_sse_events(response.text)
+
+        token_events = [e for e in events if e.get("type") == "token"]
+        assert len(token_events) == len(tokens)
+
+        for evt in token_events:
+            assert evt.get("type") == "token"
+            assert "content" in evt
+            assert isinstance(evt["content"], str)

@@ -1,5 +1,5 @@
 // READY FOR QA
-// Feature: Activity detail page — inline SSE progress strip for analysis (TASK-190)
+// Feature: Activity detail page — streamed analysis tokens in Dispatch (TASK-191)
 // What was built:
 //   - /activities/[id] replaced analyzeActivity mutation + isAnalyzing state with useProgressStream
 //   - ANALYSIS_STEPS define the 5 labeled stages (must match backend step labels exactly)
@@ -124,6 +124,7 @@ export default function ActivityDetailPage() {
     steps: analysisSteps,
     elapsedMs: analysisElapsedMs,
     isStreaming: analysisStreaming,
+    streamedText: analysisStreamedText,
     trigger: triggerAnalysis,
   } = useProgressStream<AnalysisStreamComplete>({
     url: `${apiBase}/activities/${id}/analyze`,
@@ -259,6 +260,7 @@ export default function ActivityDetailPage() {
       isAnalyzing={analysisStreaming}
       analysisSteps={analysisSteps}
       analysisElapsedMs={analysisElapsedMs}
+      analysisStreamedText={analysisStreamedText}
       analysisError={analysisError}
       rpe={activity?.rpe ?? null}
       onRpeChange={handleRpeChange}

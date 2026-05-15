@@ -1,11 +1,18 @@
 // READY FOR QA
-// Component: Dispatch (TASK-190 — inline SSE progress strip for analysis)
+// Component: Dispatch (TASK-191 — render streamed analysis tokens in Dispatch)
 // What was built:
+//   - New prop: analysisStreamedText?: string — passed from useProgressStream.streamedText
+//   - AnalysisProgressStrip now accepts streamedText?: string prop
+//   - When isAnalyzing=true + streamedText has content: step list compacts (10px, 1.5 lh)
+//     and streamed text renders below steps in Lora 13px with ol-cursor blink
+//   - Cursor shows while "Filing the verdict" step is still pending; stops once it starts
+//   - When "Filing the verdict" step is running (verdictStarted=true): ol-cursor removed,
+//     "Filing the verdict..." indicator shown below the text
+//   - On complete: full analysis prose from activity.analysis replaces streamed text seamlessly
+// Previous (TASK-190):
 //   - New props: analysisSteps (ProgressStep[]), analysisElapsedMs (number), analysisError (string | null)
 //   - isAnalyzing: boolean (kept same name — set to analysisStreaming from useProgressStream)
 //   - ProgressStep imported from @/hooks/useProgressStream (not redefined locally)
-//   - AnalysisProgressStrip sub-component: border 1px solid var(--color-ink), 12px 14px padding,
-//     Space Mono font, · pending / › running with ol-cursor / ✓ done, elapsed timer top-right M:SS
 //   - When isAnalyzing=true + analysisSteps.length > 0: shows AnalysisProgressStrip
 //   - When analysisError !== null: shows error in accent color + "Try again →" button
 //   - When idle + no analysis: shows "Get his take →" button
@@ -53,6 +60,7 @@ export interface DispatchProps {
   isAnalyzing?: boolean;
   analysisSteps?: ProgressStep[];
   analysisElapsedMs?: number;
+  analysisStreamedText?: string;
   analysisError?: string | null;
   rpe?: number | null;
   onRpeChange?: (rpe: number | null) => void;
@@ -294,18 +302,26 @@ function fmtElapsed(ms: number): string {
 interface AnalysisProgressStripProps {
   steps: ProgressStep[];
   elapsedMs: number;
+  streamedText?: string;
 }
 
-function AnalysisProgressStrip({ steps, elapsedMs }: AnalysisProgressStripProps) {
+// The step label that signals text is complete and verdict is being filed
+const VERDICT_STEP = 'Filing the verdict';
+
+function AnalysisProgressStrip({ steps, elapsedMs, streamedText }: AnalysisProgressStripProps) {
+  const hasStreamedText = streamedText !== undefined && streamedText.length > 0;
+  // Cursor blinks while "Writing the dispatch" is running; stops once "Filing the verdict" begins
+  const verdictStep = steps.find((s) => s.label === VERDICT_STEP);
+  const verdictStarted = verdictStep !== undefined && verdictStep.status !== 'pending';
+  const showCursor = hasStreamedText && !verdictStarted;
+
   return (
     <div
       style={{
-        display: 'inline-block',
         marginTop: 10,
         border: '1px solid var(--color-ink)',
         padding: '12px 14px',
         fontFamily: 'var(--font-mono-tabloid)',
-        minWidth: 260,
         position: 'relative',
       }}
     >
@@ -323,7 +339,7 @@ function AnalysisProgressStrip({ steps, elapsedMs }: AnalysisProgressStripProps)
         {fmtElapsed(elapsedMs)}
       </span>
 
-      {/* Step list */}
+      {/* Step list — compact when text is streaming */}
       <div style={{ paddingRight: 40 }}>
         {steps.map((step) => {
           const isPending = step.status === 'pending';
@@ -331,6 +347,9 @@ function AnalysisProgressStrip({ steps, elapsedMs }: AnalysisProgressStripProps)
           const isDone = step.status === 'done';
 
           const prefix = isDone ? '✓' : isRunning ? '›' : '·';
+          // When streaming text is visible, collapse the step list to be more compact
+          const fontSize = hasStreamedText ? 10 : 11;
+          const lineHeight = hasStreamedText ? 1.5 : 1.7;
 
           return (
             <div
@@ -339,21 +358,50 @@ function AnalysisProgressStrip({ steps, elapsedMs }: AnalysisProgressStripProps)
                 display: 'flex',
                 alignItems: 'baseline',
                 gap: 6,
-                fontSize: 11,
-                lineHeight: 1.7,
-                opacity: isPending ? 0.4 : 1,
+                fontSize,
+                lineHeight,
+                opacity: isPending ? 0.4 : isDone ? 0.6 : 1,
                 color: isDone ? 'var(--color-muted)' : 'inherit',
               }}
             >
               <span style={{ width: 10, flexShrink: 0 }}>{prefix}</span>
               <span>
                 {step.label}
-                {isRunning && <span className="ol-cursor">_</span>}
+                {isRunning && !hasStreamedText && <span className="ol-cursor">_</span>}
               </span>
             </div>
           );
         })}
       </div>
+
+      {/* Streamed analysis text — rendered progressively as tokens arrive */}
+      {hasStreamedText && (
+        <div
+          style={{
+            marginTop: 10,
+            borderTop: '1px solid var(--color-hairline)',
+            paddingTop: 10,
+            fontFamily: 'var(--font-body)',
+            fontSize: 13,
+            lineHeight: 1.6,
+          }}
+        >
+          {streamedText}
+          {showCursor && <span className="ol-cursor">_</span>}
+          {verdictStarted && !showCursor && (
+            <div
+              style={{
+                marginTop: 8,
+                fontFamily: 'var(--font-mono-tabloid)',
+                fontSize: 10,
+                opacity: 0.55,
+              }}
+            >
+              Filing the verdict...
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -486,7 +534,7 @@ function RpeInput({ rpe, onRpeChange, rpeSaveState = 'idle' }: RpeInputProps) {
 
 // ---- Main component ----
 
-export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBack, onNav, onAnalyze, isAnalyzing, analysisSteps = [], analysisElapsedMs = 0, analysisError = null, rpe = null, onRpeChange, rpeSaveState = 'idle' }: DispatchProps) {
+export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBack, onNav, onAnalyze, isAnalyzing, analysisSteps = [], analysisElapsedMs = 0, analysisStreamedText = '', analysisError = null, rpe = null, onRpeChange, rpeSaveState = 'idle' }: DispatchProps) {
   const dateInfo = formatActivityDate(activity.activity_date);
   const headline = getVerdictHeadline(activity);
   const paragraphs = activity.analysis ? getAnalysisParagraphs(activity.analysis) : [];
@@ -1305,7 +1353,7 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                     Pak Har hasn&#39;t seen this run yet.
                   </p>
                   {isAnalyzing && analysisSteps.length > 0 ? (
-                    <AnalysisProgressStrip steps={analysisSteps} elapsedMs={analysisElapsedMs} />
+                    <AnalysisProgressStrip steps={analysisSteps} elapsedMs={analysisElapsedMs} streamedText={analysisStreamedText} />
                   ) : analysisError !== null ? (
                     <div style={{ marginTop: 12 }}>
                       <p
@@ -1392,7 +1440,7 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                   {onAnalyze && (
                     <div className="mt-3">
                       {isAnalyzing && analysisSteps.length > 0 ? (
-                        <AnalysisProgressStrip steps={analysisSteps} elapsedMs={analysisElapsedMs} />
+                        <AnalysisProgressStrip steps={analysisSteps} elapsedMs={analysisElapsedMs} streamedText={analysisStreamedText} />
                       ) : analysisError !== null ? (
                         <div>
                           <p

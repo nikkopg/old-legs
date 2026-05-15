@@ -61,3 +61,19 @@ def error_event(message: str) -> str:
     """
     payload = {"type": "error", "message": message}
     return f"data: {json.dumps(payload)}\n\n"
+
+
+def token_event(content: str) -> str:
+    """Return an SSE token event string for streaming text content.
+
+    Args:
+        content: A text chunk yielded by the Ollama streaming response.
+            Emitted once per chunk so the frontend can render tokens
+            incrementally as they arrive.
+
+    Returns:
+        A fully-formed SSE data line, e.g.
+        ``data: {"type": "token", "content": "..."}\\n\\n``
+    """
+    payload = {"type": "token", "content": content}
+    return f"data: {json.dumps(payload)}\n\n"

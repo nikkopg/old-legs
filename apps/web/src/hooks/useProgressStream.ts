@@ -16,6 +16,11 @@ type ProgressEvent = {
   elapsed_ms: number
 }
 
+type TokenEvent = {
+  type: 'token'
+  content: string
+}
+
 type CompleteEvent<T> = {
   type: 'complete'
   data: T
@@ -26,7 +31,7 @@ type ErrorEvent = {
   message: string
 }
 
-type StreamEvent<T> = ProgressEvent | CompleteEvent<T> | ErrorEvent
+type StreamEvent<T> = ProgressEvent | TokenEvent | CompleteEvent<T> | ErrorEvent
 
 interface UseProgressStreamConfig<T> {
   url: string
@@ -41,6 +46,7 @@ interface UseProgressStreamResult {
   steps: ProgressStep[]
   elapsedMs: number
   isStreaming: boolean
+  streamedText: string
   trigger: () => void
   reset: () => void
 }
@@ -65,6 +71,7 @@ export function useProgressStream<T>(
   const [steps, setSteps] = useState<ProgressStep[]>(initialSteps)
   const [elapsedMs, setElapsedMs] = useState(0)
   const [isStreaming, setIsStreaming] = useState(false)
+  const [streamedText, setStreamedText] = useState('')
 
   // Stable refs so the stream reader closure always has current callbacks
   const onCompleteRef = useRef(onComplete)
@@ -112,6 +119,7 @@ export function useProgressStream<T>(
     setSteps(stepLabels.map((label) => ({ label, status: 'pending' })))
     setElapsedMs(0)
     setIsStreaming(false)
+    setStreamedText('')
   }, [stopStream, stepLabels])
 
   // ---------------------------------------------------------------------------
@@ -128,6 +136,7 @@ export function useProgressStream<T>(
     setSteps(stepLabels.map((label) => ({ label, status: 'pending' })))
     setElapsedMs(0)
     setIsStreaming(true)
+    setStreamedText('')
 
     // Start elapsed-time ticker (100 ms resolution)
     const startedAt = Date.now()
@@ -212,6 +221,8 @@ export function useProgressStream<T>(
                   return s
                 })
               })
+            } else if (event.type === 'token') {
+              setStreamedText((prev) => prev + event.content)
             } else if (event.type === 'complete') {
               clearElapsedInterval()
               setSteps((prev) => prev.map((s) => ({ ...s, status: 'done' })))
@@ -242,5 +253,5 @@ export function useProgressStream<T>(
     })()
   }, [url, method, body, stepLabels, clearElapsedInterval])
 
-  return { steps, elapsedMs, isStreaming, trigger, reset }
+  return { steps, elapsedMs, isStreaming, streamedText, trigger, reset }
 }

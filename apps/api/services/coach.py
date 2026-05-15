@@ -51,7 +51,7 @@ from sqlalchemy.orm import Session
 
 from models.activity import Activity
 from services.ollama import build_voice_modifier, format_pace
-from services.streaming import complete_event, error_event, progress_event
+from services.streaming import complete_event, error_event, progress_event, token_event
 
 logger = logging.getLogger(__name__)
 
@@ -1072,6 +1072,7 @@ async def run_analysis_for_activity(
                     content = data.get("message", {}).get("content")
                     if content:
                         chunks.append(content)
+                        yield token_event(content)
 
         full_analysis = "".join(chunks)
 
