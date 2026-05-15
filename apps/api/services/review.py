@@ -4,10 +4,15 @@ Weekly review generation service.
 Builds Pak Har's weekly planned-vs-actual assessment for the current user.
 Queries the active TrainingPlan for planned run count, counts Activity records
 for actual runs this week, calls Ollama non-streaming, and persists the result.
+
+generate_weekly_review is an async generator that yields SSE-formatted strings.
+The router wraps it in StreamingResponse — callers must NOT await it directly.
 """
 
 import json as _json
 import logging
+import time
+from collections.abc import AsyncGenerator
 from datetime import date, datetime, timedelta, timezone
 
 import httpx
@@ -28,6 +33,7 @@ from services.ollama import (
     build_voice_modifier,
     format_pace,
 )
+from services.streaming import complete_event, error_event, progress_event
 
 # Fallback max HR and resting HR constants (mirror coach.py defaults)
 _FALLBACK_MAX_HR: int = 185
@@ -372,176 +378,201 @@ def _build_activity_summary(activities: list[Activity]) -> str:
     return "\n".join(lines)
 
 
-async def generate_weekly_review(user: User, db: Session) -> WeeklyReview:
+async def generate_weekly_review(
+    user: User, db: Session
+) -> AsyncGenerator[str, None]:
     """
-    Generate Pak Har's weekly review for the given user.
+    Generate Pak Har's weekly review as an SSE async generator.
 
-    Steps:
-    1. Determine the Monday of the current week.
-    2. Find the active TrainingPlan — count non-rest days as planned_runs.
-    3. Count Activity records for this user since week_start_date as actual_runs.
-    4. Build prompt context: planned vs actual, activity list, user preferences.
-    5. Call Ollama non-streaming with REVIEW_PROMPT.
-    6. Persist a new WeeklyReview row and return it.
+    Yields SSE-formatted strings (progress, complete, or error events) that the
+    router passes directly to StreamingResponse. Callers must NOT await this
+    function — iterate over it instead.
+
+    Stages (a progress event is yielded before each stage's work):
+    1. "Counting this week's runs"   — fetch activities, planned run count, missed days
+    2. "Reading your zone breakdown" — build HR zone summary
+    3. "Checking last week"          — fetch prior week comparison
+    4. "Writing the assessment"      — format prompt + main Ollama call
+    5. "Filing the headline"         — second Ollama call for headline/verdict/tone
+
+    On success: yields complete_event with text, headline, verdict_tag, tone and
+    also persists a new WeeklyReview row in the database.
+
+    On any exception: yields error_event(str(exc)) and returns.
 
     Args:
         user: The authenticated User ORM object.
         db: Active database session.
 
-    Returns:
-        The newly created WeeklyReview ORM object.
-
-    Raises:
-        RuntimeError: If Ollama is unreachable.
-        TimeoutError: If Ollama does not respond within the read timeout.
+    Yields:
+        SSE-formatted strings ready to be sent over text/event-stream.
     """
-    week_start = _get_week_monday()
-    today = datetime.now(timezone.utc).date()
-
-    # --- Fetch active plan (optional — review generates regardless) ---
-    active_plan: TrainingPlan | None = (
-        db.query(TrainingPlan)
-        .filter(
-            TrainingPlan.user_id == user.id,
-            TrainingPlan.is_active == True,  # noqa: E712
-        )
-        .order_by(TrainingPlan.created_at.desc())
-        .first()
-    )
-
-    planned_runs = _count_planned_runs(active_plan)
-
-    # --- Count actual runs this week ---
-    week_start_dt = datetime(week_start.year, week_start.month, week_start.day, 0, 0, 0)
-    today_end_dt = datetime(today.year, today.month, today.day, 23, 59, 59)
-
-    week_activities: list[Activity] = (
-        db.query(Activity)
-        .filter(
-            Activity.user_id == user.id,
-            Activity.activity_date >= week_start_dt,
-            Activity.activity_date <= today_end_dt,
-            Activity.sync_status == "synced",
-        )
-        .order_by(Activity.activity_date.desc())
-        .all()
-    )
-
-    actual_runs = len(week_activities)
-    activity_summary = _build_activity_summary(week_activities)
-    user_preferences = build_user_preferences_context(user)
-
-    # --- TASK-178: total km vs target ---
-    total_km = _compute_total_km(week_activities)
-    km_target = _format_km_target(user.weekly_km_target)
-
-    # --- TASK-179: missed days ---
-    missed_days = _compute_missed_days(active_plan, week_activities, week_start, today)
-    remaining_sessions = _compute_remaining_sessions(active_plan, week_activities, week_start, today)
-
-    # --- TASK-180: prior week comparison ---
-    prior_week_runs, prior_week_km, prior_week_avg_pace = _compute_prior_week_stats(
-        user.id, week_start, db
-    )
-    if prior_week_runs == 0:
-        prior_week_runs_str = "no data"
-        prior_week_km_str = "no data"
-        prior_week_avg_pace_str = "no data"
-    else:
-        prior_week_runs_str = str(prior_week_runs)
-        prior_week_km_str = f"{prior_week_km:.1f}"
-        prior_week_avg_pace_str = prior_week_avg_pace
-
-    # --- TASK-181: HR zone breakdown ---
-    hr_zone_summary = _compute_hr_zone_summary(
-        week_activities,
-        user_max_hr=user.max_hr,
-        user_max_hr_observed=user.max_hr_observed,
-        user_resting_hr=user.resting_hr,
-    )
-
-    # --- Build prompt ---
-    user_message = REVIEW_PROMPT.format(
-        week_start_date=week_start.isoformat(),
-        today=today.isoformat(),
-        planned_runs=planned_runs,
-        actual_runs=actual_runs,
-        total_km=total_km,
-        km_target=km_target,
-        missed_days=missed_days,
-        remaining_sessions=remaining_sessions,
-        prior_week_runs=prior_week_runs_str,
-        prior_week_km=prior_week_km_str,
-        prior_week_avg_pace=prior_week_avg_pace_str,
-        hr_zone_summary=hr_zone_summary,
-        activity_summary=activity_summary,
-        user_preferences=user_preferences,
-        voice_modifier=build_voice_modifier(user.coach_voice),
-    )
-
-    payload = {
-        "model": settings.get_ollama_model(),
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "You are Pak Har. You are 70 years old. You have been running since before GPS existed.\n"
-                    "You give weekly assessments. You are blunt, specific, and direct. "
-                    "No hollow affirmations. No exclamation points. No emojis. "
-                    "You name the gap between what was planned and what happened, explain what it means, "
-                    "and give one concrete adjustment — for remaining sessions this week if any, "
-                    "otherwise for next week. Then stop."
-                ),
-            },
-            {
-                "role": "user",
-                "content": user_message,
-            },
-        ],
-        "stream": False,
-    }
-
-    url = f"{OLLAMA_BASE_URL}/api/chat"
-    logger.info(
-        "Requesting weekly review from Ollama for user_id=%d, week=%s, planned=%d, actual=%d, total_km=%.1f",
-        user.id,
-        week_start.isoformat(),
-        planned_runs,
-        actual_runs,
-        total_km,
-    )
+    started_at = time.monotonic()
 
     try:
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(
-                connect=_CONNECT_TIMEOUT,
-                read=_READ_TIMEOUT,
-                write=10.0,
-                pool=5.0,
+        # -----------------------------------------------------------------
+        # Stage 1 — Counting this week's runs
+        # -----------------------------------------------------------------
+        yield progress_event("Counting this week's runs", started_at)
+
+        week_start = _get_week_monday()
+        today = datetime.now(timezone.utc).date()
+
+        active_plan: TrainingPlan | None = (
+            db.query(TrainingPlan)
+            .filter(
+                TrainingPlan.user_id == user.id,
+                TrainingPlan.is_active == True,  # noqa: E712
             )
-        ) as client:
-            response = await client.post(url, json=payload)
-            response.raise_for_status()
-            data = response.json()
-    except httpx.ConnectError as exc:
-        logger.error("Ollama is unreachable at %s during weekly review generation", OLLAMA_BASE_URL)
-        raise RuntimeError(
-            "Pak Har is unavailable right now. Make sure Ollama is running."
-        ) from exc
-    except httpx.ReadTimeout as exc:
-        logger.error("Ollama read timeout after %ss during weekly review generation", _READ_TIMEOUT)
-        raise TimeoutError("Pak Har took too long to respond.") from exc
+            .order_by(TrainingPlan.created_at.desc())
+            .first()
+        )
 
-    review_text: str = data.get("message", {}).get("content", "").strip()
-    if not review_text:
-        raise RuntimeError("Ollama returned an empty response for weekly review generation.")
+        planned_runs = _count_planned_runs(active_plan)
 
-    # --- Second Ollama call — structured verdict extraction (best-effort) ---
-    headline: str | None = None
-    verdict_tag: str | None = None
-    tone: str | None = None
+        week_start_dt = datetime(week_start.year, week_start.month, week_start.day, 0, 0, 0)
+        today_end_dt = datetime(today.year, today.month, today.day, 23, 59, 59)
 
-    if review_text:
+        week_activities: list[Activity] = (
+            db.query(Activity)
+            .filter(
+                Activity.user_id == user.id,
+                Activity.activity_date >= week_start_dt,
+                Activity.activity_date <= today_end_dt,
+                Activity.sync_status == "synced",
+            )
+            .order_by(Activity.activity_date.desc())
+            .all()
+        )
+
+        actual_runs = len(week_activities)
+        activity_summary = _build_activity_summary(week_activities)
+        user_preferences = build_user_preferences_context(user)
+
+        total_km = _compute_total_km(week_activities)
+        km_target = _format_km_target(user.weekly_km_target)
+
+        missed_days = _compute_missed_days(active_plan, week_activities, week_start, today)
+        remaining_sessions = _compute_remaining_sessions(active_plan, week_activities, week_start, today)
+
+        # -----------------------------------------------------------------
+        # Stage 2 — Reading your zone breakdown
+        # -----------------------------------------------------------------
+        yield progress_event("Reading your zone breakdown", started_at)
+
+        hr_zone_summary = _compute_hr_zone_summary(
+            week_activities,
+            user_max_hr=user.max_hr,
+            user_max_hr_observed=user.max_hr_observed,
+            user_resting_hr=user.resting_hr,
+        )
+
+        # -----------------------------------------------------------------
+        # Stage 3 — Checking last week
+        # -----------------------------------------------------------------
+        yield progress_event("Checking last week", started_at)
+
+        prior_week_runs, prior_week_km, prior_week_avg_pace = _compute_prior_week_stats(
+            user.id, week_start, db
+        )
+        if prior_week_runs == 0:
+            prior_week_runs_str = "no data"
+            prior_week_km_str = "no data"
+            prior_week_avg_pace_str = "no data"
+        else:
+            prior_week_runs_str = str(prior_week_runs)
+            prior_week_km_str = f"{prior_week_km:.1f}"
+            prior_week_avg_pace_str = prior_week_avg_pace
+
+        # -----------------------------------------------------------------
+        # Stage 4 — Writing the assessment (main Ollama call)
+        # -----------------------------------------------------------------
+        yield progress_event("Writing the assessment", started_at)
+
+        user_message = REVIEW_PROMPT.format(
+            week_start_date=week_start.isoformat(),
+            today=today.isoformat(),
+            planned_runs=planned_runs,
+            actual_runs=actual_runs,
+            total_km=total_km,
+            km_target=km_target,
+            missed_days=missed_days,
+            remaining_sessions=remaining_sessions,
+            prior_week_runs=prior_week_runs_str,
+            prior_week_km=prior_week_km_str,
+            prior_week_avg_pace=prior_week_avg_pace_str,
+            hr_zone_summary=hr_zone_summary,
+            activity_summary=activity_summary,
+            user_preferences=user_preferences,
+            voice_modifier=build_voice_modifier(user.coach_voice),
+        )
+
+        payload = {
+            "model": settings.get_ollama_model(),
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are Pak Har. You are 70 years old. You have been running since before GPS existed.\n"
+                        "You give weekly assessments. You are blunt, specific, and direct. "
+                        "No hollow affirmations. No exclamation points. No emojis. "
+                        "You name the gap between what was planned and what happened, explain what it means, "
+                        "and give one concrete adjustment — for remaining sessions this week if any, "
+                        "otherwise for next week. Then stop."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": user_message,
+                },
+            ],
+            "stream": False,
+        }
+
+        url = f"{OLLAMA_BASE_URL}/api/chat"
+        logger.info(
+            "Requesting weekly review from Ollama for user_id=%d, week=%s, planned=%d, actual=%d, total_km=%.1f",
+            user.id,
+            week_start.isoformat(),
+            planned_runs,
+            actual_runs,
+            total_km,
+        )
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(
+                    connect=_CONNECT_TIMEOUT,
+                    read=_READ_TIMEOUT,
+                    write=10.0,
+                    pool=5.0,
+                )
+            ) as client:
+                response = await client.post(url, json=payload)
+                response.raise_for_status()
+                data = response.json()
+        except httpx.ConnectError as exc:
+            logger.error("Ollama is unreachable at %s during weekly review generation", OLLAMA_BASE_URL)
+            raise RuntimeError(
+                "Pak Har is unavailable right now. Make sure Ollama is running."
+            ) from exc
+        except httpx.ReadTimeout as exc:
+            logger.error("Ollama read timeout after %ss during weekly review generation", _READ_TIMEOUT)
+            raise TimeoutError("Pak Har took too long to respond.") from exc
+
+        review_text: str = data.get("message", {}).get("content", "").strip()
+        if not review_text:
+            raise RuntimeError("Ollama returned an empty response for weekly review generation.")
+
+        # -----------------------------------------------------------------
+        # Stage 5 — Filing the headline (verdict extraction)
+        # -----------------------------------------------------------------
+        yield progress_event("Filing the headline", started_at)
+
+        headline: str | None = None
+        verdict_tag: str | None = None
+        tone: str | None = None
+
         verdict_payload = {
             "model": settings.get_ollama_model(),
             "messages": [
@@ -624,28 +655,44 @@ async def generate_weekly_review(user: User, db: Session) -> WeeklyReview:
             verdict_tag = None
             tone = None
 
-    # --- Persist new WeeklyReview (always insert — GET /review/current returns most recent) ---
-    new_review = WeeklyReview(
-        user_id=user.id,
-        week_start_date=week_start,
-        planned_runs=planned_runs,
-        actual_runs=actual_runs,
-        review_text=review_text,
-        headline=headline,
-        verdict_tag=verdict_tag,
-        tone=tone,
-    )
-    db.add(new_review)
-    db.commit()
-    db.refresh(new_review)
+        # -----------------------------------------------------------------
+        # Persist new WeeklyReview (always insert — GET /review/current returns most recent)
+        # -----------------------------------------------------------------
+        new_review = WeeklyReview(
+            user_id=user.id,
+            week_start_date=week_start,
+            planned_runs=planned_runs,
+            actual_runs=actual_runs,
+            review_text=review_text,
+            headline=headline,
+            verdict_tag=verdict_tag,
+            tone=tone,
+        )
+        db.add(new_review)
+        db.commit()
+        db.refresh(new_review)
 
-    logger.info(
-        "Weekly review created for user_id=%d, review_id=%d, week=%s",
-        user.id,
-        new_review.id,
-        week_start.isoformat(),
-    )
-    return new_review
+        logger.info(
+            "Weekly review created for user_id=%d, review_id=%d, week=%s",
+            user.id,
+            new_review.id,
+            week_start.isoformat(),
+        )
+
+        yield complete_event({
+            "text": review_text,
+            "headline": headline,
+            "verdict_tag": verdict_tag,
+            "tone": tone,
+        })
+
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "generate_weekly_review: fatal error for user_id=%d: %s",
+            user.id,
+            exc,
+        )
+        yield error_event(str(exc))
 
 
 def get_current_review(user_id: int, db: Session) -> WeeklyReview | None:

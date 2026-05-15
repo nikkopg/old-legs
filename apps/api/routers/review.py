@@ -1,23 +1,22 @@
-# QA COMPLETE — TASK-120 passed. No blockers.
-# Feature: Weekly review endpoints (TASK-105)
+# READY FOR QA
+# Feature: Weekly review endpoints — SSE streaming conversion (TASK-186)
 # What was built:
-#   - POST /review/generate — generates Pak Har's weekly planned-vs-actual assessment.
-#     Finds the active TrainingPlan (optional), counts planned non-rest days (0 when no plan),
-#     counts Activity records for this week, calls Ollama non-streaming with REVIEW_PROMPT,
-#     persists a new WeeklyReview row, and returns it.
-#   - GET /review/current — returns the most recent WeeklyReview for the authenticated user.
+#   - POST /review/generate — now returns text/event-stream (StreamingResponse).
+#     generate_weekly_review is an async generator that yields SSE progress events before
+#     each stage, a complete event on success (with text/headline/verdict_tag/tone), and
+#     an error event on any failure. The WeeklyReview row is still persisted to the DB.
+#   - GET /review/current — unchanged. Returns the most recent WeeklyReview as JSON.
 # Edge cases to test:
-#   - No active training plan: review generates with planned_runs=0, missed_days="no plan on file".
-#   - No activities this week: actual_runs=0, Ollama receives "No runs completed this week." context.
-#   - Ollama offline: 503 returned, no DB write occurs.
-#   - Ollama returns empty content: 503 returned (treated as RuntimeError from service layer).
-#   - Ollama read timeout: 504 returned.
-#   - Rate limit exceeded (>20 req/60s): 429 returned.
-#   - Unauthenticated requests: 401 returned on both endpoints.
+#   - Rate limit exceeded (>20 req/60s): 429 returned before stream starts.
+#   - Unauthenticated requests: 401 returned before stream starts.
+#   - Ollama offline: error event in stream with RuntimeError message.
+#   - Ollama timeout: error event in stream with TimeoutError message.
+#   - Ollama returns empty content: error event in stream.
+#   - No active training plan: stream completes with planned_runs=0.
+#   - No activities this week: stream completes with actual_runs=0.
+#   - Happy path: 5 progress events followed by one complete event.
 #   - GET /review/current with no reviews ever generated: 404 returned.
 #   - Multiple reviews exist: GET /review/current returns the newest one (created_at DESC).
-#   - plan_data has non-standard "type" values: _count_planned_runs treats anything except
-#     "rest" as a run — this is intentional and tested.
 
 """
 Weekly review router.
@@ -30,6 +29,7 @@ Endpoints:
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from dependencies import get_current_user
@@ -44,26 +44,31 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/generate", response_model=WeeklyReviewRead)
+@router.post("/generate")
 async def generate_review(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> WeeklyReviewRead:
+) -> StreamingResponse:
     """
-    Generate Pak Har's weekly review for the authenticated user.
+    Generate Pak Har's weekly review for the authenticated user as an SSE stream.
 
     Compares the active TrainingPlan's planned run count (0 when no plan exists)
-    against Activity records from the current week. Calls Ollama non-streaming,
-    persists a new WeeklyReview row (always inserts — never upserts), and returns it.
-    Generates successfully even when no active training plan is on file.
+    against Activity records from the current week. Streams progress events as each
+    stage completes, then a complete event containing the review text and verdict
+    fields. The WeeklyReview row is persisted to the DB before the complete event
+    is sent. Generates successfully even when no active training plan is on file.
 
     Rate limited: 20 requests/60s per user (shared sliding window).
 
+    Response: text/event-stream
+      progress events: {"type": "progress", "step": "<label>", "elapsed_ms": <int>}
+      complete event:  {"type": "complete", "data": {"text": str, "headline": str|null,
+                        "verdict_tag": str|null, "tone": str|null}}
+      error event:     {"type": "error", "message": str}
+
     Raises:
         401: Not authenticated.
-        429: Rate limit exceeded.
-        503: Ollama is not running, unreachable, or returned empty content.
-        504: Ollama did not respond within the read timeout.
+        429: Rate limit exceeded (before stream starts).
     """
     if not check_rate_limit(user.id):
         raise HTTPException(
@@ -71,16 +76,11 @@ async def generate_review(
             detail="Too many requests. Wait a moment before generating another review.",
         )
 
-    try:
-        review = await generate_weekly_review(user=user, db=db)
-    except RuntimeError as exc:
-        logger.error("Ollama error during weekly review for user_id=%d: %s", user.id, exc)
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except TimeoutError as exc:
-        logger.error("Ollama timeout during weekly review for user_id=%d: %s", user.id, exc)
-        raise HTTPException(status_code=504, detail=str(exc)) from exc
-
-    return WeeklyReviewRead.model_validate(review)
+    return StreamingResponse(
+        generate_weekly_review(user=user, db=db),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/current", response_model=WeeklyReviewRead)
