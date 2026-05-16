@@ -384,6 +384,59 @@ def _get_week_start() -> date:
     return today - timedelta(days=days_since_monday)
 
 
+def _resolve_target_week_start(user: User, db: Session) -> tuple[date, str]:
+    """
+    Determine which week the next generated plan should target.
+
+    Resolution rule (applied in order):
+    1. Saturday or Sunday (today.weekday() in {5, 6})
+       → return (next_monday, "weekend")
+    2. Any synced Activity exists for this user with activity_date >= this_monday
+       → return (next_monday, "already_ran_this_week")
+    3. Otherwise
+       → return (this_monday, "current_week")
+
+    "Friday is a salvage day" — it only triggers next-week if the runner has
+    already logged a run this week (rule 2). A Friday with no runs yet still
+    gets this_monday so the remaining days are still plannable.
+
+    Args:
+        user: The authenticated User ORM object.
+        db:   An open SQLAlchemy Session.
+
+    Returns:
+        A tuple of (week_start_date, reason) where reason is one of:
+        "current_week" | "weekend" | "already_ran_this_week".
+    """
+    today = datetime.now(timezone.utc).date()
+    days_since_monday = today.weekday()
+    this_monday = today - timedelta(days=days_since_monday)
+    next_monday = this_monday + timedelta(weeks=1)
+
+    # Rule 1: weekend (Saturday = 5, Sunday = 6) — always target next week.
+    if today.weekday() in {5, 6}:
+        return next_monday, "weekend"
+
+    # Rule 2: runner has already trained this week — plan for next week.
+    # activity_date is stored as a naive datetime (UTC) so we compare against
+    # the datetime representation of this_monday at midnight.
+    this_monday_dt = datetime(this_monday.year, this_monday.month, this_monday.day)
+    ran_this_week = (
+        db.query(Activity)
+        .filter(
+            Activity.user_id == user.id,
+            Activity.activity_date >= this_monday_dt,
+            Activity.sync_status == "synced",
+        )
+        .first()
+    )
+    if ran_this_week is not None:
+        return next_monday, "already_ran_this_week"
+
+    # Rule 3: no runs yet this week — plan can still cover the current week.
+    return this_monday, "current_week"
+
+
 def _parse_plan_response(raw_json: str) -> tuple[dict, dict]:
     """
     Parse the raw JSON string returned by Ollama into plan_data and pak_har_notes.
@@ -639,7 +692,7 @@ async def generate_plan_with_ollama(
             TrainingPlan.is_active == True,  # noqa: E712
         ).update({"is_active": False})
 
-        week_start = _get_week_start()
+        week_start, _week_reason = _resolve_target_week_start(user, db)
         new_plan = TrainingPlan(
             user_id=user.id,
             week_start_date=week_start,
