@@ -48,7 +48,7 @@ interface AnalysisStreamComplete {
   analysis: string;
   verdict_short: string | null;
   verdict_tag: string | null;
-  tone: string | null;
+  tone: 'neutral' | 'critical' | 'good' | null;
 }
 
 const ANALYSIS_STEPS = [
