@@ -167,3 +167,10 @@ export interface OnboardingRequest {
 export interface OnboardingResponse {
   message: string
 }
+
+export interface PlanNextTarget {
+  week_start_date: string   // ISO date "YYYY-MM-DD"
+  is_next_week: boolean
+  reason: 'current_week' | 'weekend' | 'already_ran_this_week'
+  replaces_active_plan: boolean
+}

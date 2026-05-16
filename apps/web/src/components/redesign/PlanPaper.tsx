@@ -1,16 +1,22 @@
 "use client";
 
 // READY FOR QA
-// Component: PlanPaper (TASK-138, updated TASK-148, TASK-189)
+// Component: PlanPaper (TASK-138, updated TASK-148, TASK-189, TASK-201-F2/F3)
 // What was built: Tabloid weekly plan layout — fixtures table, editor's note, key/corrections.
 //   Uses NewspaperChrome chrome, Paper wrapper, and all shared primitives.
 //   TASK-189: replaced isGenerating boolean with isStreaming+steps+elapsedMs from useProgressStream.
-//   Inline progress strip shown when isStreaming=true (same visual pattern as dashboard).
+//   TASK-201-F2: dynamic button label (File this/next week's plan) + pre-generate caption from nextTarget.reason
+//   TASK-201-F3: section label "Next Edition" when isNextWeek=true; today-row suppressed for future week
 // Edge cases to test:
 //   - plan=null + isStreaming=false shows "no plan" state with generate button
 //   - plan=null + isStreaming=true shows inline SSE progress strip (5 steps, elapsed timer)
 //   - streamError non-null shows inline error in accent + retry link
 //   - todayDow correctly highlights one row with accent border + "Today" label
+//   - isNextWeek=true: no today accent row on any day; section label shows "Next Edition"
+//   - nextTarget reason="weekend": caption shows "It's the weekend. This plan runs from..."
+//   - nextTarget reason="already_ran_this_week": caption shows "You've already trained this week..."
+//   - nextTarget reason="current_week": caption shows date range only
+//   - nextTarget=undefined: button shows "File this week's plan", no caption
 //   - Rest rows are dimmed (opacity 0.55) and arrow col is transparent
 //   - Last table row gets 3px bottom border; others get 1px dotted
 //   - Totals row derives run/rest counts and peak day label from plan.days
@@ -32,6 +38,7 @@ import {
   ToneBadge,
 } from './NewspaperChrome';
 import type { ProgressStep } from '@/hooks/useProgressStream';
+import type { PlanNextTarget } from '@/types/api';
 
 // ---------- local type alias ----------
 
@@ -88,6 +95,10 @@ interface PlanPaperProps {
   todayDow: string;
   realizations: Record<string, ActivityMatch | null>;
   planVerdicts?: Record<string, PlanVerdictResult | null>;
+  /** Metadata from GET /plan/next-target — drives button label, caption, section header. */
+  nextTarget?: PlanNextTarget | null;
+  /** True when the resolved target week is next week (not the current week). */
+  isNextWeek?: boolean;
 }
 
 // ---------- helpers ----------
@@ -131,6 +142,22 @@ function deriveH1(runCount: number): string {
 
 // ---------- component ----------
 
+// ---------- helpers: date formatting for next-target preview ----------
+
+function formatWeekRange(mondayIso: string): string {
+  const mon = new Date(mondayIso + 'T00:00:00')
+  const sun = new Date(mon)
+  sun.setDate(mon.getDate() + 6)
+  const fmt = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+  return `${fmt(mon)} – ${fmt(sun)}`
+}
+
+function isoDatePlusDays(isoDate: string, days: number): string {
+  const d = new Date(isoDate + 'T00:00:00')
+  d.setDate(d.getDate() + days)
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}
+
 export function PlanPaper({
   plan,
   isStreaming,
@@ -143,6 +170,8 @@ export function PlanPaper({
   todayDow,
   realizations,
   planVerdicts,
+  nextTarget,
+  isNextWeek = false,
 }: PlanPaperProps) {
   const nav = [
     { key: 'dashboard', label: 'Front Page' },
@@ -157,10 +186,34 @@ export function PlanPaper({
   const now = new Date();
   const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
+  // Section label: use plan dateRange when plan exists, else derive from nextTarget
+  const sectionDateRange = plan?.dateRange
+    ?? (nextTarget ? formatWeekRange(nextTarget.week_start_date) : '—')
+  const sectionLabel = isNextWeek
+    ? `Next Edition · Week of ${sectionDateRange}`
+    : `Fixtures · Week of ${sectionDateRange}`
+
+  // Generate button label
+  const generateButtonLabel = isNextWeek ? "File next week's plan" : "File this week's plan"
+
+  // Pre-generation caption derived from nextTarget.reason
+  let preGenerateCaption: string | null = null
+  if (nextTarget) {
+    const monDate = isoDatePlusDays(nextTarget.week_start_date, 0)
+    const sunDate = isoDatePlusDays(nextTarget.week_start_date, 6)
+    if (nextTarget.reason === 'weekend') {
+      preGenerateCaption = `It's the weekend. This plan runs from ${monDate}.`
+    } else if (nextTarget.reason === 'already_ran_this_week') {
+      preGenerateCaption = `You've already trained this week. Plan starts ${monDate}.`
+    } else {
+      preGenerateCaption = `Week of ${monDate} – ${sunDate}.`
+    }
+  }
+
   return (
     <Paper width={980} screenLabel="03 Plan">
       <NewspaperChrome
-        section={`Fixtures · Week of ${plan?.dateRange ?? '—'}`}
+        section={sectionLabel}
         big={false}
         nav={nav}
         activeNav="plan"
@@ -250,14 +303,14 @@ export function PlanPaper({
             </div>
           ) : (
             /* Default no-plan state */
-            <div style={{ textAlign: 'center' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
               <p
                 style={{
                   fontFamily: OL.body,
                   fontSize: 16,
                   fontStyle: 'italic',
                   color: OL.muted,
-                  margin: '0 0 20px',
+                  margin: 0,
                 }}
               >
                 No plan yet. Pak Har will build one when he&apos;s seen enough of your runs.
@@ -278,8 +331,20 @@ export function PlanPaper({
                   borderRadius: 0,
                 }}
               >
-                Generate Plan
+                {generateButtonLabel}
               </button>
+              {preGenerateCaption && (
+                <span
+                  style={{
+                    fontFamily: OL.mono,
+                    fontSize: 11,
+                    color: OL.muted,
+                    opacity: 0.6,
+                  }}
+                >
+                  {preGenerateCaption}
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -397,7 +462,8 @@ export function PlanPaper({
 
             {/* Data rows */}
             {plan.days.map((d, i) => {
-              const isToday = d.day === todayDow;
+              // Suppress today treatment for future-week plans
+              const isToday = !isNextWeek && d.day === todayDow;
               const isRest = d.type === 'Rest';
               const isLast = i === plan.days.length - 1;
               const match: ActivityMatch | null = realizations[d.isoDate] ?? null;
@@ -871,7 +937,7 @@ export function PlanPaper({
                 borderRadius: 0,
               }}
             >
-              {isStreaming ? 'Filing...' : 'Regenerate Plan'}
+              {isStreaming ? 'Filing...' : generateButtonLabel}
             </button>
           </div>
 

@@ -1,6 +1,8 @@
 // READY FOR QA
-// Feature: Plan page SSE progress wiring (TASK-189, updated TASK-148)
-// What was built: /plan — PlanPaper with SSE progress strip during plan generation
+// Feature: Plan page SSE progress wiring + next-week polish (TASK-189, TASK-201-F1/F2/F3/F4)
+// What was built: /plan — PlanPaper with SSE progress strip during plan generation,
+//   pre-generation preview from GET /plan/next-target, dynamic button labels,
+//   replace-confirmation modal when replaces_active_plan=true
 // Edge cases to test:
 //   - Loading state: dark frame + 980px parchment skeleton with animate-pulse
 //   - 401 response: redirected to /
@@ -14,6 +16,10 @@
 //   - REST day where user ran anyway: ActivityMatch present, "RAN" label shown in accent
 //   - Generation complete: plan state updated from onComplete data (no refetch needed)
 //   - Generation error: inline error shown with retry link
+//   - next-target returns is_next_week=true: button shows "File next week's plan"
+//   - next-target returns reason="weekend": caption shows weekend message
+//   - next-target returns replaces_active_plan=true: modal fires before generation
+//   - next-target fails: degrades gracefully (treats as current_week, no replace check)
 
 'use client'
 
@@ -23,9 +29,10 @@ import { useRouter } from 'next/navigation'
 import { PlanPaper } from '@/components/redesign/PlanPaper'
 import { OfflinePage } from '@/components/redesign/OfflinePage'
 import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton'
-import { getCurrentPlan, getActivities, getPlanVerdict } from '@/lib/api'
+import { OL } from '@/components/redesign/NewspaperChrome'
+import { getCurrentPlan, getActivities, getPlanNextTarget, getPlanVerdict } from '@/lib/api'
 import { useProgressStream } from '@/hooks/useProgressStream'
-import type { ApiError, TrainingPlan as ApiTrainingPlan, PlanDay as ApiPlanDay, Activity } from '@/types/api'
+import type { ApiError, PlanNextTarget, TrainingPlan as ApiTrainingPlan, PlanDay as ApiPlanDay, Activity } from '@/types/api'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -228,13 +235,17 @@ export default function PlanPage() {
   const [streamedPlan, setStreamedPlan] = useState<ApiTrainingPlan | null>(null)
   const [streamError, setStreamError] = useState<string | null>(null)
 
+  // Replace-confirmation modal (TASK-201-F4)
+  const [showReplaceModal, setShowReplaceModal] = useState(false)
+
   const onComplete = useCallback((data: GeneratePlanCompleteData) => {
     if (data.plan) {
       setStreamedPlan(data.plan)
       setStreamError(null)
       queryClient.removeQueries({ queryKey: ['plan-verdict'] })
-      // Invalidate so GET /plan/current returns the new plan on next load
+      // Invalidate so GET /plan/current and GET /plan/next-target return fresh data
       queryClient.invalidateQueries({ queryKey: ['plan', 'current'] })
+      queryClient.invalidateQueries({ queryKey: ['plan', 'next-target'] })
     }
   }, [queryClient])
 
@@ -270,12 +281,31 @@ export default function PlanPage() {
     retry: 1,
   })
 
+  // TASK-201-F1: pre-generation preview — non-blocking, degrades gracefully on failure
+  const { data: nextTarget } = useQuery<PlanNextTarget, ApiError>({
+    queryKey: ['plan', 'next-target'],
+    queryFn: getPlanNextTarget,
+    staleTime: 60_000,
+    retry: false,
+  })
+
   useEffect(() => {
     if (isError && error && isUnauthorized(error)) {
       router.replace('/')
     }
   }, [isError, error, router])
 
+  // TASK-201-F4: gate generation behind a replace-confirmation modal when needed
+  function handleGenerateClick() {
+    setStreamError(null)
+    if (nextTarget?.replaces_active_plan) {
+      setShowReplaceModal(true)
+    } else {
+      trigger()
+    }
+  }
+
+  // Keep the internal trigger wrapper for use after modal confirmation
   function handleGenerate() {
     setStreamError(null)
     trigger()
@@ -342,19 +372,141 @@ export default function PlanPage() {
     )
   }
 
+  const isNextWeek = nextTarget?.is_next_week ?? false
+
   return (
-    <PlanPaper
-      plan={mappedPlan}
-      isStreaming={isStreaming}
-      steps={steps}
-      elapsedMs={elapsedMs}
-      streamError={streamError}
-      onGeneratePlan={handleGenerate}
-      onOpenCoach={() => router.push('/coach')}
-      onNav={onNav}
-      todayDow={todayDow}
-      realizations={realizations}
-      planVerdicts={planVerdicts}
-    />
+    <>
+      <PlanPaper
+        plan={mappedPlan}
+        isStreaming={isStreaming}
+        steps={steps}
+        elapsedMs={elapsedMs}
+        streamError={streamError}
+        onGeneratePlan={handleGenerateClick}
+        onOpenCoach={() => router.push('/coach')}
+        onNav={onNav}
+        todayDow={todayDow}
+        realizations={realizations}
+        planVerdicts={planVerdicts}
+        nextTarget={nextTarget ?? null}
+        isNextWeek={isNextWeek}
+      />
+
+      {/* TASK-201-F4: Replace-confirmation modal */}
+      {showReplaceModal && (
+        <div
+          onClick={() => setShowReplaceModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--color-paper)',
+              border: `3px solid var(--color-ink)`,
+              borderRadius: 0,
+              maxWidth: 400,
+              width: 'calc(100% - 32px)',
+              padding: '28px 28px 20px',
+            }}
+          >
+            <p
+              style={{
+                fontFamily: OL.display,
+                fontSize: 24,
+                lineHeight: 1.1,
+                color: 'var(--color-ink)',
+                margin: '0 0 14px',
+              }}
+            >
+              {"There's already a plan for this week."}
+            </p>
+            <div
+              style={{
+                height: 1,
+                background: 'var(--color-ink)',
+                opacity: 0.2,
+                margin: '0 0 12px',
+              }}
+            />
+            <p
+              style={{
+                fontFamily: OL.body,
+                fontSize: 13.5,
+                lineHeight: 1.55,
+                color: 'var(--color-ink)',
+                opacity: 0.75,
+                margin: '0 0 20px',
+              }}
+            >
+              {"Filing a new plan will replace it — all progress notes stay on your runs."}
+            </p>
+            <div
+              style={{
+                height: 1,
+                background: 'var(--color-ink)',
+                opacity: 0.2,
+                margin: '0 0 16px',
+              }}
+            />
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: 12,
+                alignItems: 'center',
+              }}
+            >
+              <button
+                onClick={() => setShowReplaceModal(false)}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid var(--color-ink)',
+                  color: 'var(--color-ink)',
+                  fontFamily: OL.sans,
+                  fontSize: 11,
+                  letterSpacing: 3,
+                  textTransform: 'uppercase',
+                  fontWeight: 600,
+                  padding: '10px 20px',
+                  borderRadius: 0,
+                  cursor: 'pointer',
+                }}
+              >
+                Keep it
+              </button>
+              <button
+                onClick={() => {
+                  setShowReplaceModal(false)
+                  trigger()
+                }}
+                style={{
+                  background: 'var(--color-accent)',
+                  border: 'none',
+                  color: 'var(--color-ink-on-accent)',
+                  fontFamily: OL.sans,
+                  fontSize: 11,
+                  letterSpacing: 3,
+                  textTransform: 'uppercase',
+                  fontWeight: 600,
+                  padding: '10px 20px',
+                  borderRadius: 0,
+                  cursor: 'pointer',
+                }}
+              >
+                Replace it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }

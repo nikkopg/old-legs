@@ -10,7 +10,7 @@
 //   - analyzeActivity on an already-analyzed activity (overwrites — should still return 200)
 //   - getCurrentPlan when no plan exists (404 — ApiError thrown)
 
-import type { Activity, ActivityListResponse, ApiError, GoalEvent, Insights, TrainingPlan, WeeklyReview, UserProfile, OnboardingRequest, OnboardingResponse } from '@/types/api'
+import type { Activity, ActivityListResponse, ApiError, GoalEvent, Insights, PlanNextTarget, TrainingPlan, WeeklyReview, UserProfile, OnboardingRequest, OnboardingResponse } from '@/types/api'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -121,6 +121,10 @@ export async function saveRpe(activityId: number, rpe: number | null): Promise<A
 
 export async function getCurrentPlan(): Promise<TrainingPlan> {
   return apiFetch<TrainingPlan>('/plan/current')
+}
+
+export async function getPlanNextTarget(): Promise<PlanNextTarget> {
+  return apiFetch<PlanNextTarget>('/plan/next-target')
 }
 
 export async function generatePlan(): Promise<TrainingPlan> {
