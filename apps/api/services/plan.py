@@ -636,6 +636,24 @@ async def generate_plan_with_ollama(
         # -----------------------------------------------------------------
         yield progress_event("Drafting the plan", started_at)
 
+        # Resolve which week the plan targets and craft a context-specific
+        # directive so Pak Har knows whether this is the current week or next.
+        week_start, _week_reason = _resolve_target_week_start(user, db)
+        if _week_reason == "weekend":
+            week_directive = (
+                f"Generate my training plan for the week starting {week_start.strftime('%A, %d %B %Y')}. "
+                "It is currently the weekend, so this plan covers the coming week, not the current one."
+            )
+        elif _week_reason == "already_ran_this_week":
+            week_directive = (
+                f"Generate my training plan for the week starting {week_start.strftime('%A, %d %B %Y')}. "
+                "The runner has already trained this week, so this plan covers the following week."
+            )
+        else:  # "current_week"
+            week_directive = (
+                f"Generate my training plan for the week starting {week_start.strftime('%A, %d %B %Y')}."
+            )
+
         payload = {
             "model": settings.get_ollama_model(),
             "messages": [
@@ -643,7 +661,7 @@ async def generate_plan_with_ollama(
                 {
                     "role": "user",
                     "content": (
-                        "Generate my training plan for this week. "
+                        f"{week_directive} "
                         "Output only the JSON as instructed."
                     ),
                 },
@@ -692,7 +710,7 @@ async def generate_plan_with_ollama(
             TrainingPlan.is_active == True,  # noqa: E712
         ).update({"is_active": False})
 
-        week_start, _week_reason = _resolve_target_week_start(user, db)
+        # week_start and _week_reason resolved above in Stage 4 — reuse them here
         new_plan = TrainingPlan(
             user_id=user.id,
             week_start_date=week_start,
@@ -722,7 +740,11 @@ async def generate_plan_with_ollama(
             "created_at": new_plan.created_at.isoformat() if new_plan.created_at else None,
             "updated_at": new_plan.updated_at.isoformat() if new_plan.updated_at else None,
         }
-        yield complete_event({"plan": plan_dict})
+        yield complete_event({
+            "plan": plan_dict,
+            "is_next_week": week_start != _get_week_start(),
+            "target_week_reason": _week_reason,
+        })
 
     except Exception as exc:  # noqa: BLE001
         logger.error(

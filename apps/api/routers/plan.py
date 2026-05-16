@@ -1,4 +1,22 @@
 # READY FOR QA
+# Feature: Plan-page next-week polish — TASK-201-A2 + TASK-201-A3
+# What was built:
+#   - POST /plan/generate — week-aware prompt directive injected in Stage 4 based on
+#     _resolve_target_week_start reason ("current_week" / "weekend" / "already_ran_this_week").
+#     SSE complete event now includes is_next_week (bool) and target_week_reason (str).
+#   - GET /plan/next-target — new lightweight endpoint. Returns resolved target week,
+#     is_next_week flag, reason, and whether an active plan already exists for that week.
+#     No Ollama call. No rate limiting.
+# Edge cases to test (TASK-201-D1):
+#   - All 7 weekday/activity combinations from the rule table
+#   - Timezone edge case (midnight UTC)
+#   - GET /plan/next-target: replaces_active_plan=true when active plan exists for resolved week
+#   - GET /plan/next-target: replaces_active_plan=false when no active plan for that week
+#   - POST /plan/generate complete event: is_next_week=true on weekend
+#   - POST /plan/generate complete event: is_next_week=false when current week targeted
+#
+# (Previous QA block for TASK-189 preserved below)
+#
 # Feature: Weekly training plan generation — SSE streaming conversion (TASK-189)
 # What was built:
 #   - POST /plan/generate — now returns text/event-stream (StreamingResponse).
@@ -34,10 +52,16 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from dependencies import get_current_user
+from models.training_plan import TrainingPlan
 from models.user import User
 from schemas.training_plan import TrainingPlanRead
 from services.database import get_db
-from services.plan import generate_plan_with_ollama, get_current_plan
+from services.plan import (
+    _get_week_start,
+    _resolve_target_week_start,
+    generate_plan_with_ollama,
+    get_current_plan,
+)
 from services.rate_limiter import check_rate_limit
 
 logger = logging.getLogger(__name__)
@@ -102,3 +126,55 @@ def get_current_plan_endpoint(
             detail="No active training plan found. Generate one with POST /plan/generate.",
         )
     return TrainingPlanRead.model_validate(plan)
+
+
+@router.get("/next-target")
+def get_plan_next_target(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    Return metadata about the week that would be targeted if the user generates
+    a plan right now.
+
+    Resolves the target week via _resolve_target_week_start (same logic used
+    during actual plan generation) and checks whether an active TrainingPlan
+    already exists for that week.
+
+    This is a lightweight DB read with no Ollama call and no rate limiting.
+    Frontend calls this on mount so it can display the correct button label and
+    caption before the user commits to generating a plan.
+
+    Returns:
+        week_start_date: ISO date string (Monday of the target week).
+        is_next_week: True when the resolved Monday is later than the current
+            calendar Monday, i.e. the plan would target next week.
+        reason: One of "current_week" | "weekend" | "already_ran_this_week".
+        replaces_active_plan: True when an active TrainingPlan row exists whose
+            week_start_date matches the resolved week. If the user generates a
+            plan, that existing plan would be deactivated.
+
+    Raises:
+        401: Not authenticated.
+    """
+    week_start, reason = _resolve_target_week_start(user, db)
+    current_monday = _get_week_start()
+    is_next_week = week_start != current_monday
+
+    existing_active = (
+        db.query(TrainingPlan)
+        .filter(
+            TrainingPlan.user_id == user.id,
+            TrainingPlan.is_active == True,  # noqa: E712
+            TrainingPlan.week_start_date == week_start,
+        )
+        .first()
+    )
+    replaces_active_plan = existing_active is not None
+
+    return {
+        "week_start_date": week_start.isoformat(),
+        "is_next_week": is_next_week,
+        "reason": reason,
+        "replaces_active_plan": replaces_active_plan,
+    }
