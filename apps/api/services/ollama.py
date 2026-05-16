@@ -250,8 +250,13 @@ def build_plan_context(user: User, db: Session) -> str:
     plan_data: dict = plan.plan_data or {}
     pak_har_notes: dict = plan.pak_har_notes or {}
 
+    today = datetime.now(timezone.utc).date()
+    is_next_week = week_start > today
+    week_label = "NEXT WEEK" if is_next_week else "THIS WEEK"
+
     lines = [
-        f"Current training plan (week of {week_start.isoformat()} to {week_end.isoformat()}):",
+        f"Today is {today.isoformat()} ({today.strftime('%A')}).",
+        f"Training plan for {week_label} ({week_start.isoformat()} to {week_end.isoformat()}):",
     ]
 
     for day_key in _DAY_ORDER:
