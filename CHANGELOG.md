@@ -1,0 +1,162 @@
+# Changelog
+
+## v2.0.0 — 2026-05-17
+
+v2 is a complete overhaul. The foundation from v1 is intact — Strava OAuth, activity sync, post-run analysis, weekly plan generation, Pak Har chat — but almost everything around it has been rebuilt or extended.
+
+---
+
+### What's new
+
+#### Tabloid redesign
+All five pages (dashboard, activities, dispatch, plan, chat, settings, landing) now use a newspaper aesthetic — Abril Fatface headlines, Lora body text, Space Mono for numbers, Work Sans for labels. Dark mode (Reading Light) available from Settings. No CSS framework change — Tailwind v4 throughout, redesigned from scratch with new design tokens.
+
+#### Dashboard restructured as a weekly hub
+`/dashboard` now shows: Pak Har's weekly review in "Today's Lead", this week's stats (km, runs, time on feet), today's scheduled session, last run snapshot. `/activities` is its own paginated page with a standalone route.
+
+#### Weekly review
+`POST /review/generate` produces Pak Har's assessment of the week — planned vs actual training load, patterns, one concrete adjustment. Auto-generated every Sunday at 20:00 WIB if enabled. Shows on dashboard with a headline and verdict tag. Refresh at any time.
+
+#### Onboarding and user preferences
+First-time users are asked: weekly km capacity, available training days, biggest struggle. Extended in v2 with: goal event (general fitness, 5K, 10K, half marathon, marathon, ultra), race date, resting HR, max HR. All preferences flow into every Pak Har prompt — plan generation, post-run analysis, chat, weekly review.
+
+#### Coach calibration — HR zones, RPE, cardiac drift, efficiency factor
+- **HR zones** use the Karvonen formula calibrated to user-supplied RHR and MHR. MHR falls back to auto-detected (highest observed in activity history) then to 185 bpm.
+- **Zone distribution** is calculated from per-second Strava streams when available, falling back to per-km splits — exact, not averaged.
+- **RPE** (1–10) can be submitted after any run. Pak Har cross-references it against HR zone and splits and names mismatches directly.
+- **Cardiac drift** is pre-computed per run: HR climbing while pace holds is flagged as dehydration or aerobic ceiling breach.
+- **Efficiency factor** (speed per heartbeat) is tracked vs the last 4 comparable runs. A >3% decline signals fatigue accumulation.
+
+#### High-resolution activity data (Strava streams)
+Strava's streams API replaces the per-km `splits_metric` endpoint as the primary data source. Each activity stores up to 500 data points (time, distance, velocity, HR, cadence, altitude, grade, GPS). Used for: smooth pace chart, per-second HR zone calculation, elevation profile, and future route map.
+
+#### Plan improvements
+- **Week-aware generation** — the system resolves whether to target the current week or next week before generating. Rule: Saturday/Sunday → always next week; Mon–Fri with any run already this week → next week; Mon–Fri with no runs yet → this week. Surfaced to the user before they commit.
+- **Plan realization** — each plan day shows a REALIZATION column with matched activity actuals and a Pak Har verdict (ON PLAN, PACED POORLY, FADED LATE, etc.).
+- **Goal-aware periodization** — plan generation reads goal event and race date. Phases: base building (≥8 weeks out), sharpening (2–7 weeks), taper (<2 weeks), post-race recovery.
+- **Replace confirmation** — generating a plan for a week that already has an active plan shows a confirmation modal before overwriting.
+
+#### SSE progress streaming
+Three endpoints now stream real-time progress instead of blocking until completion:
+- `POST /activities/{id}/analyze` — 5 stages: pulling splits → reading zones → checking history → writing dispatch → filing verdict
+- `POST /plan/generate` — 5 stages: reading last four weeks → checking adherence → assembling signals → drafting → filing
+- `POST /review/generate` — 5 stages: counting runs → reading zones → checking last week → writing assessment → filing headline
+
+All three yield the same event format: `progress` (step label + elapsed ms), `complete` (result payload), `error` (message). The UI renders a live step strip with elapsed timer during generation and streams the final text token-by-token.
+
+#### Chat context
+Pak Har's chat context now includes: active training plan (all 7 days), most recent weekly review, user RHR and MHR, goal event and race date. He can answer "what am I supposed to run today?" from actual plan data.
+
+#### Auto-delivery
+Two scheduled jobs via APScheduler:
+- Weekly plan generated every Monday at 05:00 WIB (opt-in, default on)
+- Weekly review generated every Sunday at 20:00 WIB (opt-in, default on)
+
+Both can be toggled independently from Settings → Delivery Preferences.
+
+#### Context reset
+`DELETE /coach/reset` wipes all AI-generated content in one transaction: chat messages, plans, reviews, and analysis fields on all activities. Activity records themselves are preserved. Two-step confirmation UI in Settings.
+
+#### Strava connected screen
+After OAuth completes, users land on `/auth/connected` — a rubber-stamp animation — before being routed to the dashboard.
+
+#### Settings page
+`/settings` (The Desk) exposes: subscriber record (read-only), coach voice level (gentle / standard / unfiltered), delivery preferences (two toggles), Runner's Brief (editable preferences), account stats, Strava disconnect, full context reset.
+
+---
+
+### Technical changes
+
+#### Infrastructure
+- **PostgreSQL replaces SQLite** across all environments — dev and prod now use the same database engine. Alembic migrations run on API startup (`alembic upgrade heads`).
+- **Docker Compose** now requires `DATABASE_URL` and `OLLAMA_MODEL` in `apps/api/.env` (previously undocumented).
+- New one-shot `ollama-init` container pulls the model on first `docker compose up`.
+
+#### Database
+- 15 Alembic migrations applied across v2 (vs 1 in v1).
+- New columns on `User`: `available_days` (JSON), `resting_hr`, `max_hr`, `max_hr_observed`, `goal_event`, `race_date`, `auto_plan_enabled`, `auto_review_enabled`, `coach_voice`.
+- New columns on `Activity`: `verdict_short`, `verdict_tag`, `tone`, `splits` (JSON), `streams` (JSON), `rpe`.
+- New columns on `WeeklyReview`: `headline`, `verdict_tag`, `tone`.
+- Composite index added on `(user_id, activity_date)`.
+
+#### Security
+- **CSRF protection** — OAuth flow now generates a `secrets.token_urlsafe(32)` state token, stores it in a short-lived `oauth_state` httpOnly cookie, and validates with `hmac.compare_digest` on callback.
+- **Session cookie** — `secure` flag and 30-day `max_age` added. `COOKIE_SECURE=false` in `.env` disables the secure flag for local HTTP development.
+- **Rate limiting** extended to `GET /insights` (was unguarded). Shared 20 req/60s window across all Ollama-backed endpoints.
+- **Strava `sport_type`** — filter now checks both `sport_type` and deprecated `type` field for forward compatibility.
+- **Timezone-aware datetimes** — all `datetime.utcnow()` calls replaced with `datetime.now(timezone.utc)`.
+- **SQLAlchemy lazy loading** — all relationships changed from `lazy="selectin"` (unbounded eager load) to `lazy="raise"` (explicit load required).
+
+---
+
+### API changes
+
+#### New endpoints
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/user/onboarding` | Save/update user preferences |
+| `GET` | `/user/me` | User profile + computed stats |
+| `PATCH` | `/activities/{id}/rpe` | Submit RPE (1–10) for a run |
+| `POST` | `/activities/{id}/plan-verdict` | Stateless plan vs actual verdict |
+| `GET` | `/plan/next-target` | Preview target week before generating |
+| `POST` | `/review/generate` | Generate weekly review (SSE) |
+| `GET` | `/review/current` | Retrieve most recent weekly review |
+| `GET` | `/insights` | 6-week trend stats + Pak Har commentary |
+| `DELETE` | `/coach/history` | Wipe chat messages |
+| `DELETE` | `/coach/reset` | Full AI context reset |
+
+#### Changed endpoints
+| Endpoint | Change |
+|---|---|
+| `GET /activities` | Response changed from `Activity[]` to `{ items, total, page, per_page }` |
+| `POST /activities/{id}/analyze` | Now returns `text/event-stream` (SSE) instead of JSON |
+| `POST /plan/generate` | Now returns `text/event-stream` (SSE) instead of JSON |
+| `POST /review/generate` | Now returns `text/event-stream` (SSE) instead of JSON |
+
+---
+
+### Bug fixes
+
+26 bugs filed and resolved across the v2 development cycle. Selected notable fixes:
+
+- **CSRF state not validated** — OAuth callback accepted any `state` parameter without checking it against the stored `oauth_state` cookie (BUG-014)
+- **Session cookie missing security flags** — `secure` flag and `max_age` were not set (BUG-013)
+- **Pak Har's voice absent from plan-verdict prompt** — verdict stamps could use any language; voice rules now enforced (BUG-002)
+- **GET /insights unguarded** — Ollama was called without rate limiting on every insights request (BUG-010)
+- **Athlete ID null guard silently failing** — `str(None)` produced `"None"` instead of raising (BUG-015)
+- **User message double-injected** — message appeared in both the system prompt and the user turn (BUG-016)
+- **Landing page swallowed auth error params** — `?error=` from Strava OAuth redirects was silently ignored (BUG-026)
+
+---
+
+### Test coverage
+
+| Layer | Framework | Tests | Status |
+|---|---|---|---|
+| Backend | pytest | 177 | All passing |
+| Frontend | Vitest | 168 | All passing |
+| **Total** | | **345** | **All passing** |
+
+E2E coverage (Playwright): auth, onboarding, dashboard, activities, plan (including week-switch flows), coach, settings, weekly review.
+
+---
+
+### Deferred to v3
+
+- **Route map** — `streams.latlng` is collected and stored per activity; the map UI is not built yet
+- **Email digest** — adds SMTP dependency; against self-hosted spirit unless opt-in
+- **Multi-user / team mode** — large architectural change
+- **Redis rate limiter** — only needed for horizontal scaling; in-memory limiter is sufficient for single-instance
+- **Activity filtering UI** — server-side filtering and pagination is implemented in the API (`GET /activities` supports `date_from`, `date_to`, `min_distance`, `max_distance`, `search`); the frontend currently shows all activities without filter controls
+
+---
+
+## v1.0.0 — 2026-04-18
+
+Initial release.
+
+- Strava OAuth login and activity sync (last 90 days)
+- Post-run analysis via Ollama — effort, trends, what worked, what to fix
+- Weekly 7-day training plan generation
+- Chat with Pak Har (streaming SSE, rate-limited)
+- Docker Compose self-hosting with auto model pull
