@@ -4,7 +4,7 @@
 
 Old Legs is a free, self-hosted AI running coach. It connects to your Strava account, analyzes your runs, and gives you honest, specific feedback — powered by a local LLM via Ollama. No subscription. No cloud. No cheerleading.
 
-![Old Legs landing page](docs/screenshots/landing-page.png)
+<p align="center"><img src="docs/screenshots/landing-page.png" alt="Old Legs landing page" /></p>
 
 ---
 
