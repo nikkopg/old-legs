@@ -5,3 +5,4 @@ __pycache__
 */*/*/__pycache__
 *.db
 .claude/
+apps/web/scripts/auth-state.json

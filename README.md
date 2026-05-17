@@ -15,6 +15,32 @@ Old Legs is a free, self-hosted AI running coach. It connects to your Strava acc
 - **Onboarding** — first-run questions to calibrate coaching: weekly km capacity, available days, biggest struggle, goal event, race date, resting HR, max HR
 - **Settings** — editable preferences, coach voice level (gentle / standard / unfiltered), automatic delivery toggles, Strava disconnect, full context reset
 
+## Screenshots
+
+<table>
+<tr>
+<td><img src="docs/screenshots/01-dashboard.png" alt="Dashboard" /></td>
+<td><img src="docs/screenshots/02-activities.png" alt="Front Page" /></td>
+</tr>
+<tr>
+<td align="center"><em>Dashboard — weekly review and today's plan</em></td>
+<td align="center"><em>Front Page — run list with Pak Har's verdicts</em></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/03-dispatch.png" alt="Dispatch" /></td>
+<td><img src="docs/screenshots/04-plan.png" alt="Plan" /></td>
+</tr>
+<tr>
+<td align="center"><em>Dispatch — post-run analysis with pace chart</em></td>
+<td align="center"><em>Plan — weekly fixtures filed by Pak Har</em></td>
+</tr>
+</table>
+
+<img src="docs/screenshots/05-chat.png" alt="Letters" />
+<p><em>Letters — direct wire to Pak Har</em></p>
+
+---
+
 ## Who is Pak Har?
 
 Your coach. He's been running since before GPS existed. He has no patience for excuses and no interest in hollow encouragement. He'll tell you your pace dropped because you went out too hard, not because you "had an off day". He's the kind of coach you'd actually listen to.
