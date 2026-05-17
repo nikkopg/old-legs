@@ -1,10 +1,7 @@
 # Old Legs
 
-> *"He's 70. He's already lapped you. And he has thoughts."*
-
-Old Legs is a free, self-hosted AI running coach. It connects to your Strava account, analyzes your runs, and gives you honest, specific feedback — powered by a local LLM via Ollama. No subscription. No cloud. No cheerleading.
-
 <p align="center"><img src="docs/screenshots/landing-page.png" alt="Old Legs landing page" /></p>
+Old Legs is a free, self-hosted AI running coach. It connects to your Strava account, analyzes your runs, and gives you honest, specific feedback — powered by a local LLM via Ollama. No subscription. No cloud. No cheerleading.
 
 ---
 
