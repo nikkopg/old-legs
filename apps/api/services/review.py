@@ -423,8 +423,8 @@ async def generate_weekly_review(
             .filter(
                 TrainingPlan.user_id == user.id,
                 TrainingPlan.is_active == True,  # noqa: E712
+                TrainingPlan.week_start_date == week_start,
             )
-            .order_by(TrainingPlan.created_at.desc())
             .first()
         )
 

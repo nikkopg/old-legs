@@ -84,12 +84,23 @@ export default function DashboardPage() {
     retry: false,
   })
 
-  // Count non-rest days in the active plan as planned sessions this week
-  const plannedRunsThisWeek: number | null = planData
-    ? Object.values(planData.plan_data).filter(
-        (d) => d.type !== 'rest' && d.type !== 'off'
-      ).length || null
-    : null
+  // Count non-rest days in the active plan as planned sessions this week.
+  // Guard: only use the plan if its week_start_date matches this week's Monday —
+  // on weekends, GET /plan/current returns next week's plan (TASK-201), so a
+  // mismatch means we have no plan for the current week.
+  const thisWeekMonday = (() => {
+    const now = new Date()
+    const day = now.getUTCDay()
+    const diff = day === 0 ? -6 : 1 - day
+    const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + diff))
+    return monday.toISOString().slice(0, 10)
+  })()
+  const plannedRunsThisWeek: number | null =
+    planData && planData.week_start_date === thisWeekMonday
+      ? Object.values(planData.plan_data).filter(
+          (d) => d.type !== 'rest' && d.type !== 'off'
+        ).length || null
+      : null
 
   // Optimistic review data rendered immediately from the stream complete event
   // Once ['review'] query refetches, reviewData from React Query takes over
