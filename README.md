@@ -11,6 +11,9 @@ Old Legs is a free, self-hosted AI running coach. It connects to your Strava acc
 - **Post-run analysis** — Pak Har reads your run data and tells you what actually happened
 - **Weekly training plans** — structured 7-day plans based on your recent training load
 - **Chat** — ask Pak Har anything about your training
+- **Weekly review** — Pak Har's weekly assessment comparing planned vs actual training load, filed on demand or automatically every Sunday
+- **Onboarding** — first-run questions to calibrate coaching: weekly km capacity, available days, biggest struggle, goal event, race date, resting HR, max HR
+- **Settings** — editable preferences, coach voice level (gentle / standard / unfiltered), automatic delivery toggles, Strava disconnect, full context reset
 
 ## Who is Pak Har?
 
@@ -18,36 +21,26 @@ Your coach. He's been running since before GPS existed. He has no patience for e
 
 ## What Pak Har considers
 
-When analyzing a run, Pak Har doesn't just read your average pace and HR. He looks at the full picture — the same signals a professional coach would pull from the data:
+The same signals a professional coach would pull — not just average pace and HR.
 
-**The run itself**
-- Distance, moving time, average pace, elevation gain
-- Per-km splits — pace, HR, cadence, and elevation change per kilometre
-
-**Effort and zones**
-- Average HR classified into 5 zones using the Karvonen formula (calibrated to your personal max HR and resting HR — not population averages)
-- Your exact zone boundaries in bpm, so he never cites a generic threshold
-- Time spent in each zone — derived from per-second streams data so the distribution is exact, not averaged per km
-- Easy-run vs HR zone mismatch — if you called it easy but ran at Zone 4, he'll say so
-- Cardiac drift — HR climbing while pace holds signals dehydration or working beyond your aerobic ceiling
-
-**Pacing pattern**
-- Splits let him see whether you went out too fast and faded, ran even, or negative-split
-- Cadence drop across the run signals form breakdown under fatigue, not just tiredness
-
-**Perceived effort**
-- RPE (1–10) submitted by you after the run, cross-referenced against HR zone and splits
-- A Zone 2 run rated 9/10 gets named directly — poor fitness calibration, heat, fatigue, or sleep
-
-**Fitness trend**
-- Efficiency factor (speed per heartbeat) compared against your last 4 runs — improving means aerobic fitness is building; declining means you're working harder to cover the same ground
-- HR trend across comparable distances — if your HR at 8km has climbed 10 bpm over the last 3 similar runs, that's fatigue accumulation
-
-**Context**
-- Your active training plan for the day — if Tuesday was scheduled as a tempo, Zone 4 HR is expected and he won't flag it as "too hard"
-- Your last 3 run analyses — if he's flagged the same problem three times, he escalates instead of repeating himself
-- Your most recent weekly review — training load context so a hard effort after a heavy week reads differently than the same effort after two rest days
-- Your stated preferences — weekly km target, days available, biggest struggle
+| Category | Signal | What he looks for |
+|---|---|---|
+| The run | Distance & pace | Moving time, average pace, elevation gain |
+| The run | Per-km splits | Pace, HR, cadence, elevation change per km |
+| Effort | HR zones | 5 zones via Karvonen, calibrated to your RHR/MHR — not population averages |
+| Effort | Zone distribution | Time in each zone from per-second streams — exact, not averaged per km |
+| Effort | Zone mismatch | Called it easy but ran at Zone 4 — he'll say so |
+| Effort | Cardiac drift | HR climbing while pace holds = dehydration or aerobic ceiling |
+| Pacing | Split pattern | Whether you faded, ran even, or negative-split |
+| Pacing | Cadence drop | Form breakdown under fatigue, not just tiredness |
+| Perceived effort | RPE | 1–10, cross-referenced against HR zone and splits |
+| Perceived effort | RPE mismatch | Zone 2 run rated 9/10 gets named — calibration, heat, fatigue, or sleep |
+| Fitness trend | Efficiency factor | Speed per heartbeat vs your last 4 runs — building or declining |
+| Fitness trend | HR trend | HR climbing across comparable distances = fatigue accumulation |
+| Context | Today's plan | Zone 4 HR on a scheduled tempo is expected — he won't flag it |
+| Context | Last 3 analyses | Same problem flagged three times = escalation, not repetition |
+| Context | Weekly review | Hard effort after a heavy week reads differently than after two rest days |
+| Context | Your preferences | Weekly km, available days, biggest struggle |
 
 ---
 
@@ -78,7 +71,11 @@ STRAVA_REDIRECT_URI=http://localhost:3000/auth/callback
 FRONTEND_URL=http://localhost:3000
 SECRET_KEY=change-this-to-a-random-string
 COOKIE_SECURE=false
+DATABASE_URL=postgresql://oldlegs:oldlegs@postgres:5432/oldlegs
+OLLAMA_MODEL=gemma4:31b-cloud
 ```
+
+> **`DATABASE_URL`** uses `postgres` as the host — that's the service name in Docker Compose. If you're running the API locally (not in Docker), change `postgres` to `localhost`.
 
 > **`COOKIE_SECURE=false`** is required for local development over plain HTTP. Remove this line (or set it to `true`) when running behind HTTPS in production.
 
@@ -146,7 +143,7 @@ ollama pull gemma4:31b-cloud
 |---|---|
 | Frontend | Next.js 16, TypeScript, Tailwind CSS v4 |
 | Backend | FastAPI, Python 3.11+ |
-| Database | SQLite (dev) / PostgreSQL (prod) |
+| Database | PostgreSQL |
 | AI | Ollama — default model: `gemma4:31b-cloud` |
 | Auth | Strava OAuth 2.0 |
 
