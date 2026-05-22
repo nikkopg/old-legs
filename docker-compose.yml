@@ -68,7 +68,6 @@ services:
     environment:
       DATABASE_URL: postgresql://oldlegs:oldlegs@postgres:5432/oldlegs
       OLLAMA_BASE_URL: http://ollama:11434
-      OLLAMA_MODEL: gemma4:31b-cloud
       API_PORT: 8000
       CORS_ORIGIN: http://localhost:3000
     ports:
