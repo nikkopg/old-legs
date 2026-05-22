@@ -31,6 +31,27 @@ from main import app
 
 
 # ---------------------------------------------------------------------------
+# Encryption setup — provide a deterministic test Fernet key
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="session", autouse=True)
+def set_test_fernet_key():
+    """
+    Set a throwaway Fernet key for the test session so encrypt_token() works.
+    Resets the singleton after the session so it doesn't bleed into other processes.
+    """
+    from cryptography.fernet import Fernet
+    from config import settings
+    import services.encryption as enc_module
+
+    test_key = Fernet.generate_key().decode()
+    settings.fernet_key = test_key
+    enc_module._fernet = None  # reset singleton to pick up the new key
+    yield
+    enc_module._fernet = None
+
+
+# ---------------------------------------------------------------------------
 # Rate limiter reset
 # ---------------------------------------------------------------------------
 
@@ -121,10 +142,12 @@ def test_user(db_session: Session) -> User:
 @pytest.fixture(scope="function")
 def authenticated_client(test_app: TestClient, test_user: User) -> TestClient:
     """
-    Return a TestClient with the session cookie pre-set for test_user.
+    Return a TestClient with a signed session cookie pre-set for test_user.
     Use this fixture for any test that requires an authenticated user.
     """
-    test_app.cookies.set("session_user_id", str(test_user.id))
+    from config import settings
+    signed_session = settings.get_session_signer().dumps(test_user.id)
+    test_app.cookies.set("session_user_id", signed_session)
     return test_app
 
 

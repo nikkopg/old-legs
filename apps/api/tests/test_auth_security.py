@@ -34,10 +34,10 @@ from services.encryption import encrypt_token
 # ---------------------------------------------------------------------------
 
 def _set_oauth_settings(client_id: str = "test_id", redirect_uri: str = "http://localhost/cb"):
-    """Patch the module-level _oauth_settings object in routers.auth."""
+    """Patch the settings object in routers.auth."""
     import routers.auth as auth_router
-    auth_router._oauth_settings.client_id = client_id
-    auth_router._oauth_settings.redirect_uri = redirect_uri
+    auth_router.settings.strava_client_id = client_id
+    auth_router.settings.strava_redirect_uri = redirect_uri
 
 
 def _make_mock_exchange(athlete_id=99001):
@@ -508,14 +508,9 @@ class TestBug024CookieSecureEnvVar:
     """
 
     def _reload_cookie_secure_flag(self, value: str):
-        """
-        Force routers.auth to re-evaluate _COOKIE_SECURE from the current env.
-        The module reads it at import time so we must patch the module attribute.
-        """
+        """Set cookie_secure on the shared settings object in routers.auth."""
         import routers.auth as auth_router
-        # Simulate what the module-level code does:
-        #   _COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "true").lower() != "false"
-        auth_router._COOKIE_SECURE = value.lower() != "false"
+        auth_router.settings.cookie_secure = value.lower() != "false"
 
     def test_oauth_state_cookie_not_secure_when_disabled(
         self,

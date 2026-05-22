@@ -27,13 +27,9 @@ from models.user import User
 
 def test_initiate_oauth_returns_url(test_app: TestClient, monkeypatch):
     """Happy path: valid env vars → returns oauth_url pointing to Strava."""
-    monkeypatch.setenv("STRAVA_CLIENT_ID", "test_id")
-    monkeypatch.setenv("STRAVA_REDIRECT_URI", "http://localhost:8000/auth/strava/callback")
-
-    # Re-read env in the router's _oauth_settings object
     import routers.auth as auth_router
-    auth_router._oauth_settings.client_id = "test_id"
-    auth_router._oauth_settings.redirect_uri = "http://localhost:8000/auth/strava/callback"
+    monkeypatch.setattr(auth_router.settings, "strava_client_id", "test_id")
+    monkeypatch.setattr(auth_router.settings, "strava_redirect_uri", "http://localhost:8000/auth/strava/callback")
 
     response = test_app.post("/auth/strava", json={})
 
@@ -43,21 +39,14 @@ def test_initiate_oauth_returns_url(test_app: TestClient, monkeypatch):
     assert "strava.com/oauth/authorize" in data["oauth_url"]
 
 
-def test_initiate_oauth_missing_client_id(test_app: TestClient):
+def test_initiate_oauth_missing_client_id(test_app: TestClient, monkeypatch):
     """Missing STRAVA_CLIENT_ID → 500."""
     import routers.auth as auth_router
-    original_client_id = auth_router._oauth_settings.client_id
-    original_redirect = auth_router._oauth_settings.redirect_uri
+    monkeypatch.setattr(auth_router.settings, "strava_client_id", "")
+    monkeypatch.setattr(auth_router.settings, "strava_redirect_uri", "http://localhost:8000/auth/strava/callback")
 
-    auth_router._oauth_settings.client_id = ""
-    auth_router._oauth_settings.redirect_uri = "http://localhost:8000/auth/strava/callback"
-
-    try:
-        response = test_app.post("/auth/strava", json={})
-        assert response.status_code == 500
-    finally:
-        auth_router._oauth_settings.client_id = original_client_id
-        auth_router._oauth_settings.redirect_uri = original_redirect
+    response = test_app.post("/auth/strava", json={})
+    assert response.status_code == 500
 
 
 # ---------------------------------------------------------------------------
@@ -81,8 +70,8 @@ def test_oauth_callback_success(test_app: TestClient, db_session: Session, monke
     from datetime import datetime, timedelta, timezone
     import routers.auth as auth_router
 
-    auth_router._oauth_settings.client_id = "test_client_id"
-    auth_router._oauth_settings.redirect_uri = "http://localhost:8000/auth/strava/callback"
+    monkeypatch.setattr(auth_router.settings, "strava_client_id", "test_client_id")
+    monkeypatch.setattr(auth_router.settings, "strava_redirect_uri", "http://localhost:8000/auth/strava/callback")
 
     async def mock_exchange_code(_code: str) -> dict:
         return {
@@ -126,16 +115,16 @@ def test_oauth_callback_success(test_app: TestClient, db_session: Session, monke
     assert user.name == "Test Runner"
 
 
-def test_oauth_callback_strava_api_error(test_app: TestClient):
+def test_oauth_callback_strava_api_error(test_app: TestClient, monkeypatch):
     """Strava returns 400 for bad code → endpoint returns 400 or 500."""
     import routers.auth as auth_router
     import services.strava as strava_service
 
-    auth_router._oauth_settings.client_id = "test_client_id"
-    auth_router._oauth_settings.redirect_uri = "http://localhost:8000/auth/strava/callback"
-    strava_service._settings.client_id = "test_client_id"
-    strava_service._settings.client_secret = "test_client_secret"
-    strava_service._settings.redirect_uri = "http://localhost:8000/auth/strava/callback"
+    monkeypatch.setattr(auth_router.settings, "strava_client_id", "test_client_id")
+    monkeypatch.setattr(auth_router.settings, "strava_redirect_uri", "http://localhost:8000/auth/strava/callback")
+    monkeypatch.setattr(strava_service._settings, "strava_client_id", "test_client_id")
+    monkeypatch.setattr(strava_service._settings, "strava_client_secret", "test_client_secret")
+    monkeypatch.setattr(strava_service._settings, "strava_redirect_uri", "http://localhost:8000/auth/strava/callback")
 
     # BUG-014: Supply matching state cookie so the CSRF check passes before
     # the Strava token exchange call is made.
