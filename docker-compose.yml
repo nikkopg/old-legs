@@ -18,7 +18,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     networks:
       - oldlegs
     healthcheck:
@@ -36,7 +36,7 @@ services:
     networks:
       - oldlegs
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 10s
@@ -68,6 +68,7 @@ services:
     environment:
       DATABASE_URL: postgresql://oldlegs:oldlegs@postgres:5432/oldlegs
       OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: gemma4:31b-cloud
       API_PORT: 8000
       CORS_ORIGIN: http://localhost:3000
     ports:
@@ -89,6 +90,9 @@ services:
     ports:
       - "3000:3000"
     environment:
+      # Set to the public URL where your API is reachable from the browser.
+      # For local: http://localhost:8000
+      # For remote/VPS: http://your-server-ip:8000 or https://api.yourdomain.com
       NEXT_PUBLIC_API_URL: http://localhost:8000
       API_URL: http://api:8000
     depends_on:

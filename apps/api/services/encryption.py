@@ -5,36 +5,27 @@ Uses Fernet (symmetric encryption) from the cryptography library.
 Tokens are NEVER logged — only encrypted bytes are stored in the DB.
 """
 
-import base64
-import os
 import logging
 
 from cryptography.fernet import Fernet
-from pydantic import ConfigDict
-from pydantic_settings import BaseSettings
+
+from config import settings
 
 logger = logging.getLogger(__name__)
 
-
-class EncryptionSettings(BaseSettings):
-    """Fernet key loaded from environment. Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" """
-    model_config = ConfigDict(env_file=".env", extra="allow")
-
-    fernet_key: str | None = None
-
-
-_encryption_settings = EncryptionSettings()
 _fernet: Fernet | None = None
 
 
 def _get_fernet() -> Fernet:
     global _fernet
     if _fernet is None:
-        key = _encryption_settings.fernet_key
+        key = settings.fernet_key
         if not key:
-            # Auto-generate a key for local dev (not suitable for production)
-            logger.warning("FERNET_KEY not set — generating ephemeral key for development only. DO NOT use this in production.")
-            key = Fernet.generate_key().decode()
+            raise RuntimeError(
+                "FERNET_KEY is not set. Generate one with:\n"
+                "  python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"\n"
+                "Then add FERNET_KEY=<value> to your .env file."
+            )
         _fernet = Fernet(key.encode())
     return _fernet
 
