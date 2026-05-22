@@ -22,7 +22,7 @@ from config import settings
 from models.activity import Activity
 from models.user import User
 from schemas.insights import InsightsRead
-from services.ollama import OLLAMA_BASE_URL, _CONNECT_TIMEOUT, _READ_TIMEOUT
+from services.ollama import OLLAMA_BASE_URL, CONNECT_TIMEOUT, READ_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
@@ -289,7 +289,7 @@ async def generate_insights(user: User, db: Session) -> InsightsRead:
     try:
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(
-                connect=_CONNECT_TIMEOUT, read=_READ_TIMEOUT, write=10.0, pool=5.0
+                connect=CONNECT_TIMEOUT, read=READ_TIMEOUT, write=10.0, pool=5.0
             )
         ) as client:
             response = await client.post(url, json=payload)

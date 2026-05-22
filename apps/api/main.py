@@ -10,21 +10,16 @@
 #   - CORS rejects requests from unauthorized origins
 #   - 404 on undefined routes with proper JSON error body
 
-import os
 import logging
 from contextlib import asynccontextmanager
 
-from dotenv import load_dotenv
-load_dotenv()  # populate os.environ from .env before any module reads settings
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import ConfigDict
-from pydantic_settings import BaseSettings
 
 from alembic.config import Config as AlembicConfig
 from alembic import command as alembic_command
 
+from config import settings
 from routers import auth, activities, plan, coach, review, insights, user
 from services.scheduler import scheduler
 
@@ -32,21 +27,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class Settings(BaseSettings):
-    model_config = ConfigDict(env_file=".env", extra="allow")
-
-    # Defaults — override via environment variables in production
-    api_port: int = 8000
-    cors_origin: str = "http://localhost:3000"
-
-
-settings = Settings()
-
-
 def _run_migrations() -> None:
-    from services.database import settings as db_settings
     alembic_cfg = AlembicConfig("alembic.ini")
-    alembic_cfg.set_main_option("sqlalchemy.url", db_settings.database_url)
+    alembic_cfg.set_main_option("sqlalchemy.url", settings.database_url)
     alembic_command.upgrade(alembic_cfg, "heads")
     logger.info("Database migrations applied")
 

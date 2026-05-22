@@ -26,10 +26,11 @@ from models.training_plan import TrainingPlan
 from models.user import User
 from prompts.pak_har import PLAN_PROMPT
 from config import settings
+from services.coach import FALLBACK_MAX_HR as _FALLBACK_MAX_HR, DEFAULT_RHR as _DEFAULT_RHR
 from services.ollama import (
     OLLAMA_BASE_URL,
-    _CONNECT_TIMEOUT,
-    _READ_TIMEOUT,
+    CONNECT_TIMEOUT,
+    READ_TIMEOUT,
     build_strava_context,
     build_user_preferences_context,
     format_pace,
@@ -51,8 +52,6 @@ _PLAN_HR_ZONE_PCTS: list[tuple[float, float, int]] = [
     (0.70, 0.85, 4),
     (0.85, 9.99, 5),
 ]
-_DEFAULT_RHR: int = 60
-_FALLBACK_MAX_HR: int = 185
 
 
 def _classify_zone_number(average_hr: int, max_hr: int, resting_hr: int) -> int:
@@ -675,8 +674,8 @@ async def generate_plan_with_ollama(
         try:
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(
-                    connect=_CONNECT_TIMEOUT,
-                    read=_READ_TIMEOUT,
+                    connect=CONNECT_TIMEOUT,
+                    read=READ_TIMEOUT,
                     write=10.0,
                     pool=5.0,
                 )
@@ -690,7 +689,7 @@ async def generate_plan_with_ollama(
                 "Pak Har is unavailable right now. Make sure Ollama is running."
             ) from exc
         except httpx.ReadTimeout as exc:
-            logger.error("Ollama read timeout after %ss generating plan", _READ_TIMEOUT)
+            logger.error("Ollama read timeout after %ss generating plan", READ_TIMEOUT)
             raise TimeoutError("Pak Har took too long to respond.") from exc
 
         raw_content: str = data.get("message", {}).get("content", "")

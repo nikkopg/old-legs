@@ -98,7 +98,7 @@ from models.user import User
 from schemas.activity import ActivityListResponse, ActivityRead, ActivityRpeUpdate, PlanVerdictRequest, PlanVerdictResponse
 from services.coach import run_analysis_for_activity
 from services.database import get_db
-from services.ollama import OLLAMA_BASE_URL, _CONNECT_TIMEOUT, _READ_TIMEOUT
+from services.ollama import OLLAMA_BASE_URL, CONNECT_TIMEOUT, READ_TIMEOUT
 from services.rate_limiter import check_rate_limit
 from services.strava import get_valid_access_token, sync_activities
 
@@ -485,7 +485,7 @@ async def plan_verdict(
     # 4. Non-streaming Ollama call — any exception returns the fallback (never crashes).
     try:
         async with httpx.AsyncClient(
-            timeout=httpx.Timeout(connect=_CONNECT_TIMEOUT, read=_READ_TIMEOUT, write=10.0, pool=5.0)
+            timeout=httpx.Timeout(connect=CONNECT_TIMEOUT, read=READ_TIMEOUT, write=10.0, pool=5.0)
         ) as client:
             response = await client.post(url, json=payload)
             response.raise_for_status()
