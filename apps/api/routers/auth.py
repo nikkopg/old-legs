@@ -23,20 +23,15 @@ Endpoints:
 
 import hmac
 import logging
-import os
 import secrets
 from typing import Optional
-
-# Allow plain-HTTP dev environments to receive cookies.
-# In production, keep secure=True (the default).
-# Set COOKIE_SECURE=false in .env (or docker-compose) to disable for local dev.
-_COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "true").lower() != "false"
 
 from fastapi import APIRouter, Body, Cookie, Depends, HTTPException, BackgroundTasks, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from config import settings
 from dependencies import get_current_user
 from models.user import User
 from schemas.user import UserRead
@@ -46,20 +41,6 @@ from services.strava import complete_oauth_flow, get_redirect_url
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-class OAuthSettings:
-    """OAuth configuration from environment variables."""
-
-    client_id: str
-    redirect_uri: str
-
-    def __init__(self):
-        self.client_id = os.environ.get("STRAVA_CLIENT_ID", "")
-        self.redirect_uri = os.environ.get("STRAVA_REDIRECT_URI", "")
-
-
-_oauth_settings = OAuthSettings()
 
 
 # Request schemas
@@ -130,13 +111,13 @@ async def initiate_strava_oauth(
     **Errors:**
     - 500: STRAVA_CLIENT_ID or STRAVA_REDIRECT_URI not configured
     """
-    if not _oauth_settings.client_id:
+    if not settings.strava_client_id:
         raise HTTPException(
             status_code=500,
             detail="Strava client ID not configured. Set STRAVA_CLIENT_ID environment variable."
         )
 
-    if not _oauth_settings.redirect_uri:
+    if not settings.strava_redirect_uri:
         raise HTTPException(
             status_code=500,
             detail="Strava redirect URI not configured. Set STRAVA_REDIRECT_URI environment variable."
@@ -154,7 +135,7 @@ async def initiate_strava_oauth(
         value=csrf_state,
         httponly=True,
         samesite="lax",
-        secure=_COOKIE_SECURE,
+        secure=settings.cookie_secure,
         max_age=600,  # 10 minutes — enough for the user to complete the OAuth redirect
     )
 
@@ -200,7 +181,13 @@ async def strava_oauth_callback(
 
     # --- CSRF state validation (BUG-014) ---
     # Clear the oauth_state cookie unconditionally so it cannot be replayed.
-    response.delete_cookie(key="oauth_state")
+    # Attributes must match the original Set-Cookie for the browser to honour the deletion.
+    response.delete_cookie(
+        key="oauth_state",
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+    )
 
     if not state or not oauth_state:
         raise HTTPException(
@@ -216,13 +203,13 @@ async def strava_oauth_callback(
         )
 
     # Validate environment
-    if not _oauth_settings.client_id:
+    if not settings.strava_client_id:
         raise HTTPException(
             status_code=500,
             detail="Strava client ID not configured."
         )
 
-    if not _oauth_settings.redirect_uri:
+    if not settings.strava_redirect_uri:
         raise HTTPException(
             status_code=500,
             detail="Strava redirect URI not configured."
@@ -246,13 +233,14 @@ async def strava_oauth_callback(
                 },
             ).model_dump()
         )
+        signed_session = settings.get_session_signer().dumps(user.id)
         response.set_cookie(
             key="session_user_id",
-            value=str(user.id),
+            value=signed_session,
             httponly=True,
             samesite="lax",
-            secure=_COOKIE_SECURE,
-            max_age=60 * 60 * 24 * 30,  # 30 days — matches Next.js frontend maxAge
+            secure=settings.cookie_secure,
+            max_age=60 * 60 * 24 * 30,  # 30 days
         )
         return response
 
@@ -293,8 +281,11 @@ async def oauth_status(
         return {"connected": False, "message": "No active session. Use /auth/strava to connect."}
 
     try:
-        user_id = int(session_user_id)
-    except (ValueError, TypeError):
+        from itsdangerous import BadSignature, SignatureExpired
+        user_id = settings.get_session_signer().loads(
+            session_user_id, max_age=60 * 60 * 24 * 30
+        )
+    except (BadSignature, SignatureExpired, Exception):
         return {"connected": False, "message": "Invalid session. Use /auth/strava to reconnect."}
 
     user = db.query(User).filter(User.id == user_id).first()
@@ -340,7 +331,12 @@ async def disconnect_strava(
     current_user.strava_token_expires_at = None
     db.commit()
 
-    response.delete_cookie(key="session_user_id")
+    response.delete_cookie(
+        key="session_user_id",
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+    )
 
     logger.info(f"User {current_user.id} disconnected from Strava")
     return DisconnectResponse(message="Disconnected from Strava")
