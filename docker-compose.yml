@@ -31,6 +31,8 @@ services:
     image: ollama/ollama:0.21.0
     container_name: oldlegs_ollama
     restart: unless-stopped
+    environment:
+      OLLAMA_HOST: "0.0.0.0"
     volumes:
       - ollama_data:/root/.ollama
     networks:

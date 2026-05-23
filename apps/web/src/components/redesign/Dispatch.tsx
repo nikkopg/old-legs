@@ -579,7 +579,7 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                 AT A GLANCE
               </div>
               <div className="font-body text-[12px] leading-relaxed">
-                {atAGlance ?? "Pak Har hasn&#39;t analyzed this run yet."}
+                {atAGlance ?? "Pak Har hasn't analyzed this run yet."}
               </div>
             </div>
           </div>
@@ -1309,7 +1309,7 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
             {/* Left — Dispatch prose */}
             <div>
               <div className="font-sans text-[9px] uppercase tracking-widest opacity-70">
-                PAK HAR&#39;S DISPATCH
+                PAK HAR'S DISPATCH
               </div>
               <Hairline className="my-[6px]" />
 
@@ -1373,7 +1373,7 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                   ) : (
                     <>
                       <p className="font-body italic text-[13px] opacity-60">
-                        Pak Har hasn&#39;t seen this run yet.
+                        Pak Har hasn't seen this run yet.
                       </p>
                       {onAnalyze && (
                         <button
