@@ -4,6 +4,10 @@ Ollama LLM integration service.
 Sends chat messages to a local Ollama instance and handles streaming responses.
 Default model: llama3 (configurable via OLLAMA_MODEL env var).
 Prepends Pak Har system prompt from prompts/pak_har.py on every request.
+
+TODO (post-launch): Split this file. The build_*_context functions are pure domain
+logic and should live in a separate services/context.py so the HTTP streaming client
+(stream_chat) can be tested in isolation from the DB-dependent context builders.
 """
 
 import json
@@ -26,8 +30,8 @@ OLLAMA_BASE_URL: str = settings.ollama_base_url
 
 # Timeout for first byte from Ollama — 60 seconds.
 # Streaming itself has no hard timeout.
-_CONNECT_TIMEOUT = 10.0
-_READ_TIMEOUT = 60.0
+CONNECT_TIMEOUT = 10.0
+READ_TIMEOUT = 60.0
 
 
 def format_pace(pace_float: float) -> str:
@@ -163,7 +167,8 @@ def build_user_preferences_context(user: User) -> str:
         for unset fields; resting HR and max HR are omitted entirely when not set.
     """
     target = f"{user.weekly_km_target:.1f} km/week" if user.weekly_km_target else "not set"
-    struggle = user.biggest_struggle if user.biggest_struggle else "not specified"
+    raw_struggle = user.biggest_struggle or ""
+    struggle = " ".join(raw_struggle[:200].split()) if raw_struggle else "not specified"
     goal = goal_event_label(user.goal_event)
     lines = [
         f"- Weekly km target: {target}",
@@ -376,7 +381,7 @@ async def stream_chat(
 
     try:
         async with httpx.AsyncClient(
-            timeout=httpx.Timeout(connect=_CONNECT_TIMEOUT, read=_READ_TIMEOUT, write=10.0, pool=5.0)
+            timeout=httpx.Timeout(connect=CONNECT_TIMEOUT, read=READ_TIMEOUT, write=10.0, pool=5.0)
         ) as client:
             async with client.stream("POST", url, json=payload) as response:
                 response.raise_for_status()
@@ -408,7 +413,7 @@ async def stream_chat(
             f"Make sure the model is available: ollama pull {ollama_model}"
         ) from exc
     except httpx.ReadTimeout as exc:
-        logger.error("Ollama read timeout after %ss", _READ_TIMEOUT)
+        logger.error("Ollama read timeout after %ss", READ_TIMEOUT)
         raise TimeoutError(
             "Pak Har took too long to respond."
         ) from exc

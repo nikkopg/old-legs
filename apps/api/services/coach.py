@@ -61,11 +61,13 @@ logger = logging.getLogger(__name__)
 
 # Fallback max HR used only when no max_hr data exists in activity history.
 # 185 bpm is a population-average for recreational adult runners.
-_FALLBACK_MAX_HR: int = 185
+FALLBACK_MAX_HR: int = 185
+_FALLBACK_MAX_HR = FALLBACK_MAX_HR  # backwards-compat alias
 
 # Default resting HR used until the user provides their actual RHR via onboarding.
 # 60 bpm is a reasonable population average for recreational runners.
-_DEFAULT_RHR: int = 60
+DEFAULT_RHR: int = 60
+_DEFAULT_RHR = DEFAULT_RHR  # backwards-compat alias
 
 # Zone boundaries as percentage ranges of Heart Rate Reserve (HRR = MHR - RHR).
 # Uses the Karvonen formula: zone_boundary = RHR + (pct × HRR)
@@ -657,8 +659,9 @@ def build_analysis_context(
     moving_seconds = activity.moving_time_seconds % 60
     moving_time_str = f"{moving_minutes}m {moving_seconds}s"
 
+    safe_name = " ".join((activity.name or "")[:100].split())
     lines: list[str] = [
-        f"Run: {activity.name}",
+        f"Run: {safe_name}",
         f"Date: {run_date}",
         f"Distance: {activity.distance_km:.2f} km",
         f"Moving time: {moving_time_str}",
@@ -844,8 +847,8 @@ async def run_analysis_for_activity(
     from services.ollama import (
         build_user_preferences_context,
         OLLAMA_BASE_URL,
-        _CONNECT_TIMEOUT,
-        _READ_TIMEOUT,
+        CONNECT_TIMEOUT,
+        READ_TIMEOUT,
     )
 
     started_at = time.monotonic()
@@ -1050,7 +1053,7 @@ async def run_analysis_for_activity(
         chunks: list[str] = []
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(
-                connect=_CONNECT_TIMEOUT, read=_READ_TIMEOUT, write=10.0, pool=5.0
+                connect=CONNECT_TIMEOUT, read=READ_TIMEOUT, write=10.0, pool=5.0
             )
         ) as client:
             async with client.stream("POST", url, json=payload) as response:
@@ -1126,7 +1129,7 @@ async def run_analysis_for_activity(
                 verdict_chunks: list[str] = []
                 async with httpx.AsyncClient(
                     timeout=httpx.Timeout(
-                        connect=_CONNECT_TIMEOUT, read=_READ_TIMEOUT, write=10.0, pool=5.0
+                        connect=CONNECT_TIMEOUT, read=READ_TIMEOUT, write=10.0, pool=5.0
                     )
                 ) as client:
                     async with client.stream("POST", url, json=extraction_payload) as extraction_response:

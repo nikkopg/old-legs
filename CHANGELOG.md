@@ -1,5 +1,26 @@
 # Changelog
 
+## v2.0.1 — 2026-05-23
+
+Security hardening and infrastructure reliability fixes. No new user-facing features.
+
+### Security
+- **Signed session cookies** — session cookie is now signed with `itsdangerous.URLSafeTimedSerializer` using `SECRET_KEY`; unsigned or tampered cookies are rejected with 401
+- **FERNET_KEY required at startup** — removed ephemeral dev key fallback; API refuses to start without a persistent key set, preventing silent token corruption across restarts
+- **Port hardening** — Postgres (`5432`) and Ollama (`11434`) Docker ports now bound to `127.0.0.1` only; not reachable from the network
+
+### Bug fixes
+- **Ollama unreachable from API container** — Ollama 0.21.0 defaults to binding `127.0.0.1` inside its container; added `OLLAMA_HOST=0.0.0.0` to expose it on the Docker network
+- **HTML entity apostrophes** — `&#39;` in JSX text nodes rendered as literal text instead of `'` on the activity detail page (Dispatch.tsx)
+- **Activity name prompt injection** — activity names are now truncated to 100 chars and whitespace-normalised before inclusion in LLM prompts
+
+### Infrastructure
+- **Ollama image pinned** to `ollama/ollama:0.21.0` (was `latest`)
+- Settings consolidated into a single `pydantic_settings.BaseSettings` class
+- `.gstack/` added to `.gitignore`
+
+---
+
 ## v2.0.0 — 2026-05-17
 
 v2 is a complete overhaul. The foundation from v1 is intact — Strava OAuth, activity sync, post-run analysis, weekly plan generation, Pak Har chat — but almost everything around it has been rebuilt or extended.

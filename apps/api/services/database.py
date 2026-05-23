@@ -9,20 +9,10 @@ from typing import Generator
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
-from pydantic import ConfigDict
-from pydantic_settings import BaseSettings
+
+from config import settings
 
 logger = logging.getLogger(__name__)
-
-
-class Settings(BaseSettings):
-    model_config = ConfigDict(env_file=".env", extra="allow")
-
-    database_url: str = "sqlite:///./oldlegs.db"
-    echo_sql: bool = False
-
-
-settings = Settings()
 
 # Engine is created once at module load — reuse across requests
 engine = create_engine(

@@ -29,41 +29,20 @@ Handles the Authorization Code flow:
 
 import logging
 import math
-import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
 from sqlalchemy.orm import Session
 
+from config import settings as _settings
 from models.activity import Activity
 from models.user import User
 from services.encryption import decrypt_token, encrypt_token
 
 logger = logging.getLogger(__name__)
 
-
-class StravaSettings:
-    """Strava API configuration loaded from environment."""
-
-    client_id: str
-    client_secret: str
-    redirect_uri: str
-    auth_url: str = "https://www.strava.com/oauth/token"
-
-    def __init__(self):
-        self.client_id = os.environ.get("STRAVA_CLIENT_ID")
-        self.client_secret = os.environ.get("STRAVA_CLIENT_SECRET")
-        self.redirect_uri = os.environ.get("STRAVA_REDIRECT_URI")
-
-        if not all([self.client_id, self.client_secret, self.redirect_uri]):
-            logger.warning(
-                "Strava credentials not fully configured. "
-                "Set STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, STRAVA_REDIRECT_URI"
-            )
-
-
-_settings = StravaSettings()
+_STRAVA_AUTH_URL = "https://www.strava.com/oauth/token"
 
 
 def get_redirect_url(state: Optional[str] = None) -> str:
@@ -83,8 +62,8 @@ def get_redirect_url(state: Optional[str] = None) -> str:
         Full URL to redirect user to Strava's OAuth page
     """
     params = {
-        "client_id": _settings.client_id,
-        "redirect_uri": _settings.redirect_uri,
+        "client_id": _settings.strava_client_id,
+        "redirect_uri": _settings.strava_redirect_uri,
         "response_type": "code",
         "scope": "read,activity:read",
     }
@@ -110,18 +89,18 @@ async def exchange_code_for_tokens(code: str) -> dict:
         httpx.HTTPStatusError: If Strava API returns non-200
         ValueError: If required fields are missing from response
     """
-    if not _settings.client_id or not _settings.client_secret:
+    if not _settings.strava_client_id or not _settings.strava_client_secret:
         raise RuntimeError("Strava credentials not configured")
 
     payload = {
-        "client_id": _settings.client_id,
-        "client_secret": _settings.client_secret,
+        "client_id": _settings.strava_client_id,
+        "client_secret": _settings.strava_client_secret,
         "code": code,
         "grant_type": "authorization_code",
     }
 
     async with httpx.AsyncClient() as client:
-        response = await client.post(_settings.auth_url, data=payload)
+        response = await client.post(_STRAVA_AUTH_URL, data=payload)
         response.raise_for_status()
 
         data = response.json()
@@ -256,20 +235,20 @@ async def get_valid_access_token(user: User, db: Session) -> str:
     if expires_at - now <= timedelta(minutes=5):
         logger.info(f"Access token expiring soon for user {user.id} — refreshing")
 
-        if not _settings.client_id or not _settings.client_secret:
+        if not _settings.strava_client_id or not _settings.strava_client_secret:
             raise RuntimeError("Strava credentials not configured for token refresh")
 
         plaintext_refresh = decrypt_token(user.strava_refresh_token)
 
         payload = {
-            "client_id": _settings.client_id,
-            "client_secret": _settings.client_secret,
+            "client_id": _settings.strava_client_id,
+            "client_secret": _settings.strava_client_secret,
             "grant_type": "refresh_token",
             "refresh_token": plaintext_refresh,
         }
 
         async with httpx.AsyncClient() as client:
-            response = await client.post(_settings.auth_url, data=payload)
+            response = await client.post(_STRAVA_AUTH_URL, data=payload)
             response.raise_for_status()
             data = response.json()
 

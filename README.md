@@ -1,7 +1,24 @@
 # Old Legs
 
-<p align="center"><img src="docs/screenshots/landing-page.png" alt="Old Legs landing page" /></p>
-Old Legs is a free, self-hosted AI running coach. It connects to your Strava account, analyzes your runs, and gives you honest, specific feedback — powered by a local LLM via Ollama. No subscription. No cloud. No cheerleading.
+Most running apps are optimized for engagement. That means positive reinforcement by default. After enough "Great effort! Every km counts!" you start to wonder if the app is coaching you or just keeping you subscribed.
+
+Old Legs is different. It connects to your Strava account and gives you honest, specific feedback from a coach named Pak Har — a 70-year-old Indonesian runner who has been running since before GPS existed and has no patience for hollow praise.
+
+**What Pak Har actually sounds like:**
+
+> *After a week with one run:*
+> "You ran once this week. That's not training, that's a coincidence. What actually happened?"
+
+> *After a slow run you still showed up for:*
+> "That was slow. But you went out when you didn't want to — that matters more than the pace right now."
+
+> *After hitting a PR:*
+> "You hit a PR. Six weeks of not quitting will do that. Now don't use it as an excuse to rest for a month."
+
+> *After seven days straight with declining pace:*
+> "Seven days straight and your pace is getting worse. Rest two days. That's not weakness — that's how this works."
+
+No subscription. No OpenAI or Anthropic. No cheerleading. The default model uses Ollama's free cloud inference — or swap in any local model for fully private, on-device coaching.
 
 ---
 
@@ -80,7 +97,8 @@ The same signals a professional coach would pull — not just average pace and H
 
 ### Prerequisites
 
-- [Docker](https://docs.docker.com/get-docker/) + Docker Compose
+- [Docker](https://docs.docker.com/get-docker/) + Docker Compose (macOS: increase Docker Desktop RAM to at least 4GB in Settings → Resources)
+- A free [Ollama account](https://ollama.com) (required to use the AI model)
 - A Strava API application (free) — takes 2 minutes:
   1. Go to [strava.com/settings/api](https://www.strava.com/settings/api)
   2. Fill in any name and website (e.g. `http://localhost`)
@@ -94,40 +112,69 @@ git clone https://github.com/nikkopg/old-legs.git
 cd old-legs
 ```
 
-Create `apps/api/.env` and fill in your Strava credentials:
+Generate the two required secret keys:
+
+```bash
+# FERNET_KEY — encrypts your Strava tokens at rest
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# SECRET_KEY — signs session cookies
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+Create `apps/api/.env` and fill in your values:
 
 ```env
 STRAVA_CLIENT_ID=your_client_id
 STRAVA_CLIENT_SECRET=your_client_secret
 STRAVA_REDIRECT_URI=http://localhost:3000/auth/callback
 FRONTEND_URL=http://localhost:3000
-SECRET_KEY=change-this-to-a-random-string
+SECRET_KEY=<output from python command above>
+FERNET_KEY=<output from python command above>
 COOKIE_SECURE=false
 DATABASE_URL=postgresql://oldlegs:oldlegs@postgres:5432/oldlegs
 OLLAMA_MODEL=gemma4:31b-cloud
 ```
 
+> **`OLLAMA_MODEL`** — `gemma4:31b-cloud` is the default: it routes inference through Ollama's free cloud API, so your run data is sent to Ollama's servers to generate responses. For fully private, on-device coaching, swap in a local model:
+>
+> ```env
+> OLLAMA_MODEL=llama3.2:3b     # fast, ~2GB, decent quality
+> OLLAMA_MODEL=gemma2:9b       # better quality, ~5GB
+> ```
+>
+> Local models don't require an Ollama account and never send data off your machine. Quality is lower than the cloud model.
+
 > **`DATABASE_URL`** uses `postgres` as the host — that's the service name in Docker Compose. If you're running the API locally (not in Docker), change `postgres` to `localhost`.
 
 > **`COOKIE_SECURE=false`** is required for local development over plain HTTP. Remove this line (or set it to `true`) when running behind HTTPS in production.
 
-### 2. Start
+### 2. Sign in to Ollama (first time only)
+
+The AI model requires a free Ollama account. Start the Ollama container and log in before pulling the model:
+
+```bash
+docker compose up -d ollama
+docker exec -it oldlegs_ollama ollama login
+```
+
+Follow the prompts. Your credentials are saved in the `ollama_data` volume — you won't need to do this again.
+
+### 3. Start
 
 ```bash
 docker compose up -d
 ```
 
-This starts Postgres, Ollama, the API, and the web app. On first run it will also pull the AI model — give it a few minutes.
+This starts Postgres, Ollama, the API, and the web app. On first run, Docker will build the images and register the AI model with Ollama cloud.
 
-### 3. Sign in to Ollama (first time only)
-
-The AI model requires a free Ollama account. [Sign up at ollama.com](https://ollama.com) if you don't have one, then:
+Verify all containers are running:
 
 ```bash
-docker exec -it oldlegs_ollama ollama login
+docker compose ps
 ```
 
-Follow the prompts. Your credentials are saved in the `ollama_data` volume — you won't need to do this again.
+All five services (`postgres`, `ollama`, `ollama-init`, `api`, `web`) should show as running or exited (ollama-init exits after the model registers — that's expected).
 
 ### 4. Open
 
@@ -146,7 +193,7 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-API runs at `http://localhost:8000`. Docs at `http://localhost:8000/docs`.
+API runs at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
 
 ### Frontend
 
@@ -181,6 +228,17 @@ ollama pull gemma4:31b-cloud
 
 ---
 
+## Upgrading
+
+```bash
+git pull
+docker compose up --build -d
+```
+
+Check the [CHANGELOG](CHANGELOG.md) before upgrading — breaking changes (new required env vars, schema changes) are listed there with instructions.
+
+---
+
 ## Running tests
 
 ```bash
@@ -188,6 +246,33 @@ cd apps/api
 pip install -r requirements-test.txt
 pytest
 ```
+
+---
+
+## Common issues
+
+**`RuntimeError: FERNET_KEY is not set`**
+You're missing `FERNET_KEY` in your `.env`. Generate one:
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+Add `FERNET_KEY=<value>` to `apps/api/.env` and restart: `docker compose restart api`.
+
+**Pak Har gives no response / "model not found" error**
+The `ollama-init` container failed to register the model, usually because Ollama login wasn't done first. Fix:
+```bash
+docker exec -it oldlegs_ollama ollama login
+docker compose run --rm ollama-init
+```
+
+**Strava OAuth error after sign-in**
+The `STRAVA_REDIRECT_URI` in your `.env` must match what you set in your Strava app's Authorization Callback Domain. It should be `http://localhost:3000/auth/callback` for local development.
+
+**Port 8000 or 3000 already in use**
+Another process is using the port. Either stop it, or edit the port mappings in `docker-compose.yml` (e.g. `"3001:3000"` to run the frontend on 3001).
+
+**API crashes immediately / can't reach localhost:8000**
+Check the API logs: `docker compose logs api`. Common causes: `FERNET_KEY` not set, `SECRET_KEY` not set, or Postgres still initializing (wait 10s and retry).
 
 ---
 

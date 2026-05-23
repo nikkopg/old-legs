@@ -153,9 +153,9 @@ def _fake_analyze_error(message: str):
 def _patch_strava_settings():
     """Ensure strava service has env credentials set so token refresh works."""
     import services.strava as strava_service
-    strava_service._settings.client_id = "test_id"
-    strava_service._settings.client_secret = "test_secret"
-    strava_service._settings.redirect_uri = "http://localhost:8000/auth/strava/callback"
+    strava_service._settings.strava_client_id = "test_id"
+    strava_service._settings.strava_client_secret = "test_secret"
+    strava_service._settings.strava_redirect_uri = "http://localhost:8000/auth/strava/callback"
 
 
 def _mock_strava_activities(mock_router, activities_payload: list) -> None:

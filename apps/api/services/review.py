@@ -25,19 +25,16 @@ from models.user import User
 from models.weekly_review import WeeklyReview
 from prompts.pak_har import REVIEW_PROMPT
 from services.coach import classify_hr_zone
+from services.coach import FALLBACK_MAX_HR as _FALLBACK_MAX_HR, DEFAULT_RHR as _DEFAULT_RHR
 from services.ollama import (
     OLLAMA_BASE_URL,
-    _CONNECT_TIMEOUT,
-    _READ_TIMEOUT,
+    CONNECT_TIMEOUT,
+    READ_TIMEOUT,
     build_user_preferences_context,
     build_voice_modifier,
     format_pace,
 )
 from services.streaming import complete_event, error_event, progress_event, token_event
-
-# Fallback max HR and resting HR constants (mirror coach.py defaults)
-_FALLBACK_MAX_HR: int = 185
-_DEFAULT_RHR: int = 60
 
 # Day name lookup — weekday() returns 0=Monday … 6=Sunday
 _WEEKDAY_NAMES = [
@@ -489,7 +486,7 @@ async def generate_weekly_review(
         # -----------------------------------------------------------------
         yield progress_event("Writing the assessment", started_at)
 
-        user_message = REVIEW_PROMPT.format(
+        system_content = REVIEW_PROMPT.format(
             week_start_date=week_start.isoformat(),
             today=today.isoformat(),
             planned_runs=planned_runs,
@@ -512,18 +509,11 @@ async def generate_weekly_review(
             "messages": [
                 {
                     "role": "system",
-                    "content": (
-                        "You are Pak Har. You are 70 years old. You have been running since before GPS existed.\n"
-                        "You give weekly assessments. You are blunt, specific, and direct. "
-                        "No hollow affirmations. No exclamation points. No emojis. "
-                        "You name the gap between what was planned and what happened, explain what it means, "
-                        "and give one concrete adjustment — for remaining sessions this week if any, "
-                        "otherwise for next week. Then stop."
-                    ),
+                    "content": system_content,
                 },
                 {
                     "role": "user",
-                    "content": user_message,
+                    "content": "Give me your assessment of this week.",
                 },
             ],
             "stream": True,
@@ -543,8 +533,8 @@ async def generate_weekly_review(
         try:
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(
-                    connect=_CONNECT_TIMEOUT,
-                    read=_READ_TIMEOUT,
+                    connect=CONNECT_TIMEOUT,
+                    read=READ_TIMEOUT,
                     write=10.0,
                     pool=5.0,
                 )
@@ -571,7 +561,7 @@ async def generate_weekly_review(
                 "Pak Har is unavailable right now. Make sure Ollama is running."
             ) from exc
         except httpx.ReadTimeout as exc:
-            logger.error("Ollama read timeout after %ss during weekly review generation", _READ_TIMEOUT)
+            logger.error("Ollama read timeout after %ss during weekly review generation", READ_TIMEOUT)
             raise TimeoutError("Pak Har took too long to respond.") from exc
 
         review_text: str = "".join(chunks).strip()
@@ -618,8 +608,8 @@ async def generate_weekly_review(
             verdict_chunks: list[str] = []
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(
-                    connect=_CONNECT_TIMEOUT,
-                    read=_READ_TIMEOUT,
+                    connect=CONNECT_TIMEOUT,
+                    read=READ_TIMEOUT,
                     write=10.0,
                     pool=5.0,
                 )
@@ -689,7 +679,7 @@ async def generate_weekly_review(
             ) from exc
         except httpx.ReadTimeout as exc:
             logger.error(
-                "Ollama read timeout after %ss during weekly review stage 5 (headline)", _READ_TIMEOUT
+                "Ollama read timeout after %ss during weekly review stage 5 (headline)", READ_TIMEOUT
             )
             raise TimeoutError("Pak Har took too long to respond.") from exc
         except Exception as exc:  # noqa: BLE001
