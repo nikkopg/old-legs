@@ -5,7 +5,7 @@ All configurable values live here. Import `settings` anywhere in the app
 instead of calling os.getenv() directly.
 """
 
-from pydantic import ConfigDict
+from pydantic import ConfigDict, field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -33,6 +33,26 @@ class Settings(BaseSettings):
     # Fernet encryption key for Strava tokens at rest
     # Generate: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     fernet_key: str | None = None
+
+    @field_validator("strava_client_secret")
+    @classmethod
+    def validate_strava_client_secret(cls, v: str) -> str:
+        if not v:
+            raise ValueError(
+                "STRAVA_CLIENT_SECRET is not set. "
+                "Get it from your Strava API app at https://www.strava.com/settings/api"
+            )
+        return v
+
+    @field_validator("secret_key")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        if not v:
+            raise ValueError(
+                "SECRET_KEY is not set. Generate one with: "
+                'python -c "import secrets; print(secrets.token_hex(32))"'
+            )
+        return v
 
     # Ollama
     ollama_base_url: str = "http://localhost:11434"

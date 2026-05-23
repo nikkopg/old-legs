@@ -7,7 +7,7 @@ Tokens are NEVER logged — only encrypted bytes are stored in the DB.
 
 import logging
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 
 from config import settings
 
@@ -39,4 +39,9 @@ def encrypt_token(plaintext: str) -> str:
 def decrypt_token(ciphertext: str) -> str:
     """Decrypt a ciphertext string back to plaintext."""
     fernet = _get_fernet()
-    return fernet.decrypt(ciphertext.encode()).decode()
+    try:
+        return fernet.decrypt(ciphertext.encode()).decode()
+    except InvalidToken as exc:
+        raise ValueError(
+            "Token decryption failed — token may be corrupted or encrypted with a different FERNET_KEY"
+        ) from exc
