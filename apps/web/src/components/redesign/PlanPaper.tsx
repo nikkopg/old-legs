@@ -224,11 +224,12 @@ export function PlanPaper({
       {!plan && (
         <div style={{ marginTop: 40 }}>
           {isStreaming ? (
-            /* Inline SSE progress strip — same visual pattern as dashboard */
+            /* Inline SSE progress strip */
             <div
+              className="ol-paper-drop"
               style={{
                 border: `1px solid ${OL.ink}`,
-                padding: '12px 14px',
+                padding: '12px 14px 0',
                 fontFamily: OL.mono,
                 position: 'relative',
               }}
@@ -259,15 +260,43 @@ export function PlanPaper({
                     color: s.status === 'pending' ? OL.muted : OL.ink,
                   }}
                 >
-                  <span style={{ width: 12, display: 'inline-block', textAlign: 'center' }}>
+                  <span
+                    key={s.status}
+                    className={s.status === 'done' ? 'ol-check-pop' : undefined}
+                    style={{ width: 12, display: 'inline-block', textAlign: 'center' }}
+                  >
                     {s.status === 'done' ? '✓' : s.status === 'running' ? '›' : '·'}
                   </span>
-                  <span className={s.status === 'running' ? 'ol-cursor-text' : undefined}>
+                  <span
+                    key={s.label + s.status}
+                    className={s.status === 'running' ? 'ol-tw-line' : undefined}
+                    style={{
+                      opacity: s.status === 'running' ? 0 : 1,
+                    }}
+                  >
                     {s.label}
                     {s.status === 'running' && <span className="ol-cursor" />}
                   </span>
                 </div>
               ))}
+              {/* Progress bar — grows as steps complete */}
+              {(() => {
+                const total = steps.length;
+                const done = steps.filter(s => s.status === 'done').length;
+                const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                return (
+                  <div style={{ margin: '10px -14px 0', height: 3, background: 'var(--color-hairline)' }}>
+                    <div
+                      className="ol-weekly-fill"
+                      style={{
+                        height: '100%',
+                        background: OL.accent,
+                        ['--ol-fill-target' as string]: `${pct}%`,
+                      }}
+                    />
+                  </div>
+                );
+              })()}
             </div>
           ) : streamError ? (
             /* Inline error state */

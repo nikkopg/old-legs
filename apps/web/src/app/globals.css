@@ -266,6 +266,17 @@ body {
 }
 .ol-overlay-in { animation: ol-overlay-in 200ms ease both; }
 
+/* Exhibit IV-b — Check-pop (✓ completion micro-feedback) ------- */
+@keyframes ol-check-pop {
+  0%   { opacity: 0; transform: scale(0.3); }
+  70%  { transform: scale(1.2); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.ol-check-pop {
+  display: inline-block;
+  animation: ol-check-pop 220ms cubic-bezier(.4,1.4,.5,1) both;
+}
+
 /* Exhibit V — Chart line draw-in --------------------------------
    Uses pathLength="1" on SVG <polyline> / <path> so stroke-dasharray: 1
    covers the full line regardless of actual pixel length. */
@@ -309,6 +320,7 @@ body {
   .ol-tw-line,
   .ol-paper-drop,
   .ol-overlay-in,
+  .ol-check-pop,
   .ol-rail-stretch,
   .ol-rail-stretch-center,
   .ol-fade-up,
