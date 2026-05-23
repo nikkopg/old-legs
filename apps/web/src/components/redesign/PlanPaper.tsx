@@ -367,6 +367,7 @@ export function PlanPaper({
             <div>
               <Caps size={10} ls={3}>The Fixtures · {plan.weekLabel}</Caps>
               <h1
+                className="ol-masthead-settle"
                 style={{
                   fontFamily: OL.display,
                   fontWeight: 400,
@@ -384,12 +385,14 @@ export function PlanPaper({
                 ))}
               </h1>
               <p
+                className="ol-fade-up"
                 style={{
                   fontFamily: OL.body,
                   fontSize: 13.5,
                   lineHeight: 1.55,
                   margin: 0,
                   maxWidth: 560,
+                  animationDelay: '240ms',
                 }}
               >
                 Pak Har files Monday at dawn. The week is not a suggestion. You may re-arrange within it — you may not subtract from it.
@@ -398,10 +401,12 @@ export function PlanPaper({
 
             {/* Right: Week At A Glance */}
             <div
+              className="ol-paper-drop"
               style={{
                 border: `3px solid ${OL.ink}`,
                 padding: '12px 14px',
                 background: 'var(--color-paper-soft)',
+                animationDelay: '120ms',
               }}
             >
               <Caps size={9} ls={3} opacity={0.7}>Week At A Glance</Caps>
@@ -417,8 +422,8 @@ export function PlanPaper({
                   ['Runs', String(totals.runCount)],
                   ['Rest', String(totals.restCount)],
                   ['Minutes', String(totals.totalMin)],
-                ] as [string, string][]).map(([label, value]) => (
-                  <div key={label}>
+                ] as [string, string][]).map(([label, value], statIdx) => (
+                  <div key={label} className="ol-fade-up" style={{ animationDelay: `${280 + statIdx * 60}ms` }}>
                     <Caps size={8} ls={2} opacity={0.6}>{label}</Caps>
                     <div
                       style={{
@@ -438,7 +443,7 @@ export function PlanPaper({
 
           {/* Fixtures table */}
           <div style={{ marginTop: 22 }}>
-            <Rule thick />
+            <Rule thick className="ol-rail-stretch" />
 
             {/* Header row */}
             <div
@@ -471,6 +476,7 @@ export function PlanPaper({
               return (
                 <div
                   key={d.day}
+                  className="ol-fade-up"
                   style={{
                     display: 'grid',
                     gridTemplateColumns: '44px 92px 1fr 160px 160px 2fr',
@@ -484,6 +490,7 @@ export function PlanPaper({
                     borderLeft: isToday ? `3px solid ${OL.accent}` : '3px solid transparent',
                     background: isToday ? 'var(--color-accent-soft)' : 'transparent',
                     opacity: isRest ? 0.55 : 1,
+                    animationDelay: `${i * 45}ms`,
                   }}
                 >
                   {/* Col 1: Day */}
@@ -680,6 +687,7 @@ export function PlanPaper({
             }, 0);
             return (
               <div
+                className="ol-fade-up"
                 style={{
                   display: 'grid',
                   gridTemplateColumns: '44px 92px 1fr 160px 160px 2fr',
@@ -688,6 +696,7 @@ export function PlanPaper({
                   background: OL.ink,
                   color: OL.paper,
                   marginTop: -1,
+                  animationDelay: '360ms',
                 }}
               >
                 <span />
@@ -755,13 +764,16 @@ export function PlanPaper({
                   return (
                     <p
                       key={i}
+                      className="ol-tw-line"
                       style={{
+                        opacity: 0,
                         fontFamily: OL.body,
                         fontSize: 13.5,
                         lineHeight: 1.6,
                         margin: '8px 0 0',
                         textAlign: 'justify',
                         hyphens: 'auto',
+                        animationDelay: `${420 + i * 120}ms`,
                       }}
                     >
                       <span
@@ -783,13 +795,16 @@ export function PlanPaper({
                 return (
                   <p
                     key={i}
+                    className="ol-tw-line"
                     style={{
+                      opacity: 0,
                       fontFamily: OL.body,
                       fontSize: 13.5,
                       lineHeight: 1.6,
                       margin: '8px 0 0',
                       textAlign: 'justify',
                       hyphens: 'auto',
+                      animationDelay: `${420 + i * 120}ms`,
                     }}
                   >
                     {para}
