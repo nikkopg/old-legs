@@ -381,7 +381,13 @@ export function PlanPaper({
 
       {/* ---- Plan content ---- */}
       {plan && totals && (
-        <>
+        <div
+          key={plan.filedAt}
+          style={{
+            opacity: isStreaming ? 0.35 : 1,
+            transition: 'opacity 400ms ease',
+          }}
+        >
           {/* Heading */}
           <div
             style={{
@@ -941,6 +947,7 @@ export function PlanPaper({
             {isStreaming && (
               /* Compact progress strip when plan already exists and regenerating */
               <div
+                className="ol-paper-drop"
                 style={{
                   border: `1px solid ${OL.ink}`,
                   padding: '8px 12px',
@@ -953,8 +960,15 @@ export function PlanPaper({
                 }}
               >
                 {steps.map((s) => (
-                  <span key={s.label} style={{ color: s.status === 'pending' ? OL.muted : OL.ink }}>
-                    {s.status === 'done' ? '✓' : s.status === 'running' ? '›' : '·'} {s.label}
+                  <span key={s.label + s.status} style={{ color: s.status === 'pending' ? OL.muted : OL.ink }}>
+                    {s.status === 'done' ? (
+                      <span key={s.label + '-done'} className="ol-check-pop" style={{ marginRight: 4 }}>✓</span>
+                    ) : (
+                      <span className={s.status === 'running' ? 'ol-tw-line' : undefined} style={{ marginRight: 4 }}>
+                        {s.status === 'running' ? '›' : '·'}
+                      </span>
+                    )}
+                    {s.label}
                     {s.status === 'running' && <span className="ol-cursor" />}
                   </span>
                 ))}
@@ -990,7 +1004,7 @@ export function PlanPaper({
             center="Page 2 · Plan"
             right="— continued page 3: Letters to the Editor —"
           />
-        </>
+        </div>
       )}
     </Paper>
   );
