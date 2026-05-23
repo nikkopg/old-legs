@@ -18,7 +18,7 @@ Old Legs is different. It connects to your Strava account and gives you honest, 
 > *After seven days straight with declining pace:*
 > "Seven days straight and your pace is getting worse. Rest two days. That's not weakness — that's how this works."
 
-No subscription. No cloud. No cheerleading. Runs entirely on your own machine via Ollama.
+No subscription. No OpenAI or Anthropic. No cheerleading. The default model uses Ollama's free cloud inference — or swap in any local model for fully private, on-device coaching.
 
 ---
 
@@ -97,7 +97,7 @@ The same signals a professional coach would pull — not just average pace and H
 
 ### Prerequisites
 
-- [Docker](https://docs.docker.com/get-docker/) + Docker Compose
+- [Docker](https://docs.docker.com/get-docker/) + Docker Compose (macOS: increase Docker Desktop RAM to at least 4GB in Settings → Resources)
 - A free [Ollama account](https://ollama.com) (required to use the AI model)
 - A Strava API application (free) — takes 2 minutes:
   1. Go to [strava.com/settings/api](https://www.strava.com/settings/api)
@@ -135,6 +135,15 @@ COOKIE_SECURE=false
 DATABASE_URL=postgresql://oldlegs:oldlegs@postgres:5432/oldlegs
 OLLAMA_MODEL=gemma4:31b-cloud
 ```
+
+> **`OLLAMA_MODEL`** — `gemma4:31b-cloud` is the default: it routes inference through Ollama's free cloud API, so your run data is sent to Ollama's servers to generate responses. For fully private, on-device coaching, swap in a local model:
+>
+> ```env
+> OLLAMA_MODEL=llama3.2:3b     # fast, ~2GB, decent quality
+> OLLAMA_MODEL=gemma2:9b       # better quality, ~5GB
+> ```
+>
+> Local models don't require an Ollama account and never send data off your machine. Quality is lower than the cloud model.
 
 > **`DATABASE_URL`** uses `postgres` as the host — that's the service name in Docker Compose. If you're running the API locally (not in Docker), change `postgres` to `localhost`.
 
