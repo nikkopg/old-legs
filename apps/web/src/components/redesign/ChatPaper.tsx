@@ -314,6 +314,14 @@ export function ChatPaper({ messages, isStreaming, onSend, onNav, onClearSession
           }}
         />
 
+        {messages.length === 0 && (
+          <div style={{ opacity: 0.4, fontFamily: OL.mono, fontSize: 12, lineHeight: 2, pointerEvents: 'none' }}>
+            <p style={{ margin: '0 0 8px' }}>&quot;What&apos;s wrong with my last 3 weeks of Zone 3 runs?&quot;</p>
+            <p style={{ margin: '0 0 8px' }}>&quot;Why is my pace getting worse despite running more?&quot;</p>
+            <p style={{ margin: '0 0 8px' }}>&quot;File me a tempo session for Tuesday.&quot;</p>
+          </div>
+        )}
+
         {messages.map((m, i) => (
           <TeletypeLine
             key={i}

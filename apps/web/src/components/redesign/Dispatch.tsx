@@ -38,6 +38,7 @@ import type { Activity, ActivityStreams } from '@/types/api';
 import type { WeeklyKmEntry } from './FrontPage';
 import { NewspaperChrome } from './NewspaperChrome';
 import type { ProgressStep } from '@/hooks/useProgressStream';
+import { PakHarShareCard } from './PakHarShareCard';
 
 export interface DispatchSplit {
   km: number;
@@ -536,6 +537,7 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
 
   type OverlayKey = 'hr' | 'elev' | 'cad';
   const [activeOverlay, setActiveOverlay] = useState<OverlayKey | null>(null);
+  const [showShareCard, setShowShareCard] = useState(false);
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--color-paper)', color: 'var(--color-ink)' }}>
@@ -1489,7 +1491,26 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                               </button>
                             </div>
                           ) : (
-                            <div className="text-right">
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16 }}>
+                              {activity.verdict_short && (
+                                <button
+                                  onClick={() => setShowShareCard(true)}
+                                  style={{
+                                    background: 'transparent',
+                                    color: 'var(--color-muted)',
+                                    border: '1px solid var(--color-hairline-strong)',
+                                    padding: '10px 18px',
+                                    fontFamily: 'var(--font-sans)',
+                                    fontSize: 11,
+                                    letterSpacing: 3,
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase' as const,
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  Share this take →
+                                </button>
+                              )}
                               <button
                                 onClick={onAnalyze}
                                 style={{
@@ -1682,6 +1703,16 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
           </div>
         </div>
       </div>
+
+      {showShareCard && activity.verdict_short && (
+        <PakHarShareCard
+          verdictShort={activity.verdict_short}
+          activityTitle={activity.name}
+          activityDate={dateInfo.full}
+          distance={`${activity.distance_km.toFixed(1)} km`}
+          onClose={() => setShowShareCard(false)}
+        />
+      )}
     </div>
   );
 }

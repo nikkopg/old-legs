@@ -357,7 +357,8 @@ export function NewspaperChrome({
               justifyContent: 'center',
               gap: 28,
               padding: '10px 0 8px',
-              flexWrap: 'wrap',
+              overflowX: 'auto',
+              whiteSpace: 'nowrap',
             }}
           >
             {nav.map((n) => {

@@ -17,6 +17,7 @@
 import type { Activity } from '@/types/api';
 import { ToneBadge } from './ToneBadge';
 import { NewspaperChrome, Paper } from './NewspaperChrome';
+import { useWindowWidth } from '@/hooks/useWindowWidth';
 
 export interface WeeklyKmEntry {
   label: string; // "This", "W-1", "W-2", "W-3"
@@ -146,6 +147,8 @@ export function FrontPage({
   onNav,
   isSyncing = false,
 }: FrontPageProps) {
+  const width = useWindowWidth();
+  const isMobile = width < 640;
   const lead = activities[0] ?? null;
   const previousEditions = activities.slice(1);
 
@@ -275,7 +278,12 @@ export function FrontPage({
                   return (
                     <div
                       key={activity.id}
-                      className="grid grid-cols-[76px_1fr_260px] gap-[18px] py-3.5 border-b border-[var(--color-ink)] last:border-b-0 cursor-pointer hover:bg-[var(--color-paper-soft)] transition-colors"
+                      className="py-3.5 border-b border-[var(--color-ink)] last:border-b-0 cursor-pointer hover:bg-[var(--color-paper-soft)] transition-colors"
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: isMobile ? '76px 1fr' : '76px 1fr 260px',
+                        gap: 18,
+                      }}
                       onClick={() => onActivityClick(activity.id)}
                     >
                       {/* Date gutter */}
@@ -299,6 +307,21 @@ export function FrontPage({
                             {activity.name}
                           </span>
                         </div>
+                        {activity.verdict_short && (
+                          <div style={{
+                            fontFamily: 'var(--font-body)',
+                            fontSize: 12,
+                            color: 'var(--color-muted)',
+                            marginTop: 2,
+                            lineHeight: 1.4,
+                            overflow: 'hidden',
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                          }}>
+                            {activity.verdict_short}
+                          </div>
+                        )}
                         <div className="font-display text-[28px] leading-[1.1] tracking-[-0.015em] mt-1 mb-1">
                           {toSentenceCase(headline)}
                         </div>
@@ -307,8 +330,8 @@ export function FrontPage({
                         </div>
                       </div>
 
-                      {/* Stats col */}
-                      <div className="text-right" style={{ fontFamily: 'var(--font-mono-tabloid)', fontVariantNumeric: 'tabular-nums' }}>
+                      {/* Stats col — hidden on mobile */}
+                      <div className="text-right" style={{ fontFamily: 'var(--font-mono-tabloid)', fontVariantNumeric: 'tabular-nums', display: isMobile ? 'none' : undefined }}>
                         {isMissed ? (
                           <div className="font-display text-[32px] text-[var(--color-accent)]">—</div>
                         ) : (

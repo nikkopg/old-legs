@@ -360,10 +360,11 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
 
         {step === 4 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <p style={{ fontFamily: 'Lora, serif', fontSize: 14, lineHeight: 1.6, margin: 0, color: 'var(--color-muted)' }}>
+            <div style={questionStyle}>Your resting heart rate?</div>
+            <p style={{ fontFamily: T.body, fontSize: 14, lineHeight: 1.6, margin: 0, color: 'var(--color-muted)' }}>
               Optional — but it makes HR zones more accurate.
             </p>
-            <label style={{ fontFamily: 'Work Sans, sans-serif', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', opacity: 0.6 }} htmlFor="resting-hr">
+            <label style={{ fontFamily: T.sans, fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', opacity: 0.6 }} htmlFor="resting-hr">
               Resting heart rate (bpm)
             </label>
             <input
@@ -375,7 +376,7 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
               value={form.restingHr}
               onChange={(e) => setForm((f) => ({ ...f, restingHr: e.target.value }))}
               style={{
-                fontFamily: 'Space Mono, monospace',
+                fontFamily: T.mono,
                 fontSize: 14,
                 padding: '10px 14px',
                 border: '1px solid var(--color-ink)',
@@ -402,10 +403,11 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
 
         {step === 5 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <p style={{ fontFamily: 'Lora, serif', fontSize: 14, lineHeight: 1.6, margin: 0, color: 'var(--color-muted)' }}>
+            <div style={questionStyle}>Your max heart rate?</div>
+            <p style={{ fontFamily: T.body, fontSize: 14, lineHeight: 1.6, margin: 0, color: 'var(--color-muted)' }}>
               Optional — skip if you don&apos;t know it. Pak Har will estimate from your activity history.
             </p>
-            <label style={{ fontFamily: 'Work Sans, sans-serif', fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', opacity: 0.6 }} htmlFor="max-hr">
+            <label style={{ fontFamily: T.sans, fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', opacity: 0.6 }} htmlFor="max-hr">
               Max heart rate (bpm)
             </label>
             <input
@@ -417,7 +419,7 @@ export function OnboardingModal({ onComplete }: OnboardingModalProps) {
               value={form.maxHr}
               onChange={(e) => setForm((f) => ({ ...f, maxHr: e.target.value }))}
               style={{
-                fontFamily: 'Space Mono, monospace',
+                fontFamily: T.mono,
                 fontSize: 14,
                 padding: '10px 14px',
                 border: '1px solid var(--color-ink)',
