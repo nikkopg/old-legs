@@ -659,8 +659,9 @@ def build_analysis_context(
     moving_seconds = activity.moving_time_seconds % 60
     moving_time_str = f"{moving_minutes}m {moving_seconds}s"
 
+    safe_name = " ".join((activity.name or "")[:100].split())
     lines: list[str] = [
-        f"Run: {activity.name}",
+        f"Run: {safe_name}",
         f"Date: {run_date}",
         f"Distance: {activity.distance_km:.2f} km",
         f"Moving time: {moving_time_str}",

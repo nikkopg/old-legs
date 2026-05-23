@@ -486,7 +486,7 @@ async def generate_weekly_review(
         # -----------------------------------------------------------------
         yield progress_event("Writing the assessment", started_at)
 
-        user_message = REVIEW_PROMPT.format(
+        system_content = REVIEW_PROMPT.format(
             week_start_date=week_start.isoformat(),
             today=today.isoformat(),
             planned_runs=planned_runs,
@@ -509,18 +509,11 @@ async def generate_weekly_review(
             "messages": [
                 {
                     "role": "system",
-                    "content": (
-                        "You are Pak Har. You are 70 years old. You have been running since before GPS existed.\n"
-                        "You give weekly assessments. You are blunt, specific, and direct. "
-                        "No hollow affirmations. No exclamation points. No emojis. "
-                        "You name the gap between what was planned and what happened, explain what it means, "
-                        "and give one concrete adjustment — for remaining sessions this week if any, "
-                        "otherwise for next week. Then stop."
-                    ),
+                    "content": system_content,
                 },
                 {
                     "role": "user",
-                    "content": user_message,
+                    "content": "Give me your assessment of this week.",
                 },
             ],
             "stream": True,

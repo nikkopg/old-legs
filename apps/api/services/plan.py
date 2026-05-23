@@ -33,6 +33,7 @@ from services.ollama import (
     READ_TIMEOUT,
     build_strava_context,
     build_user_preferences_context,
+    build_voice_modifier,
     format_pace,
     goal_event_label,
 )
@@ -628,6 +629,7 @@ async def generate_plan_with_ollama(
             zone2_ceiling=z2_ceil,
             goal_event_context=goal_event_context,
             race_date_context=race_date_context,
+            voice_modifier=build_voice_modifier(user.coach_voice),
         )
 
         # -----------------------------------------------------------------

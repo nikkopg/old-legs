@@ -167,7 +167,8 @@ def build_user_preferences_context(user: User) -> str:
         for unset fields; resting HR and max HR are omitted entirely when not set.
     """
     target = f"{user.weekly_km_target:.1f} km/week" if user.weekly_km_target else "not set"
-    struggle = user.biggest_struggle if user.biggest_struggle else "not specified"
+    raw_struggle = user.biggest_struggle or ""
+    struggle = " ".join(raw_struggle[:200].split()) if raw_struggle else "not specified"
     goal = goal_event_label(user.goal_event)
     lines = [
         f"- Weekly km target: {target}",
