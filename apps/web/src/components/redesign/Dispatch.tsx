@@ -933,16 +933,17 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                       opacity="0.3"
                     />
 
-                    {/* Overlay polylines */}
+                    {/* Overlay polylines — fade in (not draw-in, to preserve dashed style) */}
                     {overlaySegments.map((pts, idx) => (
                       <polyline
-                        key={idx}
+                        key={`${activeOverlay}-${idx}`}
                         points={pts}
                         stroke="var(--color-accent)"
                         strokeWidth="1.5"
                         strokeDasharray="4 3"
                         fill="none"
                         strokeLinejoin="round"
+                        style={{ opacity: 0, animation: 'ol-overlay-in 400ms ease 380ms forwards' }}
                       />
                     ))}
 
@@ -959,6 +960,8 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
 
                     {/* Pace polyline */}
                     <polyline
+                      pathLength="1"
+                      className="ol-chart-draw"
                       points={pacePoints}
                       stroke="var(--color-ink)"
                       strokeWidth="2"

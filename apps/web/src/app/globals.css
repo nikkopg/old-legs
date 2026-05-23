@@ -266,6 +266,19 @@ body {
 }
 .ol-overlay-in { animation: ol-overlay-in 200ms ease both; }
 
+/* Exhibit V — Chart line draw-in --------------------------------
+   Uses pathLength="1" on SVG <polyline> / <path> so stroke-dasharray: 1
+   covers the full line regardless of actual pixel length. */
+@keyframes ol-chart-draw {
+  from { stroke-dashoffset: 1; }
+  to   { stroke-dashoffset: 0; }
+}
+.ol-chart-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: ol-chart-draw 900ms cubic-bezier(.2,.7,.2,1) forwards;
+}
+
 /* Exhibit VII — Strava connect stamp + shake ------------------- */
 @keyframes ol-stamp-land {
   0%   { opacity: 0; transform: rotate(0deg) scale(2.4); }
@@ -306,6 +319,11 @@ body {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
+  }
+  .ol-chart-draw {
+    animation: none !important;
+    stroke-dasharray: none !important;
+    stroke-dashoffset: 0 !important;
   }
   .ol-weekly-fill {
     animation-duration: 200ms !important;
