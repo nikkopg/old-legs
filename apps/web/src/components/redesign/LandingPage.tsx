@@ -113,19 +113,19 @@ export function LandingPage({ onConnect, connectState = 'idle', errorMessage }: 
         <div style={{ marginTop: 32, marginBottom: 8 }}>
           <Rule gap={16} />
           <div style={{ display: 'flex', gap: 32, textAlign: 'center' }}>
-            <div style={{ flex: 1 }}>
+            <div className="ol-fade-up" style={{ flex: 1 }}>
               <Caps size={9} ls={2} opacity={0.75}>HONEST FEEDBACK</Caps>
               <p style={{ fontFamily: OL.body, fontSize: 12, opacity: 0.75, lineHeight: 1.6, marginTop: 6, textAlign: 'center' }}>
                 Pak Har tells you what actually happened on that run.
               </p>
             </div>
-            <div style={{ flex: 1 }}>
+            <div className="ol-fade-up" style={{ flex: 1, animationDelay: '100ms' }}>
               <Caps size={9} ls={2} opacity={0.75}>SELF-HOSTED</Caps>
               <p style={{ fontFamily: OL.body, fontSize: 12, opacity: 0.75, lineHeight: 1.6, marginTop: 6, textAlign: 'center' }}>
                 Your data. Your machine. No cloud.
               </p>
             </div>
-            <div style={{ flex: 1 }}>
+            <div className="ol-fade-up" style={{ flex: 1, animationDelay: '200ms' }}>
               <Caps size={9} ls={2} opacity={0.75}>FREE</Caps>
               <p style={{ fontFamily: OL.body, fontSize: 12, opacity: 0.75, lineHeight: 1.6, marginTop: 6, textAlign: 'center' }}>
                 No subscription. No API key. Ever.

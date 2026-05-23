@@ -87,12 +87,13 @@ export function Caps({
 interface RuleProps {
   thick?: boolean;
   gap?: number;
+  className?: string;
 }
 
-export function Rule({ thick, gap = 0 }: RuleProps) {
+export function Rule({ thick, gap = 0, className }: RuleProps) {
   if (thick) {
     return (
-      <div style={{ margin: gap ? `${gap}px 0` : 0 }}>
+      <div className={className} style={{ margin: gap ? `${gap}px 0` : 0 }}>
         <div style={{ height: 3, background: OL.ink }} />
         <div style={{ height: 1, background: OL.ink, marginTop: 3 }} />
       </div>
@@ -100,6 +101,7 @@ export function Rule({ thick, gap = 0 }: RuleProps) {
   }
   return (
     <div
+      className={className}
       style={{
         height: 1,
         background: OL.ink,
@@ -314,7 +316,7 @@ export function NewspaperChrome({
         </Caps>
       </div>
 
-      <Rule thick gap={10} />
+      <Rule thick gap={10} className="ol-rail-stretch-center" />
 
       {/* Masthead */}
       <div
@@ -324,6 +326,7 @@ export function NewspaperChrome({
         }}
       >
         <div
+          className="ol-masthead-settle"
           style={{
             fontFamily: OL.display,
             fontWeight: 400,
@@ -346,7 +349,7 @@ export function NewspaperChrome({
         )}
       </div>
 
-      <Rule thick gap={10} />
+      <Rule thick gap={10} className="ol-rail-stretch-center" />
 
       {/* Nav strip + section row — only rendered when nav is provided */}
       {nav && (

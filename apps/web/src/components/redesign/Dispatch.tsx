@@ -566,7 +566,10 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
               <div className="font-sans text-[10px] uppercase tracking-widest opacity-70 mb-2">
                 FRONT PAGE · VERDICT
               </div>
-              <h1 className="font-display text-[36px] leading-[1.05] tracking-[-0.015em] mb-3">
+              <h1
+                key={headline}
+                className={`font-display text-[36px] leading-[1.05] tracking-[-0.015em] mb-3${!isAnalyzing ? ' ol-masthead-settle' : ''}`}
+              >
                 {isAnalyzing && verdictStreamedText.length > 0
                   ? <>{extractStage5Text(verdictStreamedText)}<span className="ol-cursor">_</span></>
                   : toSentenceCase(headline)

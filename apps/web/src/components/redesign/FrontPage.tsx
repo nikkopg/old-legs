@@ -199,7 +199,7 @@ export function FrontPage({
                     return `${d.dow} ${d.day} ${d.mon} · ${lead.name}`;
                   })()}
                 </div>
-                <div className="font-display text-[36px] leading-[1.05] tracking-[-0.015em] mb-3">
+                <div className="ol-masthead-settle font-display text-[36px] leading-[1.05] tracking-[-0.015em] mb-3">
                   {toSentenceCase(getVerdictHeadline(lead))}
                 </div>
                 <div className="font-body text-[14px] leading-relaxed mb-3">
@@ -268,7 +268,7 @@ export function FrontPage({
               </p>
             ) : (
               <div>
-                {previousEditions.map((activity) => {
+                {previousEditions.map((activity, i) => {
                   const d = formatActivityDate(activity.activity_date);
                   const isMissed = activity.distance_km === 0;
                   const tone = inferTone(activity);
@@ -278,11 +278,12 @@ export function FrontPage({
                   return (
                     <div
                       key={activity.id}
-                      className="py-3.5 border-b border-[var(--color-ink)] last:border-b-0 cursor-pointer hover:bg-[var(--color-paper-soft)] transition-colors"
+                      className="ol-fade-up py-3.5 border-b border-[var(--color-ink)] last:border-b-0 cursor-pointer hover:bg-[var(--color-paper-soft)] transition-colors"
                       style={{
                         display: 'grid',
                         gridTemplateColumns: isMobile ? '76px 1fr' : '76px 1fr 260px',
                         gap: 18,
+                        animationDelay: `${i * 55}ms`,
                       }}
                       onClick={() => onActivityClick(activity.id)}
                     >

@@ -31,7 +31,8 @@ export function PakHarShareCard({ verdictShort, activityTitle, activityDate, dis
     if (cardRef.current) {
       const printWindow = window.open('', '_blank')
       if (printWindow) {
-        printWindow.document.write(`<html><head><title>Pak Har on ${activityTitle}</title>`)
+        const safeTitle = activityTitle.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        printWindow.document.write(`<html><head><title>Pak Har on ${safeTitle}</title>`)
         printWindow.document.write('<style>@import url("https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Space+Mono:wght@400;700&display=swap"); body { margin: 0; }</style>')
         printWindow.document.write('</head><body>')
         printWindow.document.write(cardRef.current.outerHTML)
@@ -45,6 +46,7 @@ export function PakHarShareCard({ verdictShort, activityTitle, activityDate, dis
 
   return (
     <div
+      className="ol-overlay-in"
       style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -56,6 +58,7 @@ export function PakHarShareCard({ verdictShort, activityTitle, activityDate, dis
         {/* The card itself */}
         <div
           ref={cardRef}
+          className="ol-paper-drop"
           style={{
             width: 600, height: 400,
             background: OL.paper,
