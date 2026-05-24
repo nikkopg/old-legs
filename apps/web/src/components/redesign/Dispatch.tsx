@@ -619,8 +619,12 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                   {label}
                 </div>
                 <div
-                  className="text-[28px] font-bold leading-none"
-                  style={{ fontFamily: 'var(--font-mono-tabloid)', fontVariantNumeric: 'tabular-nums' }}
+                  className="font-bold leading-none"
+                  style={{
+                    fontFamily: 'var(--font-mono-tabloid)',
+                    fontVariantNumeric: 'tabular-nums',
+                    fontSize: value.length > 5 ? 20 : 28,
+                  }}
                 >
                   {value}
                   {unit && (
