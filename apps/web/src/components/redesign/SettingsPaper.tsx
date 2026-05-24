@@ -490,7 +490,10 @@ export function SettingsPaper({
                 return (
                   <div
                     key={opt}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => onVoiceChange(opt)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onVoiceChange(opt); } }}
                     style={{
                       border: `${active ? 3 : 1}px solid ${OL.ink}`,
                       padding: '10px 12px',
@@ -540,7 +543,12 @@ export function SettingsPaper({
                 The lamp on the desk. Turn it off and the paper goes tobacco-brown for late editions.
               </span>
               <span
+                role="switch"
+                aria-checked={theme === 'light'}
+                aria-label="Reading light"
+                tabIndex={0}
                 onClick={() => onThemeChange(theme === 'light' ? 'dark' : 'light')}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onThemeChange(theme === 'light' ? 'dark' : 'light'); } }}
                 style={{
                   display: 'inline-block',
                   flexShrink: 0,
@@ -583,7 +591,12 @@ export function SettingsPaper({
                 >
                   <span style={{ fontFamily: OL.body, fontSize: 13 }}>{label}</span>
                   <span
+                    role="switch"
+                    aria-checked={on}
+                    aria-label={label}
+                    tabIndex={0}
                     onClick={() => onToggleDelivery(key)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggleDelivery(key); } }}
                     style={{
                       display: 'inline-block',
                       width: 44,
