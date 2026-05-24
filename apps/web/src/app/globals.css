@@ -312,6 +312,17 @@ body {
   animation: ol-stamp-shake 360ms ease-out 240ms;
 }
 
+/* Focus rings — custom focus ring for all interactive/form elements.
+   Replaces browser default on input/select; covers custom role="switch"/role="button" spans+divs. */
+input:focus-visible,
+select:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible,
+[role="switch"]:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
 /* Reduced motion ------------------------------------------------
    Kill decorative motion (typewriter, paper-drop, coach tokens, stamp).
    Keep functional motion (theme transition, weekly bar fill, blink cursor)

@@ -245,7 +245,7 @@ export function SettingsPaper({
                     paddingLeft: 10,
                   }}
                 >
-                  <Caps size={8} ls={2} opacity={0.6}>{label}</Caps>
+                  <Caps size={9} ls={2} opacity={0.6}>{label}</Caps>
                   <div style={{ fontFamily: OL.mono, fontSize: 13, marginTop: 2 }}>{value}</div>
                 </div>
               ))}
@@ -262,7 +262,7 @@ export function SettingsPaper({
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 14 }}>
               {/* Weekly km target */}
               <div>
-                <Caps size={8} ls={2} opacity={0.6}>Current weekly km</Caps>
+                <Caps size={9} ls={2} opacity={0.6}>Current weekly km</Caps>
                 <input
                   type="number"
                   min={0}
@@ -277,14 +277,13 @@ export function SettingsPaper({
                     padding: '6px 8px',
                     border: `1px solid ${OL.ink}`,
                     background: 'transparent',
-                    outline: 'none',
                     boxSizing: 'border-box' as const,
                   }}
                 />
               </div>
               {/* Days available */}
               <div>
-                <Caps size={8} ls={2} opacity={0.6}>Days available</Caps>
+                <Caps size={9} ls={2} opacity={0.6}>Days available</Caps>
                 <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' as const }}>
                   {DAYS_OF_WEEK.map(({ value, label }) => {
                     const active = preferences.availableDays.includes(value);
@@ -311,8 +310,7 @@ export function SettingsPaper({
                           color: active ? OL.paper : OL.ink,
                           cursor: 'pointer',
                           borderRadius: 0,
-                          outline: 'none',
-                          flexShrink: 0,
+                                flexShrink: 0,
                         }}
                       >
                         {label}
@@ -323,7 +321,7 @@ export function SettingsPaper({
               </div>
               {/* Biggest struggle */}
               <div>
-                <Caps size={8} ls={2} opacity={0.6}>Biggest struggle</Caps>
+                <Caps size={9} ls={2} opacity={0.6}>Biggest struggle</Caps>
                 <input
                   type="text"
                   value={preferences.biggestStruggle}
@@ -337,7 +335,6 @@ export function SettingsPaper({
                     padding: '6px 8px',
                     border: `1px solid ${OL.ink}`,
                     background: 'transparent',
-                    outline: 'none',
                     boxSizing: 'border-box' as const,
                   }}
                 />
@@ -347,7 +344,7 @@ export function SettingsPaper({
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, marginBottom: 14 }}>
               {/* Resting HR */}
               <div>
-                <Caps size={8} ls={2} opacity={0.6}>Resting HR (bpm)</Caps>
+                <Caps size={9} ls={2} opacity={0.6}>Resting HR (bpm)</Caps>
                 <input
                   type="number"
                   min={30}
@@ -364,14 +361,13 @@ export function SettingsPaper({
                     padding: '6px 8px',
                     border: `1px solid ${OL.ink}`,
                     background: 'transparent',
-                    outline: 'none',
                     boxSizing: 'border-box' as const,
                   }}
                 />
               </div>
               {/* Max HR */}
               <div>
-                <Caps size={8} ls={2} opacity={0.6}>Max HR (bpm)</Caps>
+                <Caps size={9} ls={2} opacity={0.6}>Max HR (bpm)</Caps>
                 <input
                   type="number"
                   min={100}
@@ -388,7 +384,6 @@ export function SettingsPaper({
                     padding: '6px 8px',
                     border: `1px solid ${OL.ink}`,
                     background: 'transparent',
-                    outline: 'none',
                     boxSizing: 'border-box' as const,
                   }}
                 />
@@ -398,7 +393,7 @@ export function SettingsPaper({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
               {/* Training goal */}
               <div>
-                <Caps size={8} ls={2} opacity={0.6}>Training goal</Caps>
+                <Caps size={9} ls={2} opacity={0.6}>Training goal</Caps>
                 <select
                   value={preferences.goalEvent ?? ''}
                   onChange={(e) => onGoalEventChange((e.target.value as GoalEvent) || null)}
@@ -413,7 +408,6 @@ export function SettingsPaper({
                     border: `1px solid ${OL.ink}`,
                     borderRadius: 0,
                     padding: '6px 8px',
-                    outline: 'none',
                     cursor: 'pointer',
                   }}
                 >
@@ -425,7 +419,7 @@ export function SettingsPaper({
               </div>
               {/* Race date */}
               <div>
-                <Caps size={8} ls={2} opacity={0.6}>Race date</Caps>
+                <Caps size={9} ls={2} opacity={0.6}>Race date</Caps>
                 <input
                   type="date"
                   value={preferences.raceDate}
@@ -442,7 +436,6 @@ export function SettingsPaper({
                     border: `1px solid ${OL.ink}`,
                     borderRadius: 0,
                     padding: '6px 8px',
-                    outline: 'none',
                     boxSizing: 'border-box' as const,
                   }}
                 />
