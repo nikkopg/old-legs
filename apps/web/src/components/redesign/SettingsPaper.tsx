@@ -456,14 +456,16 @@ export function SettingsPaper({
                   letterSpacing: 3,
                   fontWeight: 700,
                   textTransform: 'uppercase' as const,
-                  cursor: isSavingPreferences ? 'not-allowed' : 'pointer',
+                  cursor: (isSavingPreferences || preferences.biggestStruggle.trim() === '' || preferences.weeklyKmTarget === '' || preferences.availableDays.length === 0) ? 'not-allowed' : 'pointer',
                   opacity: (preferences.biggestStruggle.trim() === '' || preferences.weeklyKmTarget === '' || preferences.availableDays.length === 0) ? 0.4 : 1,
                 }}
               >
                 {isSavingPreferences ? 'Saving...' : 'Save →'}
               </button>
               {preferencesSaved && (
-                <span style={{ fontFamily: OL.body, fontSize: 13, color: OL.muted }}>Saved.</span>
+                <span style={{ fontFamily: OL.body, fontSize: 13, color: OL.muted }}>
+                  <span className="ol-check-pop" style={{ marginRight: 4 }}>✓</span>Saved.
+                </span>
               )}
               {preferencesError && (
                 <span style={{ fontFamily: OL.body, fontSize: 13, color: OL.accent }}>{preferencesError}</span>
@@ -781,15 +783,17 @@ export function SettingsPaper({
         <aside style={{ borderLeft: `1px solid ${OL.ink}`, paddingLeft: 20 }}>
           <Caps size={10} ls={3}>The Paper in Numbers</Caps>
           <Hairline gap={6} />
-          {statsRows.map(({ value, label }) => (
+          {statsRows.map(({ value, label }, i) => (
             <div
               key={label}
+              className="ol-fade-up"
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'baseline',
                 padding: '6px 0',
                 borderBottom: `1px dotted var(--color-hairline)`,
+                animationDelay: `${i * 60}ms`,
               }}
             >
               <span style={{ fontFamily: OL.mono, fontSize: 22, fontWeight: 700 }}>
