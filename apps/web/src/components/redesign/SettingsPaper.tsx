@@ -659,18 +659,17 @@ export function SettingsPaper({
                     onClick={onResetContext}
                     style={{
                       background: 'transparent',
-                      color: OL.accent,
-                      border: `1px solid ${OL.accent}`,
-                      padding: '10px 20px',
-                      fontFamily: OL.sans,
-                      fontSize: 11,
-                      letterSpacing: 3,
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
+                      color: OL.muted,
+                      border: 'none',
+                      padding: 0,
+                      fontFamily: OL.body,
+                      fontSize: 13,
                       cursor: 'pointer',
+                      textDecoration: 'underline',
+                      textUnderlineOffset: 3,
                     }}
                   >
-                    Reset Pak Har&apos;s Context →
+                    Reset Pak Har&apos;s context
                   </button>
                 )}
 
