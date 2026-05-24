@@ -20,10 +20,30 @@ interface PakHarShareCardProps {
   activityTitle: string
   activityDate: string
   distance?: string
+  movingTimeSeconds?: number
+  avgPaceMinPerKm?: number
+  avgHr?: number | null
+  elevationGainM?: number
   onClose: () => void
 }
 
-export function PakHarShareCard({ verdictShort, activityTitle, activityDate, distance, onClose }: PakHarShareCardProps) {
+function fmtTime(seconds: number): string {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = seconds % 60
+  const mm = String(m).padStart(2, '0')
+  const ss = String(s).padStart(2, '0')
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`
+}
+
+function fmtPace(minPerKm: number): string {
+  const total = Math.round(minPerKm * 60)
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
+export function PakHarShareCard({ verdictShort, activityTitle, activityDate, distance, movingTimeSeconds, avgPaceMinPerKm, avgHr, elevationGainM, onClose }: PakHarShareCardProps) {
   const cardRef = useRef<HTMLDivElement>(null)
 
   function handleDownload() {
@@ -75,7 +95,7 @@ export function PakHarShareCard({ verdictShort, activityTitle, activityDate, dis
             <div
               style={{
                 fontFamily: OL.display,
-                fontSize: verdictShort.length > 80 ? 32 : verdictShort.length > 50 ? 40 : 48,
+                fontSize: verdictShort.length > 80 ? 30 : verdictShort.length > 50 ? 38 : 44,
                 lineHeight: 1.1,
                 letterSpacing: -0.5,
                 fontWeight: 400,
@@ -85,6 +105,51 @@ export function PakHarShareCard({ verdictShort, activityTitle, activityDate, dis
             </div>
           </div>
 
+          {/* Stats strip */}
+          {(distance || movingTimeSeconds !== undefined || avgPaceMinPerKm !== undefined || avgHr !== undefined || elevationGainM !== undefined) && (() => {
+            const stats: { label: string; value: string; unit: string }[] = []
+            if (distance)                    stats.push({ label: 'DIST',     value: distance,                    unit: '' })
+            if (movingTimeSeconds !== undefined) stats.push({ label: 'TIME', value: fmtTime(movingTimeSeconds),  unit: '' })
+            if (avgPaceMinPerKm !== undefined)   stats.push({ label: 'PACE', value: fmtPace(avgPaceMinPerKm),    unit: '/km' })
+            if (avgHr != null)                   stats.push({ label: 'HR',   value: String(avgHr),               unit: 'bpm' })
+            if (elevationGainM !== undefined)    stats.push({ label: 'ELEV', value: `+${elevationGainM}`,        unit: 'm' })
+            return (
+              <div style={{
+                display: 'flex',
+                gap: 0,
+                marginBottom: 20,
+                paddingTop: 16,
+                borderTop: `1px solid ${OL.hair}`,
+              }}>
+                {stats.map((s, i) => (
+                  <div key={s.label} style={{
+                    flex: 1,
+                    paddingLeft: i === 0 ? 0 : 16,
+                    borderLeft: i === 0 ? 'none' : `1px solid ${OL.hair}`,
+                  }}>
+                    <Caps size={8} ls={2} opacity={0.5} style={{ display: 'block', marginBottom: 3 }}>
+                      {s.label}
+                    </Caps>
+                    <span style={{
+                      fontFamily: OL.mono,
+                      fontSize: 15,
+                      fontWeight: 700,
+                      letterSpacing: -0.3,
+                      color: OL.ink,
+                    }}>
+                      {s.value}
+                    </span>
+                    {s.unit && (
+                      <span style={{ fontFamily: OL.mono, fontSize: 10, opacity: 0.5, marginLeft: 3 }}>
+                        {s.unit}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
+          })()}
+
           {/* Footer */}
           <div>
             <div style={{ borderTop: `1px solid ${OL.accent}`, marginBottom: 12 }} />
@@ -92,11 +157,9 @@ export function PakHarShareCard({ verdictShort, activityTitle, activityDate, dis
               <Caps size={9} ls={2} opacity={0.75} style={{ color: OL.accent }}>
                 BY PAK HAR · SENIOR COACH · OLD LEGS
               </Caps>
-              {distance && (
-                <Caps size={9} ls={1} opacity={0.55}>
-                  {distance} · {activityDate}
-                </Caps>
-              )}
+              <Caps size={9} ls={1} opacity={0.55}>
+                {activityDate}
+              </Caps>
             </div>
           </div>
         </div>

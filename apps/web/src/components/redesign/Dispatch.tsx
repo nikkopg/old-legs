@@ -1716,6 +1716,10 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
           activityTitle={activity.name}
           activityDate={dateInfo.full}
           distance={`${activity.distance_km.toFixed(1)} km`}
+          movingTimeSeconds={activity.moving_time_seconds}
+          avgPaceMinPerKm={activity.average_pace_min_per_km}
+          avgHr={activity.average_hr}
+          elevationGainM={activity.elevation_gain_m}
           onClose={() => setShowShareCard(false)}
         />
       )}
