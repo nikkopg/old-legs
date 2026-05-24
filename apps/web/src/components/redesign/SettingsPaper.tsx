@@ -304,7 +304,7 @@ export function SettingsPaper({
                           letterSpacing: 1,
                           padding: '4px 0',
                           width: 34,
-                          height: 28,
+                          height: 36,
                           border: `1px solid ${OL.ink}`,
                           background: active ? OL.ink : 'transparent',
                           color: active ? OL.paper : OL.ink,
