@@ -88,15 +88,21 @@ services:
       dockerfile: Dockerfile
     container_name: oldlegs_web
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    # network_mode: host shares the host's network namespace so that
+    # os.networkInterfaces() returns the real LAN IP (e.g. 192.168.x.x) for
+    # QR code generation. Without this, the container only sees its Docker
+    # bridge IP (172.18.x.x) which the phone can't reach.
+    # NOTE: host networking is Linux-only. On Docker Desktop (Mac/Windows) this
+    # falls back to the VM's network — QR IP detection won't work there.
+    network_mode: "host"
     environment:
       # Set to the public URL where your API is reachable from the browser.
       # For local: http://localhost:8000
       # For remote/VPS: http://your-server-ip:8000 or https://api.yourdomain.com
       NEXT_PUBLIC_API_URL: http://localhost:8000
-      API_URL: http://api:8000
+      # API_URL is for server-side Next.js code (proxy routes, auth callback).
+      # With network_mode: host, Docker DNS names (api:8000) don't resolve —
+      # use localhost:8000 which reaches the api container via its port mapping.
+      API_URL: http://localhost:8000
     depends_on:
       - api
-    networks:
-      - oldlegs
