@@ -245,7 +245,7 @@ export function SettingsPaper({
                     paddingLeft: 10,
                   }}
                 >
-                  <Caps size={8} ls={2} opacity={0.6}>{label}</Caps>
+                  <Caps size={9} ls={2} opacity={0.6}>{label}</Caps>
                   <div style={{ fontFamily: OL.mono, fontSize: 13, marginTop: 2 }}>{value}</div>
                 </div>
               ))}
@@ -262,7 +262,7 @@ export function SettingsPaper({
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 14 }}>
               {/* Weekly km target */}
               <div>
-                <Caps size={8} ls={2} opacity={0.6}>Current weekly km</Caps>
+                <Caps size={9} ls={2} opacity={0.6}>Current weekly km</Caps>
                 <input
                   type="number"
                   min={0}
@@ -277,14 +277,13 @@ export function SettingsPaper({
                     padding: '6px 8px',
                     border: `1px solid ${OL.ink}`,
                     background: 'transparent',
-                    outline: 'none',
                     boxSizing: 'border-box' as const,
                   }}
                 />
               </div>
               {/* Days available */}
               <div>
-                <Caps size={8} ls={2} opacity={0.6}>Days available</Caps>
+                <Caps size={9} ls={2} opacity={0.6}>Days available</Caps>
                 <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' as const }}>
                   {DAYS_OF_WEEK.map(({ value, label }) => {
                     const active = preferences.availableDays.includes(value);
@@ -305,14 +304,13 @@ export function SettingsPaper({
                           letterSpacing: 1,
                           padding: '4px 0',
                           width: 34,
-                          height: 28,
+                          height: 36,
                           border: `1px solid ${OL.ink}`,
                           background: active ? OL.ink : 'transparent',
                           color: active ? OL.paper : OL.ink,
                           cursor: 'pointer',
                           borderRadius: 0,
-                          outline: 'none',
-                          flexShrink: 0,
+                                flexShrink: 0,
                         }}
                       >
                         {label}
@@ -323,7 +321,7 @@ export function SettingsPaper({
               </div>
               {/* Biggest struggle */}
               <div>
-                <Caps size={8} ls={2} opacity={0.6}>Biggest struggle</Caps>
+                <Caps size={9} ls={2} opacity={0.6}>Biggest struggle</Caps>
                 <input
                   type="text"
                   value={preferences.biggestStruggle}
@@ -337,7 +335,6 @@ export function SettingsPaper({
                     padding: '6px 8px',
                     border: `1px solid ${OL.ink}`,
                     background: 'transparent',
-                    outline: 'none',
                     boxSizing: 'border-box' as const,
                   }}
                 />
@@ -347,7 +344,7 @@ export function SettingsPaper({
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14, marginBottom: 14 }}>
               {/* Resting HR */}
               <div>
-                <Caps size={8} ls={2} opacity={0.6}>Resting HR (bpm)</Caps>
+                <Caps size={9} ls={2} opacity={0.6}>Resting HR (bpm)</Caps>
                 <input
                   type="number"
                   min={30}
@@ -364,14 +361,13 @@ export function SettingsPaper({
                     padding: '6px 8px',
                     border: `1px solid ${OL.ink}`,
                     background: 'transparent',
-                    outline: 'none',
                     boxSizing: 'border-box' as const,
                   }}
                 />
               </div>
               {/* Max HR */}
               <div>
-                <Caps size={8} ls={2} opacity={0.6}>Max HR (bpm)</Caps>
+                <Caps size={9} ls={2} opacity={0.6}>Max HR (bpm)</Caps>
                 <input
                   type="number"
                   min={100}
@@ -388,7 +384,6 @@ export function SettingsPaper({
                     padding: '6px 8px',
                     border: `1px solid ${OL.ink}`,
                     background: 'transparent',
-                    outline: 'none',
                     boxSizing: 'border-box' as const,
                   }}
                 />
@@ -398,7 +393,7 @@ export function SettingsPaper({
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
               {/* Training goal */}
               <div>
-                <Caps size={8} ls={2} opacity={0.6}>Training goal</Caps>
+                <Caps size={9} ls={2} opacity={0.6}>Training goal</Caps>
                 <select
                   value={preferences.goalEvent ?? ''}
                   onChange={(e) => onGoalEventChange((e.target.value as GoalEvent) || null)}
@@ -413,7 +408,6 @@ export function SettingsPaper({
                     border: `1px solid ${OL.ink}`,
                     borderRadius: 0,
                     padding: '6px 8px',
-                    outline: 'none',
                     cursor: 'pointer',
                   }}
                 >
@@ -425,7 +419,7 @@ export function SettingsPaper({
               </div>
               {/* Race date */}
               <div>
-                <Caps size={8} ls={2} opacity={0.6}>Race date</Caps>
+                <Caps size={9} ls={2} opacity={0.6}>Race date</Caps>
                 <input
                   type="date"
                   value={preferences.raceDate}
@@ -442,7 +436,6 @@ export function SettingsPaper({
                     border: `1px solid ${OL.ink}`,
                     borderRadius: 0,
                     padding: '6px 8px',
-                    outline: 'none',
                     boxSizing: 'border-box' as const,
                   }}
                 />
@@ -463,14 +456,16 @@ export function SettingsPaper({
                   letterSpacing: 3,
                   fontWeight: 700,
                   textTransform: 'uppercase' as const,
-                  cursor: isSavingPreferences ? 'not-allowed' : 'pointer',
+                  cursor: (isSavingPreferences || preferences.biggestStruggle.trim() === '' || preferences.weeklyKmTarget === '' || preferences.availableDays.length === 0) ? 'not-allowed' : 'pointer',
                   opacity: (preferences.biggestStruggle.trim() === '' || preferences.weeklyKmTarget === '' || preferences.availableDays.length === 0) ? 0.4 : 1,
                 }}
               >
                 {isSavingPreferences ? 'Saving...' : 'Save →'}
               </button>
               {preferencesSaved && (
-                <span style={{ fontFamily: OL.body, fontSize: 13, color: OL.muted }}>Saved.</span>
+                <span style={{ fontFamily: OL.body, fontSize: 13, color: OL.muted }}>
+                  <span className="ol-check-pop" style={{ marginRight: 4 }}>✓</span>Saved.
+                </span>
               )}
               {preferencesError && (
                 <span style={{ fontFamily: OL.body, fontSize: 13, color: OL.accent }}>{preferencesError}</span>
@@ -497,7 +492,10 @@ export function SettingsPaper({
                 return (
                   <div
                     key={opt}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => onVoiceChange(opt)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onVoiceChange(opt); } }}
                     style={{
                       border: `${active ? 3 : 1}px solid ${OL.ink}`,
                       padding: '10px 12px',
@@ -547,7 +545,12 @@ export function SettingsPaper({
                 The lamp on the desk. Turn it off and the paper goes tobacco-brown for late editions.
               </span>
               <span
+                role="switch"
+                aria-checked={theme === 'light'}
+                aria-label="Reading light"
+                tabIndex={0}
                 onClick={() => onThemeChange(theme === 'light' ? 'dark' : 'light')}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onThemeChange(theme === 'light' ? 'dark' : 'light'); } }}
                 style={{
                   display: 'inline-block',
                   flexShrink: 0,
@@ -590,7 +593,12 @@ export function SettingsPaper({
                 >
                   <span style={{ fontFamily: OL.body, fontSize: 13 }}>{label}</span>
                   <span
+                    role="switch"
+                    aria-checked={on}
+                    aria-label={label}
+                    tabIndex={0}
                     onClick={() => onToggleDelivery(key)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggleDelivery(key); } }}
                     style={{
                       display: 'inline-block',
                       width: 44,
@@ -653,18 +661,17 @@ export function SettingsPaper({
                     onClick={onResetContext}
                     style={{
                       background: 'transparent',
-                      color: OL.accent,
-                      border: `1px solid ${OL.accent}`,
-                      padding: '10px 20px',
-                      fontFamily: OL.sans,
-                      fontSize: 11,
-                      letterSpacing: 3,
-                      fontWeight: 700,
-                      textTransform: 'uppercase',
+                      color: OL.muted,
+                      border: 'none',
+                      padding: 0,
+                      fontFamily: OL.body,
+                      fontSize: 13,
                       cursor: 'pointer',
+                      textDecoration: 'underline',
+                      textUnderlineOffset: 3,
                     }}
                   >
-                    Reset Pak Har&apos;s Context →
+                    Reset Pak Har&apos;s context
                   </button>
                 )}
 
@@ -776,15 +783,17 @@ export function SettingsPaper({
         <aside style={{ borderLeft: `1px solid ${OL.ink}`, paddingLeft: 20 }}>
           <Caps size={10} ls={3}>The Paper in Numbers</Caps>
           <Hairline gap={6} />
-          {statsRows.map(({ value, label }) => (
+          {statsRows.map(({ value, label }, i) => (
             <div
               key={label}
+              className="ol-fade-up"
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'baseline',
                 padding: '6px 0',
                 borderBottom: `1px dotted var(--color-hairline)`,
+                animationDelay: `${i * 60}ms`,
               }}
             >
               <span style={{ fontFamily: OL.mono, fontSize: 22, fontWeight: 700 }}>

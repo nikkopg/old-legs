@@ -224,11 +224,12 @@ export function PlanPaper({
       {!plan && (
         <div style={{ marginTop: 40 }}>
           {isStreaming ? (
-            /* Inline SSE progress strip — same visual pattern as dashboard */
+            /* Inline SSE progress strip */
             <div
+              className="ol-paper-drop"
               style={{
                 border: `1px solid ${OL.ink}`,
-                padding: '12px 14px',
+                padding: '12px 14px 0',
                 fontFamily: OL.mono,
                 position: 'relative',
               }}
@@ -259,15 +260,43 @@ export function PlanPaper({
                     color: s.status === 'pending' ? OL.muted : OL.ink,
                   }}
                 >
-                  <span style={{ width: 12, display: 'inline-block', textAlign: 'center' }}>
+                  <span
+                    key={s.status}
+                    className={s.status === 'done' ? 'ol-check-pop' : undefined}
+                    style={{ width: 12, display: 'inline-block', textAlign: 'center' }}
+                  >
                     {s.status === 'done' ? '✓' : s.status === 'running' ? '›' : '·'}
                   </span>
-                  <span className={s.status === 'running' ? 'ol-cursor-text' : undefined}>
+                  <span
+                    key={s.label + s.status}
+                    className={s.status === 'running' ? 'ol-tw-line' : undefined}
+                    style={{
+                      opacity: s.status === 'running' ? 0 : 1,
+                    }}
+                  >
                     {s.label}
                     {s.status === 'running' && <span className="ol-cursor" />}
                   </span>
                 </div>
               ))}
+              {/* Progress bar — grows as steps complete */}
+              {(() => {
+                const total = steps.length;
+                const done = steps.filter(s => s.status === 'done').length;
+                const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                return (
+                  <div style={{ margin: '10px -14px 0', height: 3, background: 'var(--color-hairline)' }}>
+                    <div
+                      className="ol-weekly-fill"
+                      style={{
+                        height: '100%',
+                        background: OL.accent,
+                        ['--ol-fill-target' as string]: `${pct}%`,
+                      }}
+                    />
+                  </div>
+                );
+              })()}
             </div>
           ) : streamError ? (
             /* Inline error state */
@@ -352,7 +381,13 @@ export function PlanPaper({
 
       {/* ---- Plan content ---- */}
       {plan && totals && (
-        <>
+        <div
+          key={plan.filedAt}
+          style={{
+            opacity: isStreaming ? 0.35 : 1,
+            transition: 'opacity 400ms ease',
+          }}
+        >
           {/* Heading */}
           <div
             style={{
@@ -367,6 +402,7 @@ export function PlanPaper({
             <div>
               <Caps size={10} ls={3}>The Fixtures · {plan.weekLabel}</Caps>
               <h1
+                className="ol-masthead-settle"
                 style={{
                   fontFamily: OL.display,
                   fontWeight: 400,
@@ -384,12 +420,14 @@ export function PlanPaper({
                 ))}
               </h1>
               <p
+                className="ol-fade-up"
                 style={{
                   fontFamily: OL.body,
                   fontSize: 13.5,
                   lineHeight: 1.55,
                   margin: 0,
                   maxWidth: 560,
+                  animationDelay: '240ms',
                 }}
               >
                 Pak Har files Monday at dawn. The week is not a suggestion. You may re-arrange within it — you may not subtract from it.
@@ -398,10 +436,12 @@ export function PlanPaper({
 
             {/* Right: Week At A Glance */}
             <div
+              className="ol-paper-drop"
               style={{
                 border: `3px solid ${OL.ink}`,
                 padding: '12px 14px',
                 background: 'var(--color-paper-soft)',
+                animationDelay: '120ms',
               }}
             >
               <Caps size={9} ls={3} opacity={0.7}>Week At A Glance</Caps>
@@ -417,8 +457,8 @@ export function PlanPaper({
                   ['Runs', String(totals.runCount)],
                   ['Rest', String(totals.restCount)],
                   ['Minutes', String(totals.totalMin)],
-                ] as [string, string][]).map(([label, value]) => (
-                  <div key={label}>
+                ] as [string, string][]).map(([label, value], statIdx) => (
+                  <div key={label} className="ol-fade-up" style={{ animationDelay: `${280 + statIdx * 60}ms` }}>
                     <Caps size={8} ls={2} opacity={0.6}>{label}</Caps>
                     <div
                       style={{
@@ -438,7 +478,7 @@ export function PlanPaper({
 
           {/* Fixtures table */}
           <div style={{ marginTop: 22 }}>
-            <Rule thick />
+            <Rule thick className="ol-rail-stretch" />
 
             {/* Header row */}
             <div
@@ -471,6 +511,7 @@ export function PlanPaper({
               return (
                 <div
                   key={d.day}
+                  className="ol-fade-up"
                   style={{
                     display: 'grid',
                     gridTemplateColumns: '44px 92px 1fr 160px 160px 2fr',
@@ -484,6 +525,7 @@ export function PlanPaper({
                     borderLeft: isToday ? `3px solid ${OL.accent}` : '3px solid transparent',
                     background: isToday ? 'var(--color-accent-soft)' : 'transparent',
                     opacity: isRest ? 0.55 : 1,
+                    animationDelay: `${i * 45}ms`,
                   }}
                 >
                   {/* Col 1: Day */}
@@ -680,6 +722,7 @@ export function PlanPaper({
             }, 0);
             return (
               <div
+                className="ol-fade-up"
                 style={{
                   display: 'grid',
                   gridTemplateColumns: '44px 92px 1fr 160px 160px 2fr',
@@ -688,6 +731,7 @@ export function PlanPaper({
                   background: OL.ink,
                   color: OL.paper,
                   marginTop: -1,
+                  animationDelay: '360ms',
                 }}
               >
                 <span />
@@ -755,13 +799,16 @@ export function PlanPaper({
                   return (
                     <p
                       key={i}
+                      className="ol-tw-line"
                       style={{
+                        opacity: 0,
                         fontFamily: OL.body,
                         fontSize: 13.5,
                         lineHeight: 1.6,
                         margin: '8px 0 0',
                         textAlign: 'justify',
                         hyphens: 'auto',
+                        animationDelay: `${420 + i * 120}ms`,
                       }}
                     >
                       <span
@@ -783,13 +830,16 @@ export function PlanPaper({
                 return (
                   <p
                     key={i}
+                    className="ol-tw-line"
                     style={{
+                      opacity: 0,
                       fontFamily: OL.body,
                       fontSize: 13.5,
                       lineHeight: 1.6,
                       margin: '8px 0 0',
                       textAlign: 'justify',
                       hyphens: 'auto',
+                      animationDelay: `${420 + i * 120}ms`,
                     }}
                   >
                     {para}
@@ -897,6 +947,7 @@ export function PlanPaper({
             {isStreaming && (
               /* Compact progress strip when plan already exists and regenerating */
               <div
+                className="ol-paper-drop"
                 style={{
                   border: `1px solid ${OL.ink}`,
                   padding: '8px 12px',
@@ -909,8 +960,15 @@ export function PlanPaper({
                 }}
               >
                 {steps.map((s) => (
-                  <span key={s.label} style={{ color: s.status === 'pending' ? OL.muted : OL.ink }}>
-                    {s.status === 'done' ? '✓' : s.status === 'running' ? '›' : '·'} {s.label}
+                  <span key={s.label + s.status} style={{ color: s.status === 'pending' ? OL.muted : OL.ink }}>
+                    {s.status === 'done' ? (
+                      <span key={s.label + '-done'} className="ol-check-pop" style={{ marginRight: 4 }}>✓</span>
+                    ) : (
+                      <span className={s.status === 'running' ? 'ol-tw-line' : undefined} style={{ marginRight: 4 }}>
+                        {s.status === 'running' ? '›' : '·'}
+                      </span>
+                    )}
+                    {s.label}
                     {s.status === 'running' && <span className="ol-cursor" />}
                   </span>
                 ))}
@@ -946,7 +1004,7 @@ export function PlanPaper({
             center="Page 2 · Plan"
             right="— continued page 3: Letters to the Editor —"
           />
-        </>
+        </div>
       )}
     </Paper>
   );

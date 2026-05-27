@@ -36,6 +36,7 @@ import {
 } from './NewspaperChrome';
 import type { WeeklyReview } from '@/types/api';
 import type { ProgressStep } from '@/hooks/useProgressStream';
+import { useWindowWidth } from '@/hooks/useWindowWidth';
 
 // ---------- interfaces ----------
 
@@ -85,6 +86,7 @@ interface DashboardPaperProps {
   onOpenRun: (id: number) => void;
   onOpenPlan: () => void;
   onNav: (key: string) => void;
+  justOnboarded?: boolean;
 }
 
 // ---------- helpers ----------
@@ -242,8 +244,11 @@ export function DashboardPaper({
   onOpenRun,
   onOpenPlan,
   onNav,
+  justOnboarded = false,
 }: DashboardPaperProps) {
   const { totalKm, totalRuns, totalTimeSec, plannedRuns } = weeklyStats;
+  const width = useWindowWidth();
+  const isMobile = width < 640;
 
   // Parse lastRun date parts
   const lastRunParts = lastRun ? lastRun.date.split(' ') : [];
@@ -271,7 +276,7 @@ export function DashboardPaper({
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '1.55fr 1fr',
+          gridTemplateColumns: isMobile ? '1fr' : '1.55fr 1fr',
           gap: 28,
           marginTop: 20,
           alignItems: 'start',
@@ -815,6 +820,22 @@ export function DashboardPaper({
               </div>
             </div>
           </article>
+        ) : justOnboarded ? (
+          <div style={{ padding: '14px 0' }}>
+            <div style={{
+              fontFamily: OL.mono,
+              fontSize: 11,
+              letterSpacing: 2,
+              textTransform: 'uppercase',
+              opacity: 0.7,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}>
+              <span className="ol-cursor">_</span>
+              PULLING YOUR RUNS FROM STRAVA...
+            </div>
+          </div>
         ) : (
           <p
             style={{

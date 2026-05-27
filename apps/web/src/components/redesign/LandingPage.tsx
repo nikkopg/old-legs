@@ -109,6 +109,32 @@ export function LandingPage({ onConnect, connectState = 'idle', errorMessage }: 
           <span style={{ color: OL.accent }}>And he has thoughts.</span>
         </p>
 
+        {/* Value props */}
+        <div style={{ marginTop: 32, marginBottom: 8 }}>
+          <Rule gap={16} />
+          <div style={{ display: 'flex', gap: 32, textAlign: 'center' }}>
+            <div className="ol-fade-up" style={{ flex: 1 }}>
+              <Caps size={9} ls={2} opacity={0.75}>HONEST FEEDBACK</Caps>
+              <p style={{ fontFamily: OL.body, fontSize: 12, opacity: 0.75, lineHeight: 1.6, marginTop: 6, textAlign: 'center' }}>
+                Pak Har tells you what actually happened on that run.
+              </p>
+            </div>
+            <div className="ol-fade-up" style={{ flex: 1, animationDelay: '100ms' }}>
+              <Caps size={9} ls={2} opacity={0.75}>SELF-HOSTED</Caps>
+              <p style={{ fontFamily: OL.body, fontSize: 12, opacity: 0.75, lineHeight: 1.6, marginTop: 6, textAlign: 'center' }}>
+                Your data. Your machine. No cloud.
+              </p>
+            </div>
+            <div className="ol-fade-up" style={{ flex: 1, animationDelay: '200ms' }}>
+              <Caps size={9} ls={2} opacity={0.75}>FREE</Caps>
+              <p style={{ fontFamily: OL.body, fontSize: 12, opacity: 0.75, lineHeight: 1.6, marginTop: 6, textAlign: 'center' }}>
+                No subscription. No API key. Ever.
+              </p>
+            </div>
+          </div>
+          <Rule gap={16} />
+        </div>
+
         {/* CTA block */}
         <div style={{ marginTop: 40, minWidth: 300 }}>
           {connectState === 'idle' && (
@@ -199,7 +225,7 @@ export function LandingPage({ onConnect, connectState = 'idle', errorMessage }: 
 
           <div style={{ marginTop: 14 }}>
             <Caps size={9} ls={2} opacity={0.55}>
-              Read-only access · Free · 1 minute
+              Strava read-only · Free · 1 minute setup
             </Caps>
           </div>
         </div>

@@ -273,10 +273,10 @@ export default function SettingsPage() {
         coach_voice: voice,
       })
       setPreferencesSaved(true)
-      // Invalidate cache so the next visit seeds from fresh data, then allow
-      // re-seeding on this page when the refetch completes.
+      // Invalidate cache so the next visit seeds from fresh data.
+      // Do NOT reset prefSeeded here — local state already reflects what was saved,
+      // and resetting would re-seed from stale cache before the refetch completes.
       queryClient.invalidateQueries({ queryKey: ['user', 'me'] })
-      setPrefSeeded(false)
     } catch (err) {
       const apiErr = err as ApiError
       setPreferencesError(apiErr?.detail ?? 'Something went wrong.')

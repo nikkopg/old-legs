@@ -38,6 +38,7 @@ import type { Activity, ActivityStreams } from '@/types/api';
 import type { WeeklyKmEntry } from './FrontPage';
 import { NewspaperChrome } from './NewspaperChrome';
 import type { ProgressStep } from '@/hooks/useProgressStream';
+import { PakHarShareCard } from './PakHarShareCard';
 
 export interface DispatchSplit {
   km: number;
@@ -536,6 +537,7 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
 
   type OverlayKey = 'hr' | 'elev' | 'cad';
   const [activeOverlay, setActiveOverlay] = useState<OverlayKey | null>(null);
+  const [showShareCard, setShowShareCard] = useState(false);
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--color-paper)', color: 'var(--color-ink)' }}>
@@ -564,7 +566,10 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
               <div className="font-sans text-[10px] uppercase tracking-widest opacity-70 mb-2">
                 FRONT PAGE · VERDICT
               </div>
-              <h1 className="font-display text-[36px] leading-[1.05] tracking-[-0.015em] mb-3">
+              <h1
+                key={headline}
+                className={`font-display text-[36px] leading-[1.05] tracking-[-0.015em] mb-3${!isAnalyzing ? ' ol-masthead-settle' : ''}`}
+              >
                 {isAnalyzing && verdictStreamedText.length > 0
                   ? <>{extractStage5Text(verdictStreamedText)}<span className="ol-cursor">_</span></>
                   : toSentenceCase(headline)
@@ -614,7 +619,7 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                   {label}
                 </div>
                 <div
-                  className="text-[28px] font-bold leading-none"
+                  className="text-[22px] font-bold leading-none"
                   style={{ fontFamily: 'var(--font-mono-tabloid)', fontVariantNumeric: 'tabular-nums' }}
                 >
                   {value}
@@ -928,16 +933,17 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                       opacity="0.3"
                     />
 
-                    {/* Overlay polylines */}
+                    {/* Overlay polylines — fade in (not draw-in, to preserve dashed style) */}
                     {overlaySegments.map((pts, idx) => (
                       <polyline
-                        key={idx}
+                        key={`${activeOverlay}-${idx}`}
                         points={pts}
                         stroke="var(--color-accent)"
                         strokeWidth="1.5"
                         strokeDasharray="4 3"
                         fill="none"
                         strokeLinejoin="round"
+                        style={{ opacity: 0, animation: 'ol-overlay-in 400ms ease 380ms forwards' }}
                       />
                     ))}
 
@@ -954,6 +960,8 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
 
                     {/* Pace polyline */}
                     <polyline
+                      pathLength="1"
+                      className="ol-chart-draw"
                       points={pacePoints}
                       stroke="var(--color-ink)"
                       strokeWidth="2"
@@ -1489,7 +1497,26 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                               </button>
                             </div>
                           ) : (
-                            <div className="text-right">
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16 }}>
+                              {activity.verdict_short && (
+                                <button
+                                  onClick={() => setShowShareCard(true)}
+                                  style={{
+                                    background: 'transparent',
+                                    color: 'var(--color-muted)',
+                                    border: '1px solid var(--color-hairline-strong)',
+                                    padding: '10px 18px',
+                                    fontFamily: 'var(--font-sans)',
+                                    fontSize: 11,
+                                    letterSpacing: 3,
+                                    fontWeight: 700,
+                                    textTransform: 'uppercase' as const,
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  Share this take →
+                                </button>
+                              )}
                               <button
                                 onClick={onAnalyze}
                                 style={{
@@ -1682,6 +1709,20 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
           </div>
         </div>
       </div>
+
+      {showShareCard && activity.verdict_short && (
+        <PakHarShareCard
+          verdictShort={activity.verdict_short}
+          activityTitle={activity.name}
+          activityDate={dateInfo.full}
+          distance={`${activity.distance_km.toFixed(1)} km`}
+          movingTimeSeconds={activity.moving_time_seconds}
+          avgPaceMinPerKm={activity.average_pace_min_per_km}
+          avgHr={activity.average_hr}
+          elevationGainM={activity.elevation_gain_m}
+          onClose={() => setShowShareCard(false)}
+        />
+      )}
     </div>
   );
 }

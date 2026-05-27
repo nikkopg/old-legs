@@ -26,7 +26,7 @@
 
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { DashboardPaper } from '@/components/redesign/DashboardPaper'
@@ -69,6 +69,8 @@ export default function DashboardPage() {
   const { weeklyStats, todayPlan, lastRun, isLoading, isError, isUnauthorized } = useDashboard()
   const { user } = useUser()
   const [onboardingDone, setOnboardingDone] = useState(false)
+  const [justOnboarded, setJustOnboarded] = useState(false)
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Non-blocking weekly review query — failures are silently treated as null
   const { data: reviewData } = useQuery<WeeklyReview, ApiError>({
@@ -142,6 +144,36 @@ export default function DashboardPage() {
       router.replace('/')
     }
   }, [isUnauthorized, router])
+
+  // After onboarding: poll for activities until the first one arrives
+  useEffect(() => {
+    if (!justOnboarded) return
+
+    // Trigger an immediate refetch of the activities query
+    queryClient.invalidateQueries({ queryKey: ['activities'] })
+
+    pollIntervalRef.current = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ['activities'] })
+    }, 3000)
+
+    return () => {
+      if (pollIntervalRef.current !== null) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
+      }
+    }
+  }, [justOnboarded, queryClient])
+
+  // Stop polling once we have at least one activity
+  useEffect(() => {
+    if (justOnboarded && lastRun !== null) {
+      setJustOnboarded(false)
+      if (pollIntervalRef.current !== null) {
+        clearInterval(pollIntervalRef.current)
+        pollIntervalRef.current = null
+      }
+    }
+  }, [justOnboarded, lastRun])
 
   // Navigation handler — maps nav keys to routes
   const onNav = (key: string) => {
@@ -255,9 +287,13 @@ export default function DashboardPage() {
         onOpenRun={(id) => router.push(`/activities/${id}`)}
         onOpenPlan={() => router.push('/plan')}
         onNav={onNav}
+        justOnboarded={justOnboarded}
       />
       {user !== null && !user.onboarding_completed && !onboardingDone && (
-        <OnboardingModal onComplete={() => setOnboardingDone(true)} />
+        <OnboardingModal onComplete={() => {
+          setOnboardingDone(true)
+          setJustOnboarded(true)
+        }} />
       )}
     </>
   )

@@ -1,5 +1,37 @@
 # Changelog
 
+## v2.1.0 — 2026-05-27
+
+Share card enhancements, design system polish, and entrance animations.
+
+### Features
+- **Share card — mobile QR handoff** — desktop generates a share card PNG, uploads it to a short-lived in-memory token store (1 h TTL), and displays a QR code. Scanning on a phone opens a share page served over port 3000 (no need to reach the API port). Long-press the image on iOS to save to Photos; tap "Save Image" on Android. Removes the broken `navigator.share` button (Web Share API requires HTTPS — not available over LAN HTTP).
+- **Share card — run stats strip** — distance, moving time, pace, average HR, and elevation are now rendered directly on the share card PNG via Canvas 2D at 2× scale (1200 × 800 px).
+- **Docker LAN IP auto-detection** — web container uses `network_mode: host` so `os.networkInterfaces()` returns the real host NIC (not the Docker bridge IP). QR code links are generated server-side at request time via `/api/local-ip`, with interface-name filtering to skip `docker0`, `br-*`, `veth*`, and loopback.
+- **Entrance animations** — staggered fade-in on dashboard, activities, dispatch, plan, and chat pages. Plan replacement uses dim → drop → check-pop → re-entrance sequence. SSE generation progress animates step-by-step.
+- **Pace line draw-in** — activity detail chart animates the pace line on mount.
+
+### Design (DESK series)
+- **DESK-001/002** — keyboard and screen-reader accessible day-toggle buttons and voice-card disclosure pattern
+- **DESK-003** — day toggle button height increased from 28 px to 36 px (easier tap target)
+- **DESK-004/008** — consistent focus rings across all interactive elements; field labels readable at small viewport
+- **DESK-005** — "Reset Context" action visually subordinated to "Cancel Subscription"
+- **DESK-006/007/009** — pointer cursor on clickable elements, save-feedback inline toast, sidebar open/close animation
+- Share card layout and onboarding polish; landing page value-prop copy and mobile breakpoints
+
+### Bug fixes
+- **Settings prefs re-seed** — `prefSeeded` was being reset on every save, causing preferences to silently re-seed from defaults on next load. Now preserved across saves.
+- **Stats strip font overflow** — TIME column truncated `h:mm:ss` at 24 px; reduced to 22 px.
+
+### Infrastructure
+- **`POST /share-image`** — new FastAPI endpoint (auth required); accepts PNG upload, returns `{ token: UUID }`, 5 MB cap, 1 h TTL in-memory store with lazy cleanup.
+- **`GET /share-image/{token}`** — no-auth public endpoint; returns stored PNG as `image/png`.
+- **`/api/share-image/[token]`** — Next.js proxy route; phone fetches image through port 3000, proxy calls FastAPI server-side (avoids CORS and firewall issues).
+- **`/api/local-ip`** — server-side route returns host LAN IP filtered by interface name; respects `HOST_IP` env override.
+- **`docker-compose.yml`** — web service migrated to `network_mode: host`; `API_URL` changed from `http://api:8000` to `http://localhost:8000` (Docker DNS doesn't resolve under host networking).
+
+---
+
 ## v2.0.1 — 2026-05-23
 
 Security hardening and infrastructure reliability fixes. No new user-facing features.

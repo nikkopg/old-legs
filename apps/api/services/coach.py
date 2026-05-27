@@ -1115,7 +1115,7 @@ async def run_analysis_for_activity(
                             f"{full_analysis}\n"
                             "---\n\n"
                             "Output plain text in exactly this format:\n"
-                            "<verdict_short — one or two sentences in Pak Har voice summarising what this run showed. No praise, no fluff.>\n"
+                            "<verdict_short — one or two sentences in Pak Har voice summarising what this run showed. No praise, no fluff. Each sentence in verdict_short must begin with a capital letter.>\n"
                             "TAG: <one of: PACED POORLY | ON PLAN | HELD THE LINE | FADED LATE | FUELING | RESTRAINED | STEADY | NO SHOW>\n"
                             "TONE: <one of: critical, good, neutral>\n\n"
                             "No JSON. No markdown. No extra lines."
