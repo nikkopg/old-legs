@@ -12,9 +12,8 @@
 //   - clicking inside the card does not call onClose
 //   - print window opens with correct font imports
 
-import React, { useRef, useState } from 'react'
+import React, { useRef } from 'react'
 import { OL, Caps } from './NewspaperChrome'
-import { uploadShareImage } from '@/lib/api'
 
 interface PakHarShareCardProps {
   verdictShort: string
@@ -44,183 +43,11 @@ function fmtPace(minPerKm: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-// Hardcoded light-mode values — used in both the DOM card and the canvas drawing.
-const CARD = {
-  paper:  '#f4efe4',
-  ink:    '#141210',
-  accent: '#8a2a12',
-  hair:   'rgba(20, 18, 16, 0.30)',
-} as const
-
-function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
-  const words = text.split(' ')
-  const lines: string[] = []
-  let current = ''
-  for (const word of words) {
-    const test = current ? `${current} ${word}` : word
-    if (ctx.measureText(test).width > maxWidth && current) {
-      lines.push(current)
-      current = word
-    } else {
-      current = test
-    }
-  }
-  if (current) lines.push(current)
-  return lines
-}
-
-async function drawShareCard(
-  verdictShort: string,
-  activityDate: string,
-  stats: { label: string; value: string; unit: string }[],
-): Promise<Blob> {
-  const scale  = 2
-  const W      = 600 * scale   // 1200
-  const H      = 400 * scale   // 800
-  const PX     = 56  * scale   // 112
-  const PY     = 48  * scale   //  96
-  const IW     = W - PX * 2    // 976
-
-  // Load all fonts at their exact rendered sizes before drawing
-  await document.fonts.ready
-  const fsSizes = verdictShort.length > 80 ? [60] : verdictShort.length > 50 ? [76] : [88]
-  await Promise.all([
-    ...fsSizes.map(s => document.fonts.load(`400 ${s}px "Abril Fatface"`)),
-    document.fonts.load('700 30px "Space Mono"'),
-    document.fonts.load('400 20px "Space Mono"'),
-    document.fonts.load('600 18px "Work Sans"'),
-    document.fonts.load('600 16px "Work Sans"'),
-  ])
-
-  const canvas = document.createElement('canvas')
-  canvas.width  = W
-  canvas.height = H
-  const ctx = canvas.getContext('2d')!
-  ctx.textBaseline = 'top'
-
-  // Background
-  ctx.fillStyle = CARD.paper
-  ctx.fillRect(0, 0, W, H)
-
-  // ── Footer (built bottom-up) ──────────────────────────────────────────────
-  const footerTextH   = 18   // 9 * 2
-  const ruleGap       = 24   // 12 * 2
-  const footerRuleY   = H - PY - ruleGap - footerTextH
-  const footerTextY   = footerRuleY + 2 + ruleGap
-
-  // Accent rule
-  ctx.strokeStyle = CARD.accent
-  ctx.lineWidth   = 2
-  ctx.beginPath(); ctx.moveTo(PX, footerRuleY); ctx.lineTo(W - PX, footerRuleY); ctx.stroke()
-
-  // Attribution
-  ctx.font        = `600 ${footerTextH}px "Work Sans"`
-  ctx.fillStyle   = CARD.accent
-  ctx.globalAlpha = 0.75
-  ctx.letterSpacing = '4px'
-  ctx.fillText('BY PAK HAR · SENIOR COACH · OLD LEGS', PX, footerTextY)
-
-  // Date (right-aligned)
-  ctx.fillStyle   = CARD.ink
-  ctx.globalAlpha = 0.55
-  ctx.letterSpacing = '2px'
-  ctx.textAlign   = 'right'
-  ctx.fillText(activityDate.toUpperCase(), W - PX, footerTextY)
-  ctx.textAlign   = 'left'
-  ctx.globalAlpha = 1
-  ctx.letterSpacing = '0px'
-
-  // ── Stats strip ───────────────────────────────────────────────────────────
-  const statsMarginBottom = 40  // 20 * 2
-  const statsPadTop       = 32  // 16 * 2
-  const labelH            = 16  // 8  * 2
-  const labelValueGap     = 6   //  3 * 2
-  const valueH            = 30  // 15 * 2
-  const statsH            = statsPadTop + labelH + labelValueGap + valueH
-  const statsTop          = footerRuleY - statsMarginBottom - statsH
-
-  // Top hairline
-  ctx.strokeStyle = CARD.hair
-  ctx.lineWidth   = 1
-  ctx.beginPath(); ctx.moveTo(PX, statsTop); ctx.lineTo(W - PX, statsTop); ctx.stroke()
-
-  if (stats.length > 0) {
-    const colW = IW / stats.length
-    for (let i = 0; i < stats.length; i++) {
-      const s    = stats[i]
-      const colX = PX + i * colW
-      const padL = i === 0 ? 0 : 32   // 16 * 2
-
-      // Vertical divider
-      if (i > 0) {
-        ctx.strokeStyle = CARD.hair
-        ctx.lineWidth   = 1
-        ctx.beginPath()
-        ctx.moveTo(colX, statsTop + statsPadTop)
-        ctx.lineTo(colX, statsTop + statsH)
-        ctx.stroke()
-      }
-
-      const textX  = colX + padL
-      const labelY = statsTop + statsPadTop
-      const valueY = labelY + labelH + labelValueGap
-
-      // Label
-      ctx.font          = `600 ${labelH}px "Work Sans"`
-      ctx.fillStyle     = CARD.ink
-      ctx.globalAlpha   = 0.5
-      ctx.letterSpacing = '4px'
-      ctx.fillText(s.label, textX, labelY)
-
-      // Value
-      ctx.font          = `700 ${valueH}px "Space Mono"`
-      ctx.fillStyle     = CARD.ink
-      ctx.globalAlpha   = 1
-      ctx.letterSpacing = '0px'
-      ctx.fillText(s.value, textX, valueY)
-
-      // Unit
-      if (s.unit) {
-        const vw = ctx.measureText(s.value).width
-        ctx.font          = `400 20px "Space Mono"`
-        ctx.globalAlpha   = 0.5
-        ctx.fillText(s.unit, textX + vw + 6, valueY + 10)
-        ctx.globalAlpha   = 1
-      }
-    }
-  }
-
-  // ── Headline (vertically centred in remaining space) ──────────────────────
-  const headlineSize = (verdictShort.length > 80 ? 30 : verdictShort.length > 50 ? 38 : 44) * scale
-  ctx.font          = `400 ${headlineSize}px "Abril Fatface"`
-  ctx.fillStyle     = CARD.ink
-  ctx.globalAlpha   = 1
-  ctx.letterSpacing = '-1px'
-
-  const headlineAreaH = statsTop - PY
-  const lines      = wrapText(ctx, verdictShort, IW)
-  const lineH      = headlineSize * 1.1
-  const totalTextH = lines.length * lineH
-  const startY     = PY + (headlineAreaH - totalTextH) / 2
-
-  for (let i = 0; i < lines.length; i++) {
-    ctx.fillText(lines[i], PX, startY + i * lineH)
-  }
-
-  return new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/png')
-  })
-}
-
-type MobileShareState = 'idle' | 'capturing' | 'ready' | 'error'
-
 export function PakHarShareCard({ verdictShort, activityTitle, activityDate, distance, movingTimeSeconds, avgPaceMinPerKm, avgHr, elevationGainM, onClose }: PakHarShareCardProps) {
   const cardRef = useRef<HTMLDivElement>(null)
-  const [mobileShareState, setMobileShareState] = useState<MobileShareState>('idle')
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
-  const [mobileError, setMobileError] = useState<string | null>(null)
 
   function handleDownload() {
+    // html2canvas not yet installed — use print fallback
     if (cardRef.current) {
       const printWindow = window.open('', '_blank')
       if (printWindow) {
@@ -234,34 +61,6 @@ export function PakHarShareCard({ verdictShort, activityTitle, activityDate, dis
         printWindow.focus()
         setTimeout(() => printWindow.print(), 500)
       }
-    }
-  }
-
-  async function handleMobileShare() {
-    setMobileShareState('capturing')
-    setMobileError(null)
-    try {
-      const statsForCanvas: { label: string; value: string; unit: string }[] = []
-      if (distance)                       statsForCanvas.push({ label: 'DIST', value: distance,                  unit: '' })
-      if (movingTimeSeconds !== undefined) statsForCanvas.push({ label: 'TIME', value: fmtTime(movingTimeSeconds), unit: '' })
-      if (avgPaceMinPerKm !== undefined)   statsForCanvas.push({ label: 'PACE', value: fmtPace(avgPaceMinPerKm),  unit: '/km' })
-      if (avgHr != null)                  statsForCanvas.push({ label: 'HR',   value: String(avgHr),              unit: 'bpm' })
-      if (elevationGainM !== undefined)    statsForCanvas.push({ label: 'ELEV', value: `+${elevationGainM}`,      unit: 'm' })
-
-      const blob = await drawShareCard(verdictShort, activityDate, statsForCanvas)
-      const { token } = await uploadShareImage(blob)
-      const url = `${window.location.origin}/share/${token}`
-      const QRCode = (await import('qrcode')).default
-      const dataUrl = await QRCode.toDataURL(url, {
-        width: 200,
-        margin: 2,
-        color: { dark: '#141210', light: '#f4efe4' },
-      })
-      setQrDataUrl(dataUrl)
-      setMobileShareState('ready')
-    } catch {
-      setMobileShareState('error')
-      setMobileError('Something went wrong. Try again.')
     }
   }
 
@@ -282,8 +81,8 @@ export function PakHarShareCard({ verdictShort, activityTitle, activityDate, dis
           className="ol-paper-drop"
           style={{
             width: 600, height: 400,
-            background: CARD.paper,
-            color: CARD.ink,
+            background: OL.paper,
+            color: OL.ink,
             padding: '48px 56px',
             display: 'flex',
             flexDirection: 'column',
@@ -320,13 +119,13 @@ export function PakHarShareCard({ verdictShort, activityTitle, activityDate, dis
                 gap: 0,
                 marginBottom: 20,
                 paddingTop: 16,
-                borderTop: `1px solid ${CARD.hair}`,
+                borderTop: `1px solid ${OL.hair}`,
               }}>
                 {stats.map((s, i) => (
                   <div key={s.label} style={{
                     flex: 1,
                     paddingLeft: i === 0 ? 0 : 16,
-                    borderLeft: i === 0 ? 'none' : `1px solid ${CARD.hair}`,
+                    borderLeft: i === 0 ? 'none' : `1px solid ${OL.hair}`,
                   }}>
                     <Caps size={8} ls={2} opacity={0.5} style={{ display: 'block', marginBottom: 3 }}>
                       {s.label}
@@ -336,7 +135,7 @@ export function PakHarShareCard({ verdictShort, activityTitle, activityDate, dis
                       fontSize: 15,
                       fontWeight: 700,
                       letterSpacing: -0.3,
-                      color: CARD.ink,
+                      color: OL.ink,
                     }}>
                       {s.value}
                     </span>
@@ -353,9 +152,9 @@ export function PakHarShareCard({ verdictShort, activityTitle, activityDate, dis
 
           {/* Footer */}
           <div>
-            <div style={{ borderTop: `1px solid ${CARD.accent}`, marginBottom: 12 }} />
+            <div style={{ borderTop: `1px solid ${OL.accent}`, marginBottom: 12 }} />
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <Caps size={9} ls={2} opacity={0.75} style={{ color: CARD.accent }}>
+              <Caps size={9} ls={2} opacity={0.75} style={{ color: OL.accent }}>
                 BY PAK HAR · SENIOR COACH · OLD LEGS
               </Caps>
               <Caps size={9} ls={1} opacity={0.55}>
@@ -366,86 +165,30 @@ export function PakHarShareCard({ verdictShort, activityTitle, activityDate, dis
         </div>
 
         {/* Controls */}
-        {mobileShareState === 'ready' && qrDataUrl ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-            <img src={qrDataUrl} alt="QR code" style={{ width: 200, height: 200 }} />
-            <Caps size={9} ls={1} opacity={0.6} style={{ color: OL.paper }}>
-              Scan on your phone · expires in 1 hour
-            </Caps>
-            <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
-              <button
-                onClick={() => { setMobileShareState('idle'); setQrDataUrl(null) }}
-                style={{
-                  background: 'transparent', color: OL.paper,
-                  border: `1px solid ${OL.paper}`, padding: '10px 20px',
-                  fontFamily: OL.sans, fontSize: 11, letterSpacing: 2, fontWeight: 700,
-                  textTransform: 'uppercase', cursor: 'pointer',
-                }}
-              >
-                Back
-              </button>
-              <button
-                onClick={onClose}
-                style={{
-                  background: 'transparent', color: OL.paper,
-                  border: `1px solid ${OL.paper}`, padding: '10px 20px',
-                  fontFamily: OL.sans, fontSize: 11, letterSpacing: 2, fontWeight: 700,
-                  textTransform: 'uppercase', cursor: 'pointer',
-                  opacity: 0.55,
-                }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button
-                onClick={handleMobileShare}
-                disabled={mobileShareState === 'capturing'}
-                style={{
-                  background: OL.ink, color: 'var(--color-ink-on-ink)',
-                  border: 'none', padding: '12px 28px',
-                  fontFamily: OL.sans, fontSize: 11, letterSpacing: 2, fontWeight: 700,
-                  textTransform: 'uppercase',
-                  cursor: mobileShareState === 'capturing' ? 'wait' : 'pointer',
-                  opacity: mobileShareState === 'capturing' ? 0.6 : 1,
-                }}
-              >
-                {mobileShareState === 'capturing' ? 'Preparing...' : 'Share to Mobile →'}
-              </button>
-              <button
-                onClick={handleDownload}
-                style={{
-                  background: 'transparent', color: OL.paper,
-                  border: `1px solid ${OL.paper}`, padding: '12px 20px',
-                  fontFamily: OL.sans, fontSize: 11, letterSpacing: 2, fontWeight: 700,
-                  textTransform: 'uppercase', cursor: 'pointer',
-                }}
-              >
-                Print / Save
-              </button>
-              <button
-                onClick={onClose}
-                style={{
-                  background: 'transparent', color: OL.paper,
-                  border: `1px solid ${OL.paper}`, padding: '12px 20px',
-                  fontFamily: OL.sans, fontSize: 11, letterSpacing: 2, fontWeight: 700,
-                  textTransform: 'uppercase', cursor: 'pointer',
-                  opacity: 0.55,
-                }}
-              >
-                Close
-              </button>
-            </div>
-            {mobileShareState === 'error' && mobileError && (
-              <Caps size={9} ls={1} opacity={0.7} style={{ color: OL.paper }}>
-                {mobileError}
-              </Caps>
-            )}
-          </div>
-        )}
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button
+            onClick={handleDownload}
+            style={{
+              background: OL.ink, color: 'var(--color-ink-on-ink)',
+              border: 'none', padding: '12px 28px',
+              fontFamily: OL.sans, fontSize: 11, letterSpacing: 2, fontWeight: 700,
+              textTransform: 'uppercase', cursor: 'pointer',
+            }}
+          >
+            Print / Save →
+          </button>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'transparent', color: OL.paper,
+              border: `1px solid ${OL.paper}`, padding: '12px 20px',
+              fontFamily: OL.sans, fontSize: 11, letterSpacing: 2, fontWeight: 700,
+              textTransform: 'uppercase', cursor: 'pointer',
+            }}
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -249,23 +249,3 @@ export async function streamChat(
   // Stream ended without a [DONE] marker — still signal completion
   onDone()
 }
-
-// ---------------------------------------------------------------------------
-// Share image — upload PNG blob, get back a short-lived token
-// ---------------------------------------------------------------------------
-
-export async function uploadShareImage(blob: Blob): Promise<{ token: string }> {
-  const form = new FormData()
-  form.append('file', blob, 'share.png')
-  // Do NOT pass Content-Type — browser must set it with the multipart boundary
-  const res = await fetch(`${API_BASE}/share-image`, {
-    method: 'POST',
-    credentials: 'include',
-    body: form,
-  })
-  if (!res.ok) {
-    const err: ApiError = { detail: 'Upload failed', status: res.status }
-    throw err
-  }
-  return res.json() as Promise<{ token: string }>
-}
