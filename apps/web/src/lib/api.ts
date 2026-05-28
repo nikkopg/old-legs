@@ -12,6 +12,17 @@
 
 import type { Activity, ActivityListResponse, ApiError, GoalEvent, Insights, PlanNextTarget, TrainingPlan, WeeklyReview, UserProfile, OnboardingRequest, OnboardingResponse } from '@/types/api'
 
+export interface WatchStatusResponse {
+  platform: string;
+  connected: boolean;
+  last_synced_at: string | null;
+  last_sync_error: string | null;
+}
+
+export interface WatchSyncResponse {
+  results: Record<string, string>;
+}
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 // ---------------------------------------------------------------------------
@@ -248,6 +259,44 @@ export async function streamChat(
 
   // Stream ended without a [DONE] marker — still signal completion
   onDone()
+}
+
+// ---------------------------------------------------------------------------
+// Watch Integration
+// ---------------------------------------------------------------------------
+
+export async function getWatchStatus(): Promise<WatchStatusResponse[]> {
+  return apiFetch<WatchStatusResponse[]>('/watch/status');
+}
+
+export async function connectWatch(
+  platform: string,
+  credentials: Record<string, string>
+): Promise<WatchStatusResponse> {
+  return apiFetch<WatchStatusResponse>('/watch/connect', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform, credentials }),
+  });
+}
+
+export async function connectWatchMfa(
+  platform: string,
+  mfa_code: string
+): Promise<WatchStatusResponse> {
+  return apiFetch<WatchStatusResponse>('/watch/connect/mfa', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform, mfa_code }),
+  });
+}
+
+export async function disconnectWatch(platform: string): Promise<void> {
+  await apiFetch<void>(`/watch/${platform}/disconnect`, { method: 'DELETE' });
+}
+
+export async function syncToWatch(): Promise<WatchSyncResponse> {
+  return apiFetch<WatchSyncResponse>('/watch/sync', { method: 'POST' });
 }
 
 // ---------------------------------------------------------------------------
