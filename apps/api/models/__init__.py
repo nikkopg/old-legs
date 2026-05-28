@@ -10,5 +10,6 @@ from models.activity import Activity
 from models.training_plan import TrainingPlan
 from models.chat_message import ChatMessage
 from models.weekly_review import WeeklyReview
+from models.watch_integration import WatchIntegration
 
-__all__ = ["Base", "User", "Activity", "TrainingPlan", "ChatMessage", "WeeklyReview"]
+__all__ = ["Base", "User", "Activity", "TrainingPlan", "ChatMessage", "WeeklyReview", "WatchIntegration"]
