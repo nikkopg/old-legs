@@ -26,7 +26,7 @@ from models.training_plan import TrainingPlan
 from models.user import User
 from prompts.pak_har import PLAN_PROMPT
 from config import settings
-from services.coach import FALLBACK_MAX_HR as _FALLBACK_MAX_HR, DEFAULT_RHR as _DEFAULT_RHR
+from services.hr_utils import get_hr_params as _get_hr_params
 from services.ollama import (
     OLLAMA_BASE_URL,
     CONNECT_TIMEOUT,
@@ -339,36 +339,6 @@ def _build_zone_distribution(
 
     return "\n".join(lines)
 
-
-def _get_hr_params(user: User, activities: list[Activity]) -> tuple[int, int]:
-    """
-    Resolve resting HR and max HR for zone classification.
-
-    Prefers values stored on the User row (resting_hr, max_hr_observed / max_hr).
-    Falls back to scanning activity max_hr fields, then population defaults.
-
-    Args:
-        user: The authenticated User ORM object.
-        activities: Recent activities used as fallback for max HR.
-
-    Returns:
-        A (rhr, max_hr) tuple, both in bpm.
-    """
-    rhr = user.resting_hr if user.resting_hr is not None else _DEFAULT_RHR
-    # Prefer the explicitly stored observed max HR, then the user-entered value
-    max_hr = user.max_hr_observed or user.max_hr
-    if max_hr is None:
-        candidates = [a.max_hr for a in activities if a.max_hr is not None]
-        max_hr = max(candidates) if candidates else None
-    if max_hr is None:
-        # Rough estimate: highest avg_hr × 1.1, minimum fallback
-        avg_hrs = [a.average_hr for a in activities if a.average_hr is not None]
-        if avg_hrs:
-            max_hr = int(max(avg_hrs) * 1.1)
-        else:
-            max_hr = _FALLBACK_MAX_HR
-
-    return rhr, max_hr
 
 
 def _get_week_start() -> date:
