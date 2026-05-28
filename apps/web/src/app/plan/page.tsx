@@ -30,7 +30,8 @@ import { PlanPaper } from '@/components/redesign/PlanPaper'
 import { OfflinePage } from '@/components/redesign/OfflinePage'
 import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton'
 import { OL } from '@/components/redesign/NewspaperChrome'
-import { getCurrentPlan, getActivities, getPlanNextTarget, getPlanVerdict } from '@/lib/api'
+import { getCurrentPlan, getActivities, getPlanNextTarget, getPlanVerdict, getWatchStatus, syncToWatch } from '@/lib/api'
+import type { WatchSyncResponse } from '@/lib/api'
 import { useProgressStream } from '@/hooks/useProgressStream'
 import type { ApiError, PlanNextTarget, TrainingPlan as ApiTrainingPlan, PlanDay as ApiPlanDay, Activity } from '@/types/api'
 
@@ -289,6 +290,26 @@ export default function PlanPage() {
     retry: false,
   })
 
+  // Watch sync
+  const { data: watchStatusData } =
+    useQuery({ queryKey: ['watchStatus'], queryFn: getWatchStatus })
+  const hasConnectedWatch = watchStatusData?.some(w => w.connected) ?? false
+
+  const [syncState, setSyncState] =
+    useState<'idle' | 'syncing' | 'done' | 'error'>('idle')
+  const [syncResults, setSyncResults] = useState<Record<string, string>>({})
+
+  async function handleSyncToWatch() {
+    setSyncState('syncing')
+    try {
+      const res: WatchSyncResponse = await syncToWatch()
+      setSyncResults(res.results)
+      setSyncState('done')
+    } catch {
+      setSyncState('error')
+    }
+  }
+
   useEffect(() => {
     if (isError && error && isUnauthorized(error)) {
       router.replace('/')
@@ -390,6 +411,10 @@ export default function PlanPage() {
         planVerdicts={planVerdicts}
         nextTarget={nextTarget ?? null}
         isNextWeek={isNextWeek}
+        onSyncToWatch={handleSyncToWatch}
+        syncState={syncState}
+        syncResults={syncResults}
+        hasConnectedWatch={hasConnectedWatch}
       />
 
       {/* TASK-201-F4: Replace-confirmation modal */}

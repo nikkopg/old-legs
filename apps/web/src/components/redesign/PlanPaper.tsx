@@ -99,6 +99,11 @@ interface PlanPaperProps {
   nextTarget?: PlanNextTarget | null;
   /** True when the resolved target week is next week (not the current week). */
   isNextWeek?: boolean;
+  /** Watch sync props */
+  onSyncToWatch?: () => void;
+  syncState?: 'idle' | 'syncing' | 'done' | 'error';
+  syncResults?: Record<string, string>;
+  hasConnectedWatch?: boolean;
 }
 
 // ---------- helpers ----------
@@ -172,6 +177,10 @@ export function PlanPaper({
   planVerdicts,
   nextTarget,
   isNextWeek = false,
+  onSyncToWatch,
+  syncState = 'idle',
+  syncResults = {},
+  hasConnectedWatch = false,
 }: PlanPaperProps) {
   const nav = [
     { key: 'dashboard', label: 'Front Page' },
@@ -934,7 +943,7 @@ export function PlanPaper({
             </div>
           </div>
 
-          {/* Regenerate */}
+          {/* Regenerate + Sync to Watch */}
           <div
             style={{
               marginTop: 26,
@@ -944,6 +953,42 @@ export function PlanPaper({
               alignItems: 'center',
             }}
           >
+            {/* Sync to Watch button + results */}
+            {hasConnectedWatch && plan && onSyncToWatch && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0 }}>
+                <button
+                  onClick={onSyncToWatch}
+                  disabled={syncState === 'syncing'}
+                  style={{
+                    fontFamily: OL.mono,
+                    fontSize: 11,
+                    letterSpacing: 2,
+                    background: 'transparent',
+                    border: `1px solid ${OL.ink}`,
+                    padding: '10px 20px',
+                    cursor: syncState === 'syncing' ? 'not-allowed' : 'pointer',
+                    color: OL.ink,
+                    borderRadius: 0,
+                  }}
+                >
+                  {syncState === 'syncing' ? 'Syncing...' : 'Sync to Watch'}
+                </button>
+                {syncState === 'done' && (
+                  <div style={{ fontFamily: OL.mono, fontSize: 12, marginTop: 8, textAlign: 'right' }}>
+                    {Object.entries(syncResults).map(([platform, result]) => (
+                      <div key={platform} style={{ color: result === 'pushed' ? OL.ink : OL.accent }}>
+                        {platform}: {result === 'pushed' ? '✓ pushed' : `✗ ${result}`}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {syncState === 'error' && (
+                  <div style={{ fontFamily: OL.mono, fontSize: 12, color: OL.accent, marginTop: 8, textAlign: 'right' }}>
+                    Sync failed — check Watch Integration in Settings.
+                  </div>
+                )}
+              </div>
+            )}
             {isStreaming && (
               /* Compact progress strip when plan already exists and regenerating */
               <div
