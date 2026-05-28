@@ -48,7 +48,8 @@ import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { SettingsPaper } from '@/components/redesign/SettingsPaper'
 import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton'
-import { getAuthStatus, disconnectStrava, resetPakHarContext, saveOnboarding } from '@/lib/api'
+import { getAuthStatus, disconnectStrava, resetPakHarContext, saveOnboarding, getWatchStatus, connectWatch, connectWatchMfa, disconnectWatch } from '@/lib/api'
+import type { WatchStatusResponse } from '@/lib/api'
 import { useUser } from '@/hooks/useUser'
 import { useChatStore } from '@/store/chat'
 import type { ApiError, GoalEvent, VoiceLevel } from '@/types/api'
@@ -89,6 +90,10 @@ export default function SettingsPage() {
   // User profile query
   const { user: userProfile, isLoading: userLoading } = useUser()
 
+  // Watch status query
+  const { data: watchStatus, refetch: refetchWatch } =
+    useQuery<WatchStatusResponse[], ApiError>({ queryKey: ['watchStatus'], queryFn: getWatchStatus })
+
   const isLoading = authLoading || userLoading
 
   // Local-only preferences state (no backend yet)
@@ -115,6 +120,14 @@ export default function SettingsPage() {
 
   // Reset context state machine
   const [resetContextState, setResetContextState] = useState<ResetContextState>('idle')
+
+  // Watch integration state
+  const [watchEmail, setWatchEmail] = useState('')
+  const [watchPassword, setWatchPassword] = useState('')
+  const [watchMfaMode, setWatchMfaMode] = useState(false)
+  const [watchMfaCode, setWatchMfaCode] = useState('')
+  const [watchConnectLoading, setWatchConnectLoading] = useState(false)
+  const [watchConnectError, setWatchConnectError] = useState<string | null>(null)
 
   // Redirect if not authenticated or not connected
   const isUnauthorized = error !== null && error !== undefined && (error as ApiError).status === 401
@@ -311,6 +324,47 @@ export default function SettingsPage() {
     }
   }
 
+  // Watch integration handlers
+  async function handleConnectWatch() {
+    setWatchConnectLoading(true)
+    setWatchConnectError(null)
+    try {
+      await connectWatch('garmin', { email: watchEmail, password: watchPassword })
+      setWatchEmail('')
+      setWatchPassword('')
+      refetchWatch()
+    } catch (err) {
+      const apiErr = err as ApiError
+      if (apiErr.status === 428) {
+        setWatchMfaMode(true)
+      } else {
+        setWatchConnectError(apiErr.detail ?? 'Connection failed.')
+      }
+    } finally {
+      setWatchConnectLoading(false)
+    }
+  }
+
+  async function handleWatchMfaSubmit() {
+    setWatchConnectLoading(true)
+    setWatchConnectError(null)
+    try {
+      await connectWatchMfa('garmin', watchMfaCode)
+      setWatchMfaMode(false)
+      setWatchMfaCode('')
+      refetchWatch()
+    } catch (err) {
+      setWatchConnectError((err as ApiError).detail ?? 'MFA failed.')
+    } finally {
+      setWatchConnectLoading(false)
+    }
+  }
+
+  async function handleDisconnectWatch() {
+    await disconnectWatch('garmin')
+    refetchWatch()
+  }
+
   // Loading state
   if (isLoading) {
     return <PageLoadingSkeleton />
@@ -362,6 +416,19 @@ export default function SettingsPage() {
       isSavingPreferences={isSavingPreferences}
       preferencesSaved={preferencesSaved}
       preferencesError={preferencesError}
+      watchStatus={watchStatus ?? []}
+      watchEmail={watchEmail}
+      watchPassword={watchPassword}
+      watchMfaMode={watchMfaMode}
+      watchMfaCode={watchMfaCode}
+      watchConnectLoading={watchConnectLoading}
+      watchConnectError={watchConnectError}
+      onWatchEmailChange={setWatchEmail}
+      onWatchPasswordChange={setWatchPassword}
+      onWatchMfaCodeChange={setWatchMfaCode}
+      onConnectWatch={handleConnectWatch}
+      onWatchMfaSubmit={handleWatchMfaSubmit}
+      onDisconnectWatch={handleDisconnectWatch}
     />
   )
 }

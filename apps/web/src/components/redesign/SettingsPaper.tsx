@@ -45,6 +45,7 @@ import {
   NewspaperChrome,
 } from './NewspaperChrome';
 import type { GoalEvent, VoiceLevel } from '@/types/api';
+import type { WatchStatusResponse } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
 // Goal event options
@@ -128,6 +129,20 @@ interface SettingsPaperProps {
   isSavingPreferences: boolean;
   preferencesSaved: boolean;
   preferencesError: string | null;
+  // Watch Integration
+  watchStatus: WatchStatusResponse[];
+  watchEmail: string;
+  watchPassword: string;
+  watchMfaMode: boolean;
+  watchMfaCode: string;
+  watchConnectLoading: boolean;
+  watchConnectError: string | null;
+  onWatchEmailChange: (v: string) => void;
+  onWatchPasswordChange: (v: string) => void;
+  onWatchMfaCodeChange: (v: string) => void;
+  onConnectWatch: () => void;
+  onWatchMfaSubmit: () => void;
+  onDisconnectWatch: () => void;
 }
 
 // ---------- component ----------
@@ -155,6 +170,19 @@ export function SettingsPaper({
   isSavingPreferences,
   preferencesSaved,
   preferencesError,
+  watchStatus,
+  watchEmail,
+  watchPassword,
+  watchMfaMode,
+  watchMfaCode,
+  watchConnectLoading,
+  watchConnectError,
+  onWatchEmailChange,
+  onWatchPasswordChange,
+  onWatchMfaCodeChange,
+  onConnectWatch,
+  onWatchMfaSubmit,
+  onDisconnectWatch,
 }: SettingsPaperProps) {
   const voiceOptions: Array<{ opt: VoiceLevel; label: string; description: string }> = [
     { opt: 'gentle', label: 'Gentle', description: 'Mentor. Still honest. Less bite.' },
@@ -623,7 +651,162 @@ export function SettingsPaper({
             })}
           </section>
 
-          {/* Section 5 — Cancel the Subscription */}
+          {/* Section 6 — Watch Integration */}
+          <section style={{ padding: '14px 0', borderBottom: `1px solid ${OL.ink}` }}>
+            <SectionLabel>Watch Integration</SectionLabel>
+            {(() => {
+              const garmin = watchStatus.find(w => w.platform === 'garmin');
+              const isConnected = garmin?.connected === true;
+
+              function relativeTime(isoStr: string): string {
+                const diffMs = Date.now() - new Date(isoStr).getTime();
+                const diffMin = Math.floor(diffMs / 60000);
+                if (diffMin < 60) return `${diffMin} minute${diffMin !== 1 ? 's' : ''} ago`;
+                const diffHr = Math.floor(diffMin / 60);
+                if (diffHr < 24) return `${diffHr} hour${diffHr !== 1 ? 's' : ''} ago`;
+                const diffDay = Math.floor(diffHr / 24);
+                return `${diffDay} day${diffDay !== 1 ? 's' : ''} ago`;
+              }
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <Caps size={9} ls={2} opacity={0.7}>Garmin Connect</Caps>
+
+                  {isConnected ? (
+                    <div>
+                      <div style={{ fontFamily: OL.mono, fontSize: 13, color: '#3a7a3a' }}>
+                        Garmin — Connected
+                      </div>
+                      <div style={{ fontFamily: OL.mono, fontSize: 12, color: OL.muted, marginTop: 4 }}>
+                        {garmin!.last_synced_at
+                          ? `Last synced ${relativeTime(garmin!.last_synced_at)}`
+                          : 'Never synced'}
+                      </div>
+                      {garmin!.last_sync_error && (
+                        <div style={{ fontFamily: OL.mono, fontSize: 12, color: OL.accent, marginTop: 4 }}>
+                          {garmin!.last_sync_error}
+                        </div>
+                      )}
+                      <button
+                        onClick={onDisconnectWatch}
+                        style={{
+                          marginTop: 10,
+                          background: 'transparent',
+                          border: `1px solid ${OL.ink}`,
+                          color: OL.ink,
+                          fontFamily: OL.mono,
+                          fontSize: 11,
+                          padding: '6px 16px',
+                          cursor: 'pointer',
+                          borderRadius: 0,
+                        }}
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                  ) : watchMfaMode ? (
+                    <div>
+                      <p style={{ fontFamily: OL.mono, fontSize: 12, margin: '0 0 8px', color: OL.ink }}>
+                        A verification code was sent to your device.
+                      </p>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          value={watchMfaCode}
+                          onChange={e => onWatchMfaCodeChange(e.target.value)}
+                          disabled={watchConnectLoading}
+                          placeholder="Code"
+                          style={{
+                            fontFamily: OL.mono,
+                            fontSize: 13,
+                            padding: '6px 10px',
+                            border: `1px solid ${OL.ink}`,
+                            background: 'transparent',
+                            borderRadius: 0,
+                          }}
+                        />
+                        <button
+                          onClick={onWatchMfaSubmit}
+                          disabled={watchConnectLoading}
+                          style={{
+                            background: OL.ink,
+                            color: OL.paper,
+                            border: 'none',
+                            fontFamily: OL.mono,
+                            fontSize: 11,
+                            padding: '6px 16px',
+                            cursor: watchConnectLoading ? 'not-allowed' : 'pointer',
+                            borderRadius: 0,
+                          }}
+                        >
+                          {watchConnectLoading ? 'Connecting...' : 'Submit'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' as const }}>
+                        <input
+                          type="email"
+                          value={watchEmail}
+                          onChange={e => onWatchEmailChange(e.target.value)}
+                          disabled={watchConnectLoading}
+                          placeholder="Email"
+                          style={{
+                            fontFamily: OL.mono,
+                            fontSize: 13,
+                            padding: '6px 10px',
+                            border: `1px solid ${OL.ink}`,
+                            background: 'transparent',
+                            borderRadius: 0,
+                          }}
+                        />
+                        <input
+                          type="password"
+                          value={watchPassword}
+                          onChange={e => onWatchPasswordChange(e.target.value)}
+                          disabled={watchConnectLoading}
+                          placeholder="Password"
+                          style={{
+                            fontFamily: OL.mono,
+                            fontSize: 13,
+                            padding: '6px 10px',
+                            border: `1px solid ${OL.ink}`,
+                            background: 'transparent',
+                            borderRadius: 0,
+                          }}
+                        />
+                        <button
+                          onClick={onConnectWatch}
+                          disabled={watchConnectLoading}
+                          style={{
+                            background: OL.ink,
+                            color: OL.paper,
+                            border: 'none',
+                            fontFamily: OL.mono,
+                            fontSize: 11,
+                            padding: '6px 16px',
+                            cursor: watchConnectLoading ? 'not-allowed' : 'pointer',
+                            borderRadius: 0,
+                          }}
+                        >
+                          {watchConnectLoading ? 'Connecting...' : 'Connect'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {watchConnectError && (
+                    <div style={{ fontFamily: OL.mono, fontSize: 12, color: OL.accent, marginTop: 4 }}>
+                      {watchConnectError}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </section>
+
+          {/* Section 7 — Cancel the Subscription */}
           <section style={{ padding: '14px 0' }}>
             <SectionLabel>Cancel the Subscription</SectionLabel>
             <p style={{
