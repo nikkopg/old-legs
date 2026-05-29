@@ -129,16 +129,36 @@ class TestConnectWatch:
 # ---------------------------------------------------------------------------
 
 class TestConnectMfa:
-    def test_mfa_complete_happy_path(
+    def test_mfa_full_round_trip(
         self, authenticated_client: TestClient, db_session: Session, test_user
     ):
-        _make_integration(db_session, test_user.id)
+        """Full round-trip: connect raises 428, credentials saved, mfa completes."""
+        # Step 1: connect with credentials that trigger MFA
+        with patch("services.watch_sync.adapters.garmin.GarminAdapter.connect",
+                   side_effect=Exception("MFA code required")):
+            connect_resp = authenticated_client.post("/watch/connect", json={
+                "platform": "garmin",
+                "credentials": {"email": "runner@example.com", "password": "secret"},
+            })
+        assert connect_resp.status_code == 428
+
+        # Credentials must have been persisted so /mfa can read them
+        row = db_session.query(WatchIntegration).filter_by(
+            user_id=test_user.id, platform="garmin"
+        ).first()
+        assert row is not None, "connect (428) must persist credentials for /mfa to read"
+
+        # Step 2: submit MFA code
         with patch("services.watch_sync.adapters.garmin.GarminAdapter.connect_with_mfa"):
-            resp = authenticated_client.post("/watch/connect/mfa", json={
+            mfa_resp = authenticated_client.post("/watch/connect/mfa", json={
                 "platform": "garmin",
                 "mfa_code": "123456",
             })
-        assert resp.status_code == 200
+        assert mfa_resp.status_code == 200
+
+        # Still exactly one row — not duplicated
+        rows = db_session.query(WatchIntegration).filter_by(user_id=test_user.id).all()
+        assert len(rows) == 1
 
     def test_mfa_no_integration_returns_404(self, authenticated_client: TestClient):
         resp = authenticated_client.post("/watch/connect/mfa", json={
