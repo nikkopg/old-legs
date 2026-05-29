@@ -35,6 +35,7 @@
   --color-hairline-strong: rgba(20, 18, 16, 0.35);
   --color-frame:           #1a1612;
   --color-data-fill-bg:    rgba(20, 18, 16, 0.08);   /* legacy alias of paper-soft-3 */
+  --color-success:         #3a7a3a;
 
   /* ---- Typography — dark theme (existing) ---- */
   --font-sans: var(--font-inter);
@@ -86,6 +87,7 @@
   --color-hairline-strong: rgba(236, 226, 204, 0.35);
   --color-frame:           #0a0805;                  /* darker than paper, sits behind it */
   --color-data-fill-bg:    rgba(236, 226, 204, 0.10);
+  --color-success:         #5aaf5a;
 }
 
 /* ---- Base styles ---- */

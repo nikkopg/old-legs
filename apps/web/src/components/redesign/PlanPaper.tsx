@@ -953,6 +953,12 @@ export function PlanPaper({
               alignItems: 'center',
             }}
           >
+            {/* Discoverability link when no watch connected but plan exists */}
+            {!hasConnectedWatch && plan && (
+              <span style={{ fontFamily: OL.mono, fontSize: 11, color: OL.muted }}>
+                <a href="/settings" style={{ color: OL.muted }}>Connect a watch in Settings</a> to sync plans.
+              </span>
+            )}
             {/* Sync to Watch button + results */}
             {hasConnectedWatch && plan && onSyncToWatch && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0 }}>
@@ -977,7 +983,7 @@ export function PlanPaper({
                   <div style={{ fontFamily: OL.mono, fontSize: 12, marginTop: 8, textAlign: 'right' }}>
                     {Object.entries(syncResults).map(([platform, result]) => (
                       <div key={platform} style={{ color: result === 'pushed' ? OL.ink : OL.accent }}>
-                        {platform}: {result === 'pushed' ? '✓ pushed' : `✗ ${result}`}
+                        {platform}: {result === 'pushed' ? 'On your watch.' : `✗ ${result}`}
                       </div>
                     ))}
                   </div>

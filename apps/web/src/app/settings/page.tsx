@@ -128,6 +128,7 @@ export default function SettingsPage() {
   const [watchMfaCode, setWatchMfaCode] = useState('')
   const [watchConnectLoading, setWatchConnectLoading] = useState(false)
   const [watchConnectError, setWatchConnectError] = useState<string | null>(null)
+  const [watchShowPassword, setWatchShowPassword] = useState(false)
 
   // Redirect if not authenticated or not connected
   const isUnauthorized = error !== null && error !== undefined && (error as ApiError).status === 401
@@ -365,6 +366,11 @@ export default function SettingsPage() {
     refetchWatch()
   }
 
+  function handleWatchMfaCancel() {
+    setWatchMfaMode(false)
+    setWatchConnectError(null)
+  }
+
   // Loading state
   if (isLoading) {
     return <PageLoadingSkeleton />
@@ -429,6 +435,9 @@ export default function SettingsPage() {
       onConnectWatch={handleConnectWatch}
       onWatchMfaSubmit={handleWatchMfaSubmit}
       onDisconnectWatch={handleDisconnectWatch}
+      onWatchMfaCancel={handleWatchMfaCancel}
+      watchShowPassword={watchShowPassword}
+      onWatchShowPasswordToggle={() => setWatchShowPassword((v) => !v)}
     />
   )
 }

@@ -143,6 +143,9 @@ interface SettingsPaperProps {
   onConnectWatch: () => void;
   onWatchMfaSubmit: () => void;
   onDisconnectWatch: () => void;
+  onWatchMfaCancel: () => void;
+  watchShowPassword: boolean;
+  onWatchShowPasswordToggle: () => void;
 }
 
 // ---------- component ----------
@@ -183,6 +186,9 @@ export function SettingsPaper({
   onConnectWatch,
   onWatchMfaSubmit,
   onDisconnectWatch,
+  onWatchMfaCancel,
+  watchShowPassword,
+  onWatchShowPasswordToggle,
 }: SettingsPaperProps) {
   const voiceOptions: Array<{ opt: VoiceLevel; label: string; description: string }> = [
     { opt: 'gentle', label: 'Gentle', description: 'Mentor. Still honest. Less bite.' },
@@ -654,6 +660,9 @@ export function SettingsPaper({
           {/* Section 6 — Watch Integration */}
           <section style={{ padding: '14px 0', borderBottom: `1px solid ${OL.ink}` }}>
             <SectionLabel>Watch Integration</SectionLabel>
+            <p style={{ fontFamily: OL.mono, fontSize: 12, color: OL.muted, margin: '4px 0 10px' }}>
+              Connect your Garmin account. Plans push directly to your watch calendar.
+            </p>
             {(() => {
               const garmin = watchStatus.find(w => w.platform === 'garmin');
               const isConnected = garmin?.connected === true;
@@ -674,7 +683,7 @@ export function SettingsPaper({
 
                   {isConnected ? (
                     <div>
-                      <div style={{ fontFamily: OL.mono, fontSize: 13, color: '#3a7a3a' }}>
+                      <div style={{ fontFamily: OL.mono, fontSize: 13, color: OL.success }}>
                         Garmin — Connected
                       </div>
                       <div style={{ fontFamily: OL.mono, fontSize: 12, color: OL.muted, marginTop: 4 }}>
@@ -696,7 +705,7 @@ export function SettingsPaper({
                           color: OL.ink,
                           fontFamily: OL.mono,
                           fontSize: 11,
-                          padding: '6px 16px',
+                          padding: '12px 20px',
                           cursor: 'pointer',
                           borderRadius: 0,
                         }}
@@ -719,7 +728,7 @@ export function SettingsPaper({
                           style={{
                             fontFamily: OL.mono,
                             fontSize: 13,
-                            padding: '6px 10px',
+                            padding: '12px 10px',
                             border: `1px solid ${OL.ink}`,
                             background: 'transparent',
                             borderRadius: 0,
@@ -734,7 +743,7 @@ export function SettingsPaper({
                             border: 'none',
                             fontFamily: OL.mono,
                             fontSize: 11,
-                            padding: '6px 16px',
+                            padding: '12px 20px',
                             cursor: watchConnectLoading ? 'not-allowed' : 'pointer',
                             borderRadius: 0,
                           }}
@@ -742,40 +751,84 @@ export function SettingsPaper({
                           {watchConnectLoading ? 'Connecting...' : 'Submit'}
                         </button>
                       </div>
+                      <button
+                        onClick={onWatchMfaCancel}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          fontFamily: OL.mono,
+                          fontSize: 11,
+                          color: OL.muted,
+                          cursor: 'pointer',
+                          padding: 0,
+                          marginTop: 6,
+                        }}
+                      >
+                        ← Back
+                      </button>
                     </div>
                   ) : (
                     <div>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' as const }}>
-                        <input
-                          type="email"
-                          value={watchEmail}
-                          onChange={e => onWatchEmailChange(e.target.value)}
-                          disabled={watchConnectLoading}
-                          placeholder="Email"
-                          style={{
-                            fontFamily: OL.mono,
-                            fontSize: 13,
-                            padding: '6px 10px',
-                            border: `1px solid ${OL.ink}`,
-                            background: 'transparent',
-                            borderRadius: 0,
-                          }}
-                        />
-                        <input
-                          type="password"
-                          value={watchPassword}
-                          onChange={e => onWatchPasswordChange(e.target.value)}
-                          disabled={watchConnectLoading}
-                          placeholder="Password"
-                          style={{
-                            fontFamily: OL.mono,
-                            fontSize: 13,
-                            padding: '6px 10px',
-                            border: `1px solid ${OL.ink}`,
-                            background: 'transparent',
-                            borderRadius: 0,
-                          }}
-                        />
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' as const }}>
+                        <div>
+                          <label style={{ fontFamily: OL.mono, fontSize: 11, display: 'block', marginBottom: 2 }}>
+                            Email
+                          </label>
+                          <input
+                            type="email"
+                            autoComplete="email"
+                            value={watchEmail}
+                            onChange={e => onWatchEmailChange(e.target.value)}
+                            disabled={watchConnectLoading}
+                            style={{
+                              fontFamily: OL.mono,
+                              fontSize: 13,
+                              padding: '12px 10px',
+                              border: `1px solid ${OL.ink}`,
+                              background: 'transparent',
+                              borderRadius: 0,
+                              minWidth: 160,
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontFamily: OL.mono, fontSize: 11, display: 'block', marginBottom: 2 }}>
+                            Password
+                          </label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <input
+                              type={watchShowPassword ? 'text' : 'password'}
+                              autoComplete="current-password"
+                              value={watchPassword}
+                              onChange={e => onWatchPasswordChange(e.target.value)}
+                              disabled={watchConnectLoading}
+                              style={{
+                                fontFamily: OL.mono,
+                                fontSize: 13,
+                                padding: '12px 10px',
+                                border: `1px solid ${OL.ink}`,
+                                background: 'transparent',
+                                borderRadius: 0,
+                                minWidth: 160,
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={onWatchShowPasswordToggle}
+                              style={{
+                                fontFamily: OL.mono,
+                                fontSize: 11,
+                                color: OL.muted,
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                padding: '0 4px',
+                              }}
+                            >
+                              {watchShowPassword ? 'Hide' : 'Show'}
+                            </button>
+                          </div>
+                        </div>
                         <button
                           onClick={onConnectWatch}
                           disabled={watchConnectLoading}
@@ -785,7 +838,7 @@ export function SettingsPaper({
                             border: 'none',
                             fontFamily: OL.mono,
                             fontSize: 11,
-                            padding: '6px 16px',
+                            padding: '12px 20px',
                             cursor: watchConnectLoading ? 'not-allowed' : 'pointer',
                             borderRadius: 0,
                           }}

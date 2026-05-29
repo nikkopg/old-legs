@@ -319,6 +319,7 @@ export default function PlanPage() {
   // TASK-201-F4: gate generation behind a replace-confirmation modal when needed
   function handleGenerateClick() {
     setStreamError(null)
+    setSyncState('idle')
     if (nextTarget?.replaces_active_plan) {
       setShowReplaceModal(true)
     } else {
@@ -329,6 +330,7 @@ export default function PlanPage() {
   // Keep the internal trigger wrapper for use after modal confirmation
   function handleGenerate() {
     setStreamError(null)
+    setSyncState('idle')
     trigger()
   }
 
@@ -510,6 +512,7 @@ export default function PlanPage() {
               <button
                 onClick={() => {
                   setShowReplaceModal(false)
+                  setSyncState('idle')
                   trigger()
                 }}
                 style={{
