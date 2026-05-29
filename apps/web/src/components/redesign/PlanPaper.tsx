@@ -971,7 +971,7 @@ export function PlanPaper({
                     letterSpacing: 2,
                     background: 'transparent',
                     border: `1px solid ${OL.ink}`,
-                    padding: '10px 20px',
+                    padding: '12px 20px',
                     cursor: syncState === 'syncing' ? 'not-allowed' : 'pointer',
                     color: OL.ink,
                     borderRadius: 0,
@@ -982,7 +982,7 @@ export function PlanPaper({
                 {syncState === 'done' && (
                   <div style={{ fontFamily: OL.mono, fontSize: 12, marginTop: 8, textAlign: 'right' }}>
                     {Object.entries(syncResults).map(([platform, result]) => (
-                      <div key={platform} style={{ color: result === 'pushed' ? OL.ink : OL.accent }}>
+                      <div key={platform} style={{ color: result === 'pushed' ? OL.success : OL.accent }}>
                         {platform}: {result === 'pushed' ? 'On your watch.' : `✗ ${result}`}
                       </div>
                     ))}

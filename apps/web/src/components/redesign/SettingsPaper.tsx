@@ -668,7 +668,8 @@ export function SettingsPaper({
               const isConnected = garmin?.connected === true;
 
               function relativeTime(isoStr: string): string {
-                const diffMs = Date.now() - new Date(isoStr).getTime();
+                const normalized = isoStr.endsWith('Z') || isoStr.includes('+') ? isoStr : isoStr + 'Z';
+                const diffMs = Date.now() - new Date(normalized).getTime();
                 const diffMin = Math.floor(diffMs / 60000);
                 if (diffMin < 60) return `${diffMin} minute${diffMin !== 1 ? 's' : ''} ago`;
                 const diffHr = Math.floor(diffMin / 60);
@@ -760,7 +761,7 @@ export function SettingsPaper({
                           fontSize: 11,
                           color: OL.muted,
                           cursor: 'pointer',
-                          padding: 0,
+                          padding: '8px 0',
                           marginTop: 6,
                         }}
                       >
@@ -822,7 +823,7 @@ export function SettingsPaper({
                                 background: 'none',
                                 border: 'none',
                                 cursor: 'pointer',
-                                padding: '0 4px',
+                                padding: '12px 4px',
                               }}
                             >
                               {watchShowPassword ? 'Hide' : 'Show'}

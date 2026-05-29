@@ -1,13 +1,22 @@
 from datetime import datetime
-from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class WatchConnectRequest(BaseModel):
-    platform: str          # "garmin", "polar", etc.
-    credentials: dict[str, Any]   # platform-specific; validated by adapter
+    platform: str
+    credentials: dict[str, str]   # platform-specific; validated by adapter
     # Note: auto_sync intentionally absent — sync is user-initiated via POST /watch/sync
+
+    @field_validator("credentials")
+    @classmethod
+    def _credentials_bounded(cls, v: dict[str, str]) -> dict[str, str]:
+        if len(v) > 10:
+            raise ValueError("credentials must not contain more than 10 keys")
+        for key, val in v.items():
+            if len(key) > 128 or len(val) > 512:
+                raise ValueError("credential key/value exceeds maximum length")
+        return v
 
 
 class WatchMfaRequest(BaseModel):
@@ -16,6 +25,8 @@ class WatchMfaRequest(BaseModel):
 
 
 class WatchStatusResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     platform: str
     connected: bool
     last_synced_at: datetime | None = None

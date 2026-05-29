@@ -9,6 +9,7 @@ Endpoints:
     POST   /watch/sync               — manually push current active plan to all connected platforms
 """
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -43,6 +44,33 @@ def _get_adapter_or_422(platform: str):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+def _upsert_integration(
+    db: Session, user_id: int, platform: str, credentials_encrypted: str
+) -> WatchIntegration:
+    existing = (
+        db.query(WatchIntegration)
+        .filter(WatchIntegration.user_id == user_id, WatchIntegration.platform == platform)
+        .first()
+    )
+    if existing:
+        existing.credentials_encrypted = credentials_encrypted
+        existing.session_token_encrypted = None
+        existing.session_expires_at = None
+        existing.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        return existing
+    integration = WatchIntegration(
+        user_id=user_id,
+        platform=platform,
+        credentials_encrypted=credentials_encrypted,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    db.add(integration)
+    db.commit()
+    return integration
+
+
 def _integration_to_status(integration: WatchIntegration) -> WatchStatusResponse:
     return WatchStatusResponse(
         platform=integration.platform,
@@ -69,11 +97,11 @@ async def connect_watch(
         422: Unsupported platform or invalid credentials shape.
         428: MFA required (Garmin 2FA).
     """
-    import asyncio
-
-    _get_adapter_or_422(body.platform)
-
     adapter = _get_adapter_or_422(body.platform)
+
+    credentials_json = json.dumps(body.credentials)
+    credentials_encrypted = encrypt_token(credentials_json)
+
     try:
         await asyncio.to_thread(adapter.connect, body.credentials)
     except ValueError as exc:
@@ -81,14 +109,13 @@ async def connect_watch(
     except Exception as exc:
         exc_str = str(exc).lower()
         if "mfa" in exc_str or "2fa" in exc_str or "code" in exc_str or "factor" in exc_str:
+            # Persist credentials so POST /watch/connect/mfa can read them.
+            _upsert_integration(db, user.id, body.platform, credentials_encrypted)
             raise HTTPException(
                 status_code=428,
                 detail={"mfa_required": True, "platform": body.platform},
             ) from exc
-        raise HTTPException(status_code=400, detail=f"Authentication failed: {exc}") from exc
-
-    credentials_json = json.dumps(body.credentials)
-    credentials_encrypted = encrypt_token(credentials_json)
+        raise HTTPException(status_code=400, detail="Authentication failed. Check your credentials.") from exc
 
     existing = (
         db.query(WatchIntegration)
@@ -140,8 +167,6 @@ async def connect_watch_mfa(
         404: No pending integration found — call /watch/connect first.
         400: MFA code rejected.
     """
-    import asyncio
-
     _get_adapter_or_422(body.platform)
 
     integration = (
@@ -157,13 +182,13 @@ async def connect_watch_mfa(
 
     credentials = json.loads(decrypt_token(integration.credentials_encrypted))
 
-    from services.watch_sync.adapters.garmin import GarminAdapter
     if body.platform == "garmin":
+        from services.watch_sync.adapters.garmin import GarminAdapter
         garmin_adapter = GarminAdapter()
         try:
             await asyncio.to_thread(garmin_adapter.connect_with_mfa, credentials, body.mfa_code)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"MFA failed: {exc}") from exc
+            raise HTTPException(status_code=400, detail="MFA verification failed. Check the code and try again.") from exc
     else:
         raise HTTPException(status_code=422, detail=f"MFA not supported for platform '{body.platform}'")
 
@@ -187,7 +212,9 @@ def disconnect_watch(
 
     Raises:
         401: Not authenticated.
+        422: Unsupported platform.
     """
+    _get_adapter_or_422(platform)
     integration = (
         db.query(WatchIntegration)
         .filter(WatchIntegration.user_id == user.id, WatchIntegration.platform == platform)

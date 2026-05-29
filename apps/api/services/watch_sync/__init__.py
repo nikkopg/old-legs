@@ -11,9 +11,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
+from models.activity import Activity
 from models.training_plan import TrainingPlan
 from models.user import User
 from models.watch_integration import WatchIntegration
@@ -49,9 +51,6 @@ async def push_plan_to_watch(
         return {}
 
     # Fetch recent activities for HR param fallback
-    from models.activity import Activity
-    from datetime import datetime, timedelta, timezone
-
     cutoff = datetime.now(timezone.utc) - timedelta(days=28)
     activities = (
         db.query(Activity)
@@ -75,7 +74,6 @@ async def push_plan_to_watch(
             for workout in workouts:
                 await asyncio.to_thread(adapter.push_workout, workout)
             integration.last_sync_error = None
-            from datetime import datetime, timezone
             integration.last_synced_at = datetime.now(timezone.utc)
             db.add(integration)
             db.commit()
