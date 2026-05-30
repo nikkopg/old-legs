@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.2.1 — 2026-05-30
+
+### Changed
+- **Pak Har analysis** — post-run analysis now classifies each run as EXECUTED, DEVIATED, or NONE before responding. Correctly executed sessions get a forward-looking observation instead of a manufactured criticism. Splits instruction updated to use grade-adjusted pace (GAP) as the primary effort measure when terrain data is present.
+- **Grade-adjusted pace (GAP)** — each split in the post-run analysis now shows a GAP column alongside actual pace, calculated using the Minetti et al. (2002) metabolic cost polynomial. Pak Har can now reason from effort-normalised numbers on hilly runs rather than inferring from raw pace and elevation delta.
+
+### Fixed
+- **Strava OAuth on split ports** — connecting Strava when running frontend (:3000) and backend (:8000) on separate ports now works. The `oauth_state` cookie is re-set on the frontend origin via a new Next.js proxy route, so the CSRF check no longer fails when Strava redirects back.
+- **Migration hang on startup** — the `d6e7f8a9b0c1` migration no longer hangs on PostgreSQL. Replaced `batch_alter_table` (which triggered a full table rebuild) with direct `ALTER TABLE` using the correct existing FK constraint name.
+
+### Added
+- **Pak Har voice tests** — `test_pak_har_voice.py` adds four live Ollama scenarios (EXECUTED, DEVIATED-hard, DEVIATED-short, no plan) verified against `gemma4:31b-cloud`. All 19 assertions pass.
+
 ## v2.2.0 — 2026-05-30
 
 Garmin Connect watch sync — push your weekly training plan directly to your Garmin watch calendar.
