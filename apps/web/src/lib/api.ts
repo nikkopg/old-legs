@@ -92,10 +92,9 @@ export async function saveGoalEvent(goalEvent: GoalEvent | null): Promise<Onboar
 // ---------------------------------------------------------------------------
 
 export async function initiateStravaOAuth(state?: string): Promise<{ oauth_url: string }> {
-  return apiFetch<{ oauth_url: string }>('/auth/strava', {
-    method: 'POST',
-    body: JSON.stringify({ state: state ?? null }),
-  })
+  const res = await fetch('/api/auth/strava', { method: 'POST', cache: 'no-store' })
+  if (!res.ok) throw new Error('oauth_init_failed')
+  return res.json() as Promise<{ oauth_url: string }>
 }
 
 export async function getAuthStatus(): Promise<{ connected: boolean; message: string }> {

@@ -470,6 +470,35 @@ def _compute_efficiency_factor(
 _MAX_SPLITS: int = 20
 
 
+def _grade_adjusted_pace(pace_sec_per_km: float, elev_m: float, distance_m: float) -> float | None:
+    """
+    Compute grade-adjusted pace using the Minetti et al. (2002) metabolic cost
+    curve. Returns GAP in seconds/km, or None when grade is out of range.
+
+    The Minetti polynomial gives metabolic cost in J/(kg·m) as a function of
+    grade (decimal). Dividing by the flat cost (3.6 J/kg/m) gives the effort
+    multiplier. GAP = actual_pace / multiplier, so a hard uphill yields a
+    faster (lower) GAP than actual pace.
+    """
+    if distance_m <= 0:
+        return None
+    grade = elev_m / distance_m  # decimal, e.g. 0.05 for 5%
+    if not (-0.45 <= grade <= 0.45):  # Minetti curve valid range
+        return None
+    cost = (
+        155.4 * grade**5
+        - 30.4 * grade**4
+        - 43.3 * grade**3
+        + 46.3 * grade**2
+        + 19.5 * grade
+        + 3.6
+    )
+    multiplier = cost / 3.6
+    if multiplier <= 0:
+        return None
+    return pace_sec_per_km / multiplier
+
+
 def _format_splits_context(splits: list[dict]) -> str:
     """
     Format per-km split data into a human-readable table for the analysis prompt.
@@ -495,17 +524,33 @@ def _format_splits_context(splits: list[dict]) -> str:
 
     all_hr_null = all(s.get("hr") is None for s in capped)
     all_cad_null = all(s.get("cad") is None for s in capped)
+    all_elev_null = all(s.get("elev") is None for s in capped)
 
     lines: list[str] = ["Per-km splits:"]
     for s in capped:
         km = s.get("km", "?")
         avg_speed_ms = s.get("avg_speed_ms")
+        pace_sec_per_km: float | None = None
         if avg_speed_ms and avg_speed_ms > 0:
-            pace_str = format_pace(1000 / (avg_speed_ms * 60))
+            pace_sec_per_km = 1000 / avg_speed_ms
+            pace_str = format_pace(pace_sec_per_km / 60)
         else:
             pace_str = "--:--"
 
         parts = [f"km {km} — {pace_str}/km"]
+
+        # Grade-adjusted pace — only shown when elevation data is present
+        elev_val = s.get("elev")
+        distance_val = s.get("distance")
+        if (
+            not all_elev_null
+            and elev_val is not None
+            and distance_val
+            and pace_sec_per_km is not None
+        ):
+            gap = _grade_adjusted_pace(pace_sec_per_km, elev_val, distance_val)
+            if gap is not None:
+                parts.append(f"GAP {format_pace(gap / 60)}/km")
 
         if not all_hr_null:
             hr_val = s.get("hr")
@@ -518,9 +563,8 @@ def _format_splits_context(splits: list[dict]) -> str:
             else:
                 parts.append("Cad — spm")
 
-        elev_val = s.get("elev")
-        if elev_val is not None:
-            parts.append(f"Elev {int(elev_val):+d}m")
+        if not all_elev_null:
+            parts.append(f"Elev {int(elev_val):+d}m" if elev_val is not None else "Elev —m")
 
         lines.append("  " + " | ".join(parts))
 
