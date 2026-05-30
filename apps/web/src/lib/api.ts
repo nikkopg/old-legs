@@ -52,6 +52,7 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
     } catch {
       // response body wasn't JSON — keep the default message
     }
+    console.warn(`[api] ${options?.method ?? 'GET'} ${path} → ${res.status}`, detail)
     const err: ApiError = { detail, status: res.status }
     throw err
   }
