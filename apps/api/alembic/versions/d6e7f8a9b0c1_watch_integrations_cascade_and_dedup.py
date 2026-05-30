@@ -21,27 +21,28 @@ depends_on = None
 
 
 def upgrade() -> None:
-    with op.batch_alter_table("watch_integrations", schema=None) as batch_op:
-        # Re-create FK with ON DELETE CASCADE
-        batch_op.drop_constraint("watch_integrations_user_id_fkey", type_="foreignkey")
-        batch_op.create_foreign_key(
-            "watch_integrations_user_id_fkey",
-            "users",
-            ["user_id"],
-            ["id"],
-            ondelete="CASCADE",
-        )
-        # Dedup column — nullable, no default needed (NULL means never synced)
-        batch_op.add_column(sa.Column("last_synced_plan_id", sa.Integer(), nullable=True))
+    # Use raw ALTER TABLE — batch mode does a full table rebuild which hangs on
+    # PostgreSQL when the existing FK name doesn't match the migration's assumption.
+    # The actual constraint name in the DB is fk_watch_integrations_user_id_users.
+    op.drop_constraint("fk_watch_integrations_user_id_users", "watch_integrations", type_="foreignkey")
+    op.create_foreign_key(
+        "fk_watch_integrations_user_id_users",
+        "watch_integrations",
+        "users",
+        ["user_id"],
+        ["id"],
+        ondelete="CASCADE",
+    )
+    op.add_column("watch_integrations", sa.Column("last_synced_plan_id", sa.Integer(), nullable=True))
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("watch_integrations", schema=None) as batch_op:
-        batch_op.drop_column("last_synced_plan_id")
-        batch_op.drop_constraint("watch_integrations_user_id_fkey", type_="foreignkey")
-        batch_op.create_foreign_key(
-            "watch_integrations_user_id_fkey",
-            "users",
-            ["user_id"],
-            ["id"],
-        )
+    op.drop_column("watch_integrations", "last_synced_plan_id")
+    op.drop_constraint("fk_watch_integrations_user_id_users", "watch_integrations", type_="foreignkey")
+    op.create_foreign_key(
+        "fk_watch_integrations_user_id_users",
+        "watch_integrations",
+        "users",
+        ["user_id"],
+        ["id"],
+    )
