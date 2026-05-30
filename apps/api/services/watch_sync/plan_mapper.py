@@ -154,7 +154,7 @@ def map_plan_to_workouts(
         day_date = week_start + timedelta(days=i)
         display_day = day_name.capitalize()
         type_label = plan_day.type.replace("_", " ").title()
-        month_day = day_date.strftime("%-d %b") if hasattr(day_date, "strftime") else str(day_date)
+        month_day = f"{day_date.day} {day_date.strftime('%b')}"
 
         workouts.append(WorkoutSpec(
             name=f"{display_day} - {type_label} Run — {month_day}",

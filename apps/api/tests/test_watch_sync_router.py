@@ -259,11 +259,12 @@ class TestWatchSync:
         _make_plan(db_session, test_user.id)
         with patch("services.watch_sync.adapters.garmin.GarminAdapter.connect"), \
              patch("services.watch_sync.adapters.garmin.GarminAdapter.push_workout",
-                   return_value="garmin-workout-123"):
+                   return_value="garmin-workout-123") as mock_push:
             resp = authenticated_client.post("/watch/sync")
         assert resp.status_code == 200
         body = resp.json()
         assert body["results"]["garmin"] == "pushed"
+        assert mock_push.call_count >= 1, "push_workout must be called at least once"
 
     def test_sync_garmin_down_returns_failed(
         self, authenticated_client: TestClient, db_session: Session, test_user

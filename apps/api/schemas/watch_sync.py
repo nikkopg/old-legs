@@ -23,6 +23,13 @@ class WatchMfaRequest(BaseModel):
     platform: str
     mfa_code: str
 
+    @field_validator("mfa_code")
+    @classmethod
+    def _mfa_code_bounded(cls, v: str) -> str:
+        if len(v) > 16:
+            raise ValueError("mfa_code must not exceed 16 characters")
+        return v
+
 
 class WatchStatusResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

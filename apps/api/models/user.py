@@ -91,5 +91,5 @@ class User(Base):
         "WeeklyReview", back_populates="user", lazy="raise"
     )
     watch_integrations: Mapped[list["WatchIntegration"]] = relationship(
-        "WatchIntegration", back_populates="user", lazy="raise"
+        "WatchIntegration", back_populates="user", lazy="raise", passive_deletes=True
     )

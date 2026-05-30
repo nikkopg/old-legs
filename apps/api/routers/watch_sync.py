@@ -15,6 +15,7 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from dependencies import get_current_user
@@ -37,7 +38,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _get_adapter_or_422(platform: str):
+def _get_adapter_or_422(platform: str) -> "WatchAdapter":  # type: ignore[name-defined]
     try:
         return get_adapter(platform)
     except ValueError as exc:
@@ -45,7 +46,11 @@ def _get_adapter_or_422(platform: str):
 
 
 def _upsert_integration(
-    db: Session, user_id: int, platform: str, credentials_encrypted: str
+    db: Session,
+    user_id: int,
+    platform: str,
+    credentials_encrypted: str,
+    clear_sync_error: bool = False,
 ) -> WatchIntegration:
     existing = (
         db.query(WatchIntegration)
@@ -56,6 +61,8 @@ def _upsert_integration(
         existing.credentials_encrypted = credentials_encrypted
         existing.session_token_encrypted = None
         existing.session_expires_at = None
+        if clear_sync_error:
+            existing.last_sync_error = None
         existing.updated_at = datetime.now(timezone.utc)
         db.commit()
         return existing
@@ -67,7 +74,26 @@ def _upsert_integration(
         updated_at=datetime.now(timezone.utc),
     )
     db.add(integration)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        # Concurrent insert raced us — fetch the now-existing row and update it.
+        existing = (
+            db.query(WatchIntegration)
+            .filter(WatchIntegration.user_id == user_id, WatchIntegration.platform == platform)
+            .first()
+        )
+        if existing is None:
+            raise
+        existing.credentials_encrypted = credentials_encrypted
+        existing.session_token_encrypted = None
+        existing.session_expires_at = None
+        if clear_sync_error:
+            existing.last_sync_error = None
+        existing.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        return existing
     return integration
 
 
@@ -107,8 +133,14 @@ async def connect_watch(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
-        exc_str = str(exc).lower()
-        if "mfa" in exc_str or "2fa" in exc_str or "code" in exc_str or "factor" in exc_str:
+        # Check by type first (most reliable), then conservative keyword fallback.
+        # "code" is intentionally excluded — it matches too many non-MFA Garmin errors.
+        exc_type = type(exc).__name__
+        is_mfa = (
+            exc_type == "GarminConnectTwoFactorAuthenticationError"
+            or any(kw in str(exc).lower() for kw in ("mfa", "2fa", "factor"))
+        )
+        if is_mfa:
             # Persist credentials so POST /watch/connect/mfa can read them.
             _upsert_integration(db, user.id, body.platform, credentials_encrypted)
             raise HTTPException(
@@ -117,29 +149,9 @@ async def connect_watch(
             ) from exc
         raise HTTPException(status_code=400, detail="Authentication failed. Check your credentials.") from exc
 
-    existing = (
-        db.query(WatchIntegration)
-        .filter(WatchIntegration.user_id == user.id, WatchIntegration.platform == body.platform)
-        .first()
+    integration = _upsert_integration(
+        db, user.id, body.platform, credentials_encrypted, clear_sync_error=True
     )
-    if existing:
-        existing.credentials_encrypted = credentials_encrypted
-        existing.session_token_encrypted = None
-        existing.session_expires_at = None
-        existing.last_sync_error = None
-        existing.updated_at = datetime.now(timezone.utc)
-        integration = existing
-    else:
-        integration = WatchIntegration(
-            user_id=user.id,
-            platform=body.platform,
-            credentials_encrypted=credentials_encrypted,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-        )
-        db.add(integration)
-
-    db.commit()
     db.refresh(integration)
     return _integration_to_status(integration)
 
@@ -180,7 +192,13 @@ async def connect_watch_mfa(
             detail=f"No pending integration for platform '{body.platform}'. Call /watch/connect first.",
         )
 
-    credentials = json.loads(decrypt_token(integration.credentials_encrypted))
+    try:
+        credentials = json.loads(decrypt_token(integration.credentials_encrypted))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Stored credentials are unreadable. Reconnect via /watch/connect.",
+        ) from exc
 
     if body.platform == "garmin":
         from services.watch_sync.adapters.garmin import GarminAdapter

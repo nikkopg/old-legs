@@ -48,11 +48,15 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
       } else if (Array.isArray(body.detail) && body.detail.length > 0) {
         // FastAPI 422 — detail is an array of Pydantic error objects {type, loc, msg, input}
         detail = body.detail.map((e: { msg?: string }) => e.msg ?? String(e)).join('; ')
+      } else if (body.detail !== null && typeof body.detail === 'object') {
+        detail = JSON.stringify(body.detail)
       }
     } catch {
       // response body wasn't JSON — keep the default message
     }
-    console.warn(`[api] ${options?.method ?? 'GET'} ${path} → ${res.status}`, detail)
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn(`[api] ${options?.method ?? 'GET'} ${path} → ${res.status}`, detail)
+    }
     const err: ApiError = { detail, status: res.status }
     throw err
   }
@@ -277,7 +281,6 @@ export async function connectWatch(
 ): Promise<WatchStatusResponse> {
   return apiFetch<WatchStatusResponse>('/watch/connect', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ platform, credentials }),
   });
 }
@@ -288,7 +291,6 @@ export async function connectWatchMfa(
 ): Promise<WatchStatusResponse> {
   return apiFetch<WatchStatusResponse>('/watch/connect/mfa', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ platform, mfa_code }),
   });
 }

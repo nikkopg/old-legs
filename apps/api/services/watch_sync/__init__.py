@@ -67,6 +67,10 @@ async def push_plan_to_watch(
     results: dict[str, str] = {}
     for integration in integrations:
         platform = integration.platform
+        # Skip if this exact plan was already pushed — prevents duplicate workouts on the watch.
+        if getattr(integration, "last_synced_plan_id", None) == plan.id:
+            results[platform] = "already_synced"
+            continue
         try:
             credentials = json.loads(decrypt_token(integration.credentials_encrypted))
             adapter = get_adapter(platform)
@@ -75,6 +79,7 @@ async def push_plan_to_watch(
                 await asyncio.to_thread(adapter.push_workout, workout)
             integration.last_sync_error = None
             integration.last_synced_at = datetime.now(timezone.utc)
+            integration.last_synced_plan_id = plan.id  # type: ignore[attr-defined]
             db.add(integration)
             db.commit()
             results[platform] = "pushed"

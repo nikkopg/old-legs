@@ -36,7 +36,7 @@ class GarminAdapter:
     # WatchAdapter protocol
     # ------------------------------------------------------------------
 
-    def connect(self, credentials: dict) -> None:
+    def connect(self, credentials: dict[str, str]) -> None:
         """
         Authenticate with Garmin Connect.
 
@@ -55,7 +55,7 @@ class GarminAdapter:
         client.login()
         self._client = client
 
-    def connect_with_mfa(self, credentials: dict, mfa_code: str) -> None:
+    def connect_with_mfa(self, credentials: dict[str, str], mfa_code: str) -> None:
         """
         Complete Garmin login with an MFA code.
 
@@ -73,7 +73,7 @@ class GarminAdapter:
         client.login(mfa_code)
         self._client = client
 
-    def validate_credentials(self, credentials: dict) -> bool:
+    def validate_credentials(self, credentials: dict[str, str]) -> bool:
         try:
             self.connect(credentials)
             return True

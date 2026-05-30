@@ -964,7 +964,7 @@ export function PlanPaper({
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0 }}>
                 <button
                   onClick={onSyncToWatch}
-                  disabled={syncState === 'syncing'}
+                  disabled={syncState === 'syncing' || syncState === 'done'}
                   style={{
                     fontFamily: OL.mono,
                     fontSize: 11,
@@ -972,7 +972,7 @@ export function PlanPaper({
                     background: 'transparent',
                     border: `1px solid ${OL.ink}`,
                     padding: '12px 20px',
-                    cursor: syncState === 'syncing' ? 'not-allowed' : 'pointer',
+                    cursor: (syncState === 'syncing' || syncState === 'done') ? 'not-allowed' : 'pointer',
                     color: OL.ink,
                     borderRadius: 0,
                   }}
@@ -982,8 +982,8 @@ export function PlanPaper({
                 {syncState === 'done' && (
                   <div style={{ fontFamily: OL.mono, fontSize: 12, marginTop: 8, textAlign: 'right' }}>
                     {Object.entries(syncResults).map(([platform, result]) => (
-                      <div key={platform} style={{ color: result === 'pushed' ? OL.success : OL.accent }}>
-                        {platform}: {result === 'pushed' ? 'On your watch.' : `✗ ${result}`}
+                      <div key={platform} style={{ color: (result === 'pushed' || result === 'already_synced') ? OL.success : OL.accent }}>
+                        {platform}: {result === 'pushed' ? 'On your watch.' : result === 'already_synced' ? 'Already synced.' : `✗ ${result}`}
                       </div>
                     ))}
                   </div>
