@@ -76,18 +76,19 @@ The same signals a professional coach would pull — not just average pace and H
 | Category | Signal | What he looks for |
 |---|---|---|
 | The run | Distance & pace | Moving time, average pace, elevation gain |
-| The run | Per-km splits | Pace, HR, cadence, elevation change per km |
+| The run | Per-km splits | Pace, HR, cadence, elevation change, grade-adjusted pace (GAP) per km |
 | Effort | HR zones | 5 zones via Karvonen, calibrated to your RHR/MHR — not population averages |
 | Effort | Zone distribution | Time in each zone from per-second streams — exact, not averaged per km |
 | Effort | Zone mismatch | Called it easy but ran at Zone 4 — he'll say so |
 | Effort | Cardiac drift | HR climbing while pace holds = dehydration or aerobic ceiling |
+| Pacing | Grade-adjusted pace (GAP) | Effort per km normalised for gradient using Minetti's metabolic cost curve — a slow km up a 15% climb reads as the hard effort it actually was |
 | Pacing | Split pattern | Whether you faded, ran even, or negative-split |
 | Pacing | Cadence drop | Form breakdown under fatigue, not just tiredness |
 | Perceived effort | RPE | 1–10, cross-referenced against HR zone and splits |
 | Perceived effort | RPE mismatch | Zone 2 run rated 9/10 gets named — calibration, heat, fatigue, or sleep |
 | Fitness trend | Efficiency factor | Speed per heartbeat vs your last 4 runs — building or declining |
 | Fitness trend | HR trend | HR climbing across comparable distances = fatigue accumulation |
-| Context | Today's plan | Zone 4 HR on a scheduled tempo is expected — he won't flag it |
+| Context | Today's plan | Zone 4 HR on a scheduled tempo is expected — he won't flag it. Correctly executed sessions get a forward observation, not a manufactured criticism |
 | Context | Last 3 analyses | Same problem flagged three times = escalation, not repetition |
 | Context | Weekly review | Hard effort after a heavy week reads differently than after two rest days |
 | Context | Your preferences | Weekly km, available days, biggest struggle |
