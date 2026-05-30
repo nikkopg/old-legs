@@ -772,10 +772,11 @@ export function SettingsPaper({
                     <div>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' as const }}>
                         <div>
-                          <label style={{ fontFamily: OL.mono, fontSize: 11, display: 'block', marginBottom: 2 }}>
+                          <label htmlFor="watch-email" style={{ fontFamily: OL.mono, fontSize: 11, display: 'block', marginBottom: 2 }}>
                             Email
                           </label>
                           <input
+                            id="watch-email"
                             type="email"
                             autoComplete="email"
                             value={watchEmail}
@@ -793,11 +794,12 @@ export function SettingsPaper({
                           />
                         </div>
                         <div>
-                          <label style={{ fontFamily: OL.mono, fontSize: 11, display: 'block', marginBottom: 2 }}>
+                          <label htmlFor="watch-password" style={{ fontFamily: OL.mono, fontSize: 11, display: 'block', marginBottom: 2 }}>
                             Password
                           </label>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                             <input
+                              id="watch-password"
                               type={watchShowPassword ? 'text' : 'password'}
                               autoComplete="current-password"
                               value={watchPassword}
