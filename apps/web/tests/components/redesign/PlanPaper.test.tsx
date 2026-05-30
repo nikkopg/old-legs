@@ -299,4 +299,103 @@ describe('PlanPaper', () => {
       expect(onGeneratePlan).toHaveBeenCalledOnce()
     })
   })
+
+  // ---- Watch Sync ----
+
+  describe('Watch Sync', () => {
+    it('test 15: hasConnectedWatch=false + plan → "Connect a watch in Settings" link renders', () => {
+      render(
+        <PlanPaper
+          {...baseProps}
+          plan={makePlan()}
+          hasConnectedWatch={false}
+        />,
+      )
+      expect(screen.getByRole('link', { name: /Connect a watch in Settings/i })).toBeDefined()
+    })
+
+    it('test 16: hasConnectedWatch=true + plan + onSyncToWatch → "Sync to Watch" button renders', () => {
+      render(
+        <PlanPaper
+          {...baseProps}
+          plan={makePlan()}
+          hasConnectedWatch={true}
+          onSyncToWatch={vi.fn()}
+          syncState="idle"
+        />,
+      )
+      expect(screen.getByRole('button', { name: /Sync to Watch/i })).toBeDefined()
+    })
+
+    it('test 17: syncState="syncing" → Sync button is disabled', () => {
+      render(
+        <PlanPaper
+          {...baseProps}
+          plan={makePlan()}
+          hasConnectedWatch={true}
+          onSyncToWatch={vi.fn()}
+          syncState="syncing"
+        />,
+      )
+      // Button label changes to "Syncing..." when in syncing state
+      const btn = screen.getByRole('button', { name: /Syncing\.\.\./i })
+      expect((btn as HTMLButtonElement).disabled).toBe(true)
+    })
+
+    it('test 18: syncState="done" → Sync button is disabled (regression: must not re-enable)', () => {
+      render(
+        <PlanPaper
+          {...baseProps}
+          plan={makePlan()}
+          hasConnectedWatch={true}
+          onSyncToWatch={vi.fn()}
+          syncState="done"
+          syncResults={{}}
+        />,
+      )
+      const btn = screen.getByRole('button', { name: /Sync to Watch/i })
+      expect((btn as HTMLButtonElement).disabled).toBe(true)
+    })
+
+    it('test 19: syncState="done" + syncResults garmin=pushed → "On your watch." text renders', () => {
+      render(
+        <PlanPaper
+          {...baseProps}
+          plan={makePlan()}
+          hasConnectedWatch={true}
+          onSyncToWatch={vi.fn()}
+          syncState="done"
+          syncResults={{ garmin: 'pushed' }}
+        />,
+      )
+      expect(screen.getByText(/On your watch\./i)).toBeDefined()
+    })
+
+    it('test 20: syncState="done" + syncResults garmin=already_synced → "Already synced." text renders', () => {
+      render(
+        <PlanPaper
+          {...baseProps}
+          plan={makePlan()}
+          hasConnectedWatch={true}
+          onSyncToWatch={vi.fn()}
+          syncState="done"
+          syncResults={{ garmin: 'already_synced' }}
+        />,
+      )
+      expect(screen.getByText(/Already synced\./i)).toBeDefined()
+    })
+
+    it('test 21: syncState="error" → error message renders', () => {
+      render(
+        <PlanPaper
+          {...baseProps}
+          plan={makePlan()}
+          hasConnectedWatch={true}
+          onSyncToWatch={vi.fn()}
+          syncState="error"
+        />,
+      )
+      expect(screen.getByText(/Sync failed/i)).toBeDefined()
+    })
+  })
 })

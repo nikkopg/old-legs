@@ -53,6 +53,15 @@ test.describe('Settings page', () => {
         return
       }
 
+      if (url.includes('/watch/status')) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([]),
+        })
+        return
+      }
+
       await route.continue()
     })
   }

@@ -1,5 +1,30 @@
 # Changelog
 
+## v2.2.0 — 2026-05-30
+
+Garmin Connect watch sync — push your weekly training plan directly to your Garmin watch calendar.
+
+### Features
+- **Watch Integration (Settings)** — connect your Garmin Connect account in Settings → Watch Integration. Credentials are encrypted at rest (Fernet). Supports Garmin 2FA via MFA code prompt.
+- **Sync to Watch (Plan page)** — "Sync to Watch" button pushes the active weekly plan to all connected watch platforms. Each day (easy, tempo, long, interval, recovery) is mapped to a structured Garmin workout with HR-zone targets derived from your max HR. Rest and cross-training days are skipped.
+- **Dedup guard** — re-syncing the same plan returns "Already synced." instead of creating duplicate workouts on the watch calendar.
+- **Live status** — Settings shows last synced timestamp and any sync error. Plan page shows a "Connect a watch in Settings" link until a watch is connected.
+
+### Backend
+- `POST /watch/connect` — store encrypted Garmin credentials, validate with a real login (returns 428 + MFA prompt for accounts with 2FA enabled)
+- `POST /watch/connect/mfa` — complete MFA challenge
+- `DELETE /watch/{platform}/disconnect` — remove integration (idempotent, 204)
+- `GET /watch/status` — list connected platforms with last-sync timestamp
+- `POST /watch/sync` — push active plan to all connected watches; returns per-platform result (`pushed` / `already_synced` / `skipped` / `failed`)
+- New `watch_integrations` DB table with FK cascade, unique constraint on (user_id, platform)
+
+### Bug fixes
+- **MFA heuristic** — replaced overly-broad `"code"` substring match with explicit `GarminConnectTwoFactorAuthenticationError` type check; prevents false MFA triggers on unrelated Garmin errors
+- **Duplicate push protection** — `last_synced_plan_id` column tracks last-synced plan; backend skips push if plan unchanged
+- **TOCTOU race** — concurrent connect requests now handled gracefully via `IntegrityError` catch + retry
+- **apiFetch 428 detail** — structured `{ mfa_required, platform }` object now preserved through error handler
+- **Sync button state** — "Sync to Watch" button disables in `done` state, preventing accidental re-sync
+
 ## v2.1.0 — 2026-05-27
 
 Share card enhancements, design system polish, and entrance animations.

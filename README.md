@@ -60,7 +60,8 @@ No subscription. No OpenAI or Anthropic. No cheerleading. The default model uses
 </table>
 
 - **Onboarding** — first-run questions to calibrate coaching: weekly km capacity, available days, biggest struggle, goal event, race date, resting HR, max HR
-- **Settings** — editable preferences, coach voice level (gentle / standard / unfiltered), automatic delivery toggles, Strava disconnect, full context reset
+- **Sync to Watch** — push your weekly training plan to your Garmin Connect watch calendar. Each day maps to a structured workout with HR-zone targets. Rest days are skipped. Connect your Garmin account in Settings.
+- **Settings** — editable preferences, coach voice level (gentle / standard / unfiltered), automatic delivery toggles, watch platform connection (Garmin Connect), Strava disconnect, full context reset
 
 ---
 

@@ -34,6 +34,7 @@ export const OL = {
   accentSoft2: 'var(--color-accent-soft-2)',
   muted: 'var(--color-muted)',
   mutedSoft: 'var(--color-muted-soft)',
+  success: 'var(--color-success)',
   hair: 'var(--color-hairline)',
   hairStrong: 'var(--color-hairline-strong)',
   frame: 'var(--color-frame)',

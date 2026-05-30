@@ -12,6 +12,17 @@
 
 import type { Activity, ActivityListResponse, ApiError, GoalEvent, Insights, PlanNextTarget, TrainingPlan, WeeklyReview, UserProfile, OnboardingRequest, OnboardingResponse } from '@/types/api'
 
+export interface WatchStatusResponse {
+  platform: string;
+  connected: boolean;
+  last_synced_at: string | null;
+  last_sync_error: string | null;
+}
+
+export interface WatchSyncResponse {
+  results: Record<string, string>;
+}
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 // ---------------------------------------------------------------------------
@@ -37,14 +48,20 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
       } else if (Array.isArray(body.detail) && body.detail.length > 0) {
         // FastAPI 422 — detail is an array of Pydantic error objects {type, loc, msg, input}
         detail = body.detail.map((e: { msg?: string }) => e.msg ?? String(e)).join('; ')
+      } else if (body.detail !== null && typeof body.detail === 'object') {
+        detail = JSON.stringify(body.detail)
       }
     } catch {
       // response body wasn't JSON — keep the default message
+    }
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn(`[api] ${options?.method ?? 'GET'} ${path} → ${res.status}`, detail)
     }
     const err: ApiError = { detail, status: res.status }
     throw err
   }
 
+  if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
 }
 
@@ -248,6 +265,42 @@ export async function streamChat(
 
   // Stream ended without a [DONE] marker — still signal completion
   onDone()
+}
+
+// ---------------------------------------------------------------------------
+// Watch Integration
+// ---------------------------------------------------------------------------
+
+export async function getWatchStatus(): Promise<WatchStatusResponse[]> {
+  return apiFetch<WatchStatusResponse[]>('/watch/status');
+}
+
+export async function connectWatch(
+  platform: string,
+  credentials: Record<string, string>
+): Promise<WatchStatusResponse> {
+  return apiFetch<WatchStatusResponse>('/watch/connect', {
+    method: 'POST',
+    body: JSON.stringify({ platform, credentials }),
+  });
+}
+
+export async function connectWatchMfa(
+  platform: string,
+  mfa_code: string
+): Promise<WatchStatusResponse> {
+  return apiFetch<WatchStatusResponse>('/watch/connect/mfa', {
+    method: 'POST',
+    body: JSON.stringify({ platform, mfa_code }),
+  });
+}
+
+export async function disconnectWatch(platform: string): Promise<void> {
+  await apiFetch<void>(`/watch/${platform}/disconnect`, { method: 'DELETE' });
+}
+
+export async function syncToWatch(): Promise<WatchSyncResponse> {
+  return apiFetch<WatchSyncResponse>('/watch/sync', { method: 'POST' });
 }
 
 // ---------------------------------------------------------------------------
