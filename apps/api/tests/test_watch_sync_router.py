@@ -179,6 +179,27 @@ class TestConnectMfa:
             })
         assert resp.status_code == 400
 
+    def test_mfa_corrupted_credentials_returns_400(
+        self, authenticated_client: TestClient, db_session: Session, test_user
+    ):
+        """If stored credentials can't be decrypted, /mfa returns 400."""
+        # Seed a WatchIntegration with garbage credentials that will fail decryption
+        bad_integration = WatchIntegration(
+            user_id=test_user.id,
+            platform="garmin",
+            credentials_encrypted="not_valid_fernet_data",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        db_session.add(bad_integration)
+        db_session.commit()
+
+        resp = authenticated_client.post("/watch/connect/mfa", json={
+            "platform": "garmin",
+            "mfa_code": "123456",
+        })
+        assert resp.status_code == 400
+
     def test_mfa_unauthenticated_returns_401(self, test_app: TestClient):
         resp = test_app.post("/watch/connect/mfa", json={"platform": "garmin", "mfa_code": "123456"})
         assert resp.status_code == 401
@@ -201,6 +222,11 @@ class TestDisconnect:
         """Disconnecting when not connected returns 204, not 404."""
         resp = authenticated_client.delete("/watch/garmin/disconnect")
         assert resp.status_code == 204
+
+    def test_disconnect_unknown_platform_returns_422(self, authenticated_client: TestClient):
+        """Deleting a disconnect for an unsupported platform returns 422."""
+        resp = authenticated_client.delete("/watch/unknown_platform/disconnect")
+        assert resp.status_code == 422
 
     def test_disconnect_unauthenticated_returns_401(self, test_app: TestClient):
         resp = test_app.delete("/watch/garmin/disconnect")
@@ -290,6 +316,47 @@ class TestWatchSync:
         # Plan endpoint still works
         plan_resp = authenticated_client.get("/plan/current")
         assert plan_resp.status_code == 200
+
+    def test_sync_already_synced_returns_already_synced(
+        self, authenticated_client: TestClient, db_session: Session, test_user
+    ):
+        """If last_synced_plan_id matches the plan id, return already_synced without calling connect."""
+        plan = _make_plan(db_session, test_user.id)
+        integration = _make_integration(db_session, test_user.id)
+        # Mark the integration as already synced for this plan
+        integration.last_synced_plan_id = plan.id
+        db_session.commit()
+
+        resp = authenticated_client.post("/watch/sync")
+        assert resp.status_code == 200
+        assert resp.json()["results"]["garmin"] == "already_synced"
+
+    def test_sync_all_rest_days_returns_skipped(
+        self, authenticated_client: TestClient, db_session: Session, test_user
+    ):
+        """A plan where every day is type 'rest' produces no workouts — result is skipped."""
+        rest_plan = TrainingPlan(
+            user_id=test_user.id,
+            week_start_date=date(2026, 6, 8),
+            plan_data={
+                "monday": {"type": "rest", "description": "Rest", "duration_minutes": 0},
+                "tuesday": {"type": "rest", "description": "Rest", "duration_minutes": 0},
+                "wednesday": {"type": "rest", "description": "Rest", "duration_minutes": 0},
+                "thursday": {"type": "rest", "description": "Rest", "duration_minutes": 0},
+                "friday": {"type": "rest", "description": "Rest", "duration_minutes": 0},
+                "saturday": {"type": "rest", "description": "Rest", "duration_minutes": 0},
+                "sunday": {"type": "rest", "description": "Rest", "duration_minutes": 0},
+            },
+            pak_har_notes={d: None for d in ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]},
+            is_active=True,
+        )
+        db_session.add(rest_plan)
+        db_session.commit()
+        _make_integration(db_session, test_user.id)
+
+        resp = authenticated_client.post("/watch/sync")
+        assert resp.status_code == 200
+        assert resp.json()["results"]["garmin"] == "skipped"
 
     def test_sync_unauthenticated_returns_401(self, test_app: TestClient):
         resp = test_app.post("/watch/sync")
