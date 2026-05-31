@@ -114,9 +114,10 @@ Returns current user profile and stored preferences. The `onboarding_completed` 
 | `goal_event` | `string \| null` | Runner's training goal. One of: `general_fitness`, `5k`, `10k`, `half_marathon`, `marathon`, `ultra`. Null until set via onboarding. |
 | `race_date` | `date \| null` | ISO date string (`YYYY-MM-DD`). Target race date. Used by Pak Har for periodization — taper (<2 weeks), sharpening (2–7 weeks), base building (≥8 weeks). Null if no race scheduled. |
 | `available_days` | `string[] \| null` | Specific days the runner can train: `"monday"` … `"sunday"`. Null until set. Supersedes `days_available` (int) for new saves; old int kept as fallback. Pak Har schedules sessions only on listed days. |
-| `auto_plan_enabled` | `bool` | If `true`, a new weekly plan is generated automatically every Monday 05:00 WIB (Sunday 22:00 UTC). Defaults to `true`. |
-| `auto_review_enabled` | `bool` | If `true`, a weekly review is generated automatically every Sunday 20:00 WIB (Sunday 13:00 UTC). Defaults to `true`. |
+| `auto_plan_enabled` | `bool` | If `true`, a new weekly plan is generated automatically when the user's local time is Monday 05:00–06:00. Defaults to `true`. |
+| `auto_review_enabled` | `bool` | If `true`, a weekly review is generated automatically when the user's local time is Sunday 20:00–21:00. Defaults to `true`. |
 | `coach_voice` | `string` | Controls how blunt Pak Har is. One of: `"gentle"`, `"standard"`, `"unfiltered"`. Defaults to `"standard"`. |
+| `timezone` | `string` | IANA timezone key used to fire scheduled jobs at the user's local time. Defaults to `"Asia/Jakarta"`. |
 
 **Errors:** 401
 
@@ -151,6 +152,7 @@ Save or update user onboarding preferences. Sets `onboarding_completed = true` o
 - `auto_plan_enabled` — optional boolean; defaults to `true`. Persisted as-is — no null coercion.
 - `auto_review_enabled` — optional boolean; defaults to `true`. Persisted as-is.
 - `coach_voice` — optional string; one of `"gentle"`, `"standard"`, `"unfiltered"`. Defaults to `"standard"`. Any other value returns 422.
+- `timezone` — optional IANA timezone key (e.g. `"Asia/Jakarta"`, `"America/New_York"`). If provided, must be a valid IANA key — 422 otherwise. Null leaves existing value unchanged. Defaults to `"Asia/Jakarta"` on new users.
 
 **Response (200):** `{ "message": "Preferences saved." }`
 

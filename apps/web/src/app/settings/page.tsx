@@ -22,14 +22,26 @@
 //   - onDisconnect → disconnectStrava() called, then router.replace('/')
 //   - disconnectStrava() throws → error is swallowed, redirect still happens
 // READY FOR QA
-// Feature: Auto-save voice card selection
-// What was built: handleVoiceChange — optimistic update + silent rollback on failure,
-//   matching the delivery toggle pattern. Voice is now persisted on card click via
-//   POST /user/onboarding with the full current preferences payload.
+// Feature: Auto-save voice card selection + timezone selector (T1)
+// What was built:
+//   handleVoiceChange — optimistic update + silent rollback on failure,
+//     matching the delivery toggle pattern.
+//   handleTimezoneChange — same optimistic-update + silent rollback pattern.
+//     Timezone <select> renders in Section 5 (Delivery Preferences) of SettingsPaper.
+//     Initial value seeded from userProfile.timezone; falls back to 'Asia/Jakarta'.
+//     On change: POST /user/onboarding with full payload including timezone.
+//     On API failure: silently reverts to previous selection.
 // Edge cases to test:
 //   - Card click → voice state updates immediately, POST fires
 //   - POST succeeds → voice stays at new value
 //   - POST fails → voice silently reverts to previous card
+//   - Timezone dropdown renders 19 options with UTC offset labels
+//   - Selecting a timezone → state updates immediately, POST fires with new timezone
+//   - POST succeeds → timezone stays at new value
+//   - POST fails → timezone silently reverts to previous selection
+//   - timezone seeds from userProfile.timezone on first load
+//   - userProfile.timezone absent (undefined/null) → defaults to 'Asia/Jakarta'
+//   - Subscriber Record card shows live timezone (not hardcoded 'Asia/Jakarta')
 //   - voice toggle → active voice card updates visually, onVoiceChange fires
 //   - delivery toggles → knob animates immediately (optimistic), then persists to API
 //   - delivery toggle API failure → toggle reverts to previous value silently
@@ -98,6 +110,7 @@ export default function SettingsPage() {
 
   // Local-only preferences state (no backend yet)
   const [voice, setVoice] = useState<VoiceLevel>('standard')
+  const [timezone, setTimezone] = useState<string>('Asia/Jakarta')
   const [deliveryPrefs, setDeliveryPrefs] = useState<DeliveryPreferences>({
     weeklyPlanMonday: true,
     weeklyReviewSunday: true,
@@ -157,6 +170,7 @@ export default function SettingsPage() {
         weeklyReviewSunday: userProfile.auto_review_enabled ?? true,
       })
       setVoice(userProfile.coach_voice ?? 'standard')
+      setTimezone(userProfile.timezone ?? 'Asia/Jakarta')
       setPrefSeeded(true)
     }
   }, [userProfile, prefSeeded])
@@ -206,6 +220,7 @@ export default function SettingsPage() {
         auto_plan_enabled: key === 'weeklyPlanMonday' ? next : deliveryPrefs.weeklyPlanMonday,
         auto_review_enabled: key === 'weeklyReviewSunday' ? next : deliveryPrefs.weeklyReviewSunday,
         coach_voice: voice,
+        timezone,
       })
     } catch {
       // Revert toggle on failure — no error UI, just silent rollback
@@ -236,10 +251,42 @@ export default function SettingsPage() {
         auto_plan_enabled: deliveryPrefs.weeklyPlanMonday,
         auto_review_enabled: deliveryPrefs.weeklyReviewSunday,
         coach_voice: newVoice,
+        timezone,
       })
     } catch {
       // Revert to previous voice on failure — silent rollback, no error UI
       setVoice(previous)
+    }
+  }
+
+  // Timezone selector handler — optimistically updates local state, persists to backend,
+  // and reverts silently on failure (no error UI).
+  const handleTimezoneChange = async (newTimezone: string) => {
+    const previous = timezone
+    setTimezone(newTimezone)
+
+    const parsedKm = Number(preferences.weeklyKmTarget)
+    const parsedRestingHr = preferences.restingHr !== '' ? Number(preferences.restingHr) : null
+    const parsedMaxHr = preferences.maxHr !== '' ? Number(preferences.maxHr) : null
+
+    try {
+      await saveOnboarding({
+        weekly_km_target: parsedKm,
+        days_available: preferences.availableDays.length,
+        available_days: preferences.availableDays,
+        biggest_struggle: preferences.biggestStruggle.trim(),
+        resting_hr: parsedRestingHr,
+        max_hr: parsedMaxHr,
+        goal_event: preferences.goalEvent,
+        race_date: preferences.raceDate || null,
+        auto_plan_enabled: deliveryPrefs.weeklyPlanMonday,
+        auto_review_enabled: deliveryPrefs.weeklyReviewSunday,
+        coach_voice: voice,
+        timezone: newTimezone,
+      })
+    } catch {
+      // Revert to previous timezone on failure — silent rollback, no error UI
+      setTimezone(previous)
     }
   }
 
@@ -285,6 +332,7 @@ export default function SettingsPage() {
         auto_plan_enabled: deliveryPrefs.weeklyPlanMonday,
         auto_review_enabled: deliveryPrefs.weeklyReviewSunday,
         coach_voice: voice,
+        timezone,
       })
       setPreferencesSaved(true)
       // Invalidate cache so the next visit seeds from fresh data.
@@ -387,7 +435,7 @@ export default function SettingsPage() {
           year: 'numeric',
         })
       : '—',
-    timezone: 'Asia/Jakarta',
+    timezone,
     preferredUnit: 'km',
   }
 
@@ -407,6 +455,8 @@ export default function SettingsPage() {
       theme={theme}
       onVoiceChange={handleVoiceChange}
       onToggleDelivery={handleToggleDelivery}
+      timezone={timezone}
+      onTimezoneChange={handleTimezoneChange}
       onThemeChange={setTheme}
       onDisconnect={handleDisconnect}
       onNav={onNav}

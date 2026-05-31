@@ -82,6 +82,8 @@ async def save_onboarding(
     current_user.auto_plan_enabled = body.auto_plan_enabled
     current_user.auto_review_enabled = body.auto_review_enabled
     current_user.coach_voice = body.coach_voice
+    if body.timezone is not None:
+        current_user.timezone = body.timezone
     current_user.onboarding_completed = True
 
     db.commit()
@@ -154,6 +156,7 @@ async def get_me(
         auto_plan_enabled=current_user.auto_plan_enabled,
         auto_review_enabled=current_user.auto_review_enabled,
         coach_voice=current_user.coach_voice,
+        timezone=current_user.timezone,
         created_at=current_user.created_at,
         updated_at=current_user.updated_at,
         total_activities=total_activities,

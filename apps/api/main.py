@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
     _run_migrations()
 
     scheduler.start()
-    logger.info("Scheduler started — weekly_plan_job and weekly_review_job active")
+    logger.info("Scheduler started — hourly_scheduler_sweep active (per-user timezone)")
 
     logger.info(f"Old Legs API starting — port {settings.api_port}")
     logger.info(f"CORS origin: {settings.cors_origin}")

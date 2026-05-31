@@ -35,6 +35,8 @@ function buildBaseProps(watchOverrides: {
     theme: 'light' as const,
     onVoiceChange: vi.fn(),
     onToggleDelivery: vi.fn(),
+    timezone: 'Asia/Jakarta',
+    onTimezoneChange: vi.fn(),
     onThemeChange: vi.fn(),
     onDisconnect: vi.fn(),
     onNav: vi.fn(),

@@ -60,6 +60,32 @@ const GOAL_OPTIONS: Array<{ value: GoalEvent; label: string }> = [
   { value: 'ultra',           label: 'Ultra' },
 ];
 
+// ---------------------------------------------------------------------------
+// Timezone options — curated list of ~20 common IANA zones
+// ---------------------------------------------------------------------------
+
+const TIMEZONE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'Pacific/Honolulu',    label: 'Pacific/Honolulu (UTC-10)' },
+  { value: 'America/Los_Angeles', label: 'America/Los_Angeles (UTC-8)' },
+  { value: 'America/Denver',      label: 'America/Denver (UTC-7)' },
+  { value: 'America/Chicago',     label: 'America/Chicago (UTC-6)' },
+  { value: 'America/New_York',    label: 'America/New_York (UTC-5)' },
+  { value: 'America/Sao_Paulo',   label: 'America/Sao_Paulo (UTC-3)' },
+  { value: 'Europe/London',       label: 'Europe/London (UTC+0)' },
+  { value: 'Europe/Paris',        label: 'Europe/Paris (UTC+1)' },
+  { value: 'Europe/Helsinki',     label: 'Europe/Helsinki (UTC+2)' },
+  { value: 'Europe/Moscow',       label: 'Europe/Moscow (UTC+3)' },
+  { value: 'Asia/Dubai',          label: 'Asia/Dubai (UTC+4)' },
+  { value: 'Asia/Karachi',        label: 'Asia/Karachi (UTC+5)' },
+  { value: 'Asia/Dhaka',          label: 'Asia/Dhaka (UTC+6)' },
+  { value: 'Asia/Bangkok',        label: 'Asia/Bangkok (UTC+7)' },
+  { value: 'Asia/Jakarta',        label: 'Asia/Jakarta (UTC+7)' },
+  { value: 'Asia/Singapore',      label: 'Asia/Singapore (UTC+8)' },
+  { value: 'Asia/Tokyo',          label: 'Asia/Tokyo (UTC+9)' },
+  { value: 'Australia/Sydney',    label: 'Australia/Sydney (UTC+10)' },
+  { value: 'Pacific/Auckland',    label: 'Pacific/Auckland (UTC+12)' },
+];
+
 // ---------- interfaces ----------
 
 interface UserProfile {
@@ -106,6 +132,8 @@ interface SettingsPaperProps {
   theme: Theme;
   onVoiceChange: (v: VoiceLevel) => void;
   onToggleDelivery: (key: keyof DeliveryPreferences) => void;
+  timezone: string;
+  onTimezoneChange: (tz: string) => void;
   onThemeChange: (t: Theme) => void;
   onDisconnect: () => void;
   onNav: (key: string) => void;
@@ -158,6 +186,8 @@ export function SettingsPaper({
   theme,
   onVoiceChange,
   onToggleDelivery,
+  timezone,
+  onTimezoneChange,
   onThemeChange,
   onDisconnect,
   onNav,
@@ -655,6 +685,37 @@ export function SettingsPaper({
                 </div>
               );
             })}
+            {/* Timezone selector */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '10px 0 2px',
+              }}
+            >
+              <span style={{ fontFamily: OL.body, fontSize: 13 }}>Timezone</span>
+              <select
+                value={timezone}
+                onChange={(e) => onTimezoneChange(e.target.value)}
+                aria-label="Timezone"
+                style={{
+                  fontFamily: OL.mono,
+                  fontSize: 12,
+                  color: OL.ink,
+                  background: OL.paper,
+                  border: `1px solid ${OL.ink}`,
+                  borderRadius: 0,
+                  padding: '4px 8px',
+                  cursor: 'pointer',
+                  minWidth: 240,
+                }}
+              >
+                {TIMEZONE_OPTIONS.map(({ value, label }) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
           </section>
 
           {/* Section 6 — Watch Integration */}
