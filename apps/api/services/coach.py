@@ -50,7 +50,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from models.activity import Activity
-from services.ollama import build_voice_modifier, format_pace
+from services.context import build_voice_modifier, format_pace
 from services.streaming import complete_event, error_event, progress_event, token_event
 
 logger = logging.getLogger(__name__)
@@ -888,8 +888,8 @@ async def run_analysis_for_activity(
     from models.training_plan import TrainingPlan
     from models.weekly_review import WeeklyReview
     from prompts.pak_har import ANALYSIS_PROMPT
+    from services.context import build_user_preferences_context
     from services.ollama import (
-        build_user_preferences_context,
         OLLAMA_BASE_URL,
         CONNECT_TIMEOUT,
         READ_TIMEOUT,

@@ -36,7 +36,8 @@ from models.training_plan import TrainingPlan
 from models.user import User
 from models.weekly_review import WeeklyReview
 from services.database import get_db
-from services.ollama import build_plan_context, build_strava_context, build_user_preferences_context, stream_chat
+from services.context import build_plan_context, build_strava_context, build_user_preferences_context
+from services.ollama import stream_chat
 from services.rate_limiter import check_rate_limit
 
 logger = logging.getLogger(__name__)

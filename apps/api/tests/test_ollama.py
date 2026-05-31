@@ -8,7 +8,7 @@ the SSE streaming integration tests.
 
 import pytest
 
-from services.ollama import build_voice_modifier, format_pace
+from services.context import build_voice_modifier, format_pace
 
 
 class TestFormatPace:

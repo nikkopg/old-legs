@@ -435,7 +435,7 @@ async def plan_verdict(
     # 2. Build the compact activity summary for the prompt.
     moving_time_min = round(activity.moving_time_seconds / 60)
 
-    from services.ollama import format_pace
+    from services.context import format_pace
     pace_str = format_pace(activity.average_pace_min_per_km)
 
     avg_hr_str = f"{activity.average_hr} bpm" if activity.average_hr is not None else "not recorded"

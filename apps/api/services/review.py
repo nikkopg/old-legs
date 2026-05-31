@@ -26,13 +26,15 @@ from models.weekly_review import WeeklyReview
 from prompts.pak_har import REVIEW_PROMPT
 from services.coach import classify_hr_zone
 from services.coach import FALLBACK_MAX_HR as _FALLBACK_MAX_HR, DEFAULT_RHR as _DEFAULT_RHR
+from services.context import (
+    build_user_preferences_context,
+    build_voice_modifier,
+    format_pace,
+)
 from services.ollama import (
     OLLAMA_BASE_URL,
     CONNECT_TIMEOUT,
     READ_TIMEOUT,
-    build_user_preferences_context,
-    build_voice_modifier,
-    format_pace,
 )
 from services.streaming import complete_event, error_event, progress_event, token_event
 
