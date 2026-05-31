@@ -20,7 +20,7 @@ from alembic.config import Config as AlembicConfig
 from alembic import command as alembic_command
 
 from config import settings
-from routers import auth, activities, plan, coach, review, insights, user, share, watch_sync
+from routers import auth, activities, plan, coach, review, insights, user, share, watch_sync, webhook
 from services.scheduler import scheduler
 
 logging.basicConfig(level=logging.INFO)
@@ -84,6 +84,7 @@ app.include_router(review.router, prefix="/review", tags=["review"])
 app.include_router(insights.router, prefix="/insights", tags=["insights"])
 app.include_router(share.router, prefix="/share-image", tags=["share"])
 app.include_router(watch_sync.router, prefix="/watch", tags=["watch"])
+app.include_router(webhook.router, prefix="/strava", tags=["webhook"])
 
 
 @app.get("/health", tags=["health"])

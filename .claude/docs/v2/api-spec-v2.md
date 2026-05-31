@@ -718,5 +718,77 @@ Full AI context reset for the currently authenticated user. Wipes all AI-generat
 
 ---
 
+### Strava Webhooks
+
+#### `GET /strava/webhook`
+> Status: ✅ v2 (T8) — implemented 2026-05-31
+
+One-time subscription verification handshake. Strava sends this GET when you register a webhook subscription via the Strava API. Not called by the frontend.
+
+**Query params (all required, sent by Strava):**
+| Param | Type | Notes |
+|---|---|---|
+| `hub.mode` | string | Always `"subscribe"` |
+| `hub.verify_token` | string | Must match `STRAVA_WEBHOOK_VERIFY_TOKEN` env var |
+| `hub.challenge` | string | Random string Strava expects echoed back |
+
+**Response (200):**
+```json
+{ "hub.challenge": "<value>" }
+```
+
+**Errors:**
+- `403` — `hub.verify_token` does not match `STRAVA_WEBHOOK_VERIFY_TOKEN`
+- `422` — Missing required query params
+
+**Dev mode:** When `STRAVA_WEBHOOK_VERIFY_TOKEN` is empty, any token is accepted and a warning is logged.
+
+---
+
+#### `POST /strava/webhook`
+> Status: ✅ v2 (T8) — implemented 2026-05-31
+
+Real-time activity event delivery from Strava. Strava POSTs here when activities are created, updated, or deleted on a connected athlete's account.
+
+**This endpoint is not called by the frontend.** It is a server-to-server webhook from Strava.
+
+**Request headers:**
+| Header | Notes |
+|---|---|
+| `X-Hub-Signature` | `sha256=<HMAC-SHA256 of body using STRAVA_WEBHOOK_VERIFY_TOKEN>`. Required when the token is configured. |
+
+**Request body (from Strava):**
+```json
+{
+  "object_type": "activity",
+  "aspect_type": "create",
+  "owner_id": 112542884,
+  "object_id": 9876543210
+}
+```
+
+**Behaviour:**
+- Only `{"object_type": "activity", "aspect_type": "create"}` events trigger a sync. All other events return 200 immediately with no action.
+- User is looked up by `owner_id` (Strava athlete ID). Unknown athletes return 200 with no action.
+- On a matched activity-create event, `sync_activities()` + auto-analysis runs non-blocking via `asyncio.create_task()`. Response is returned before the sync completes.
+
+**Response (200):** `{"status": "ok"}` — always, for all accepted events.
+
+**Errors:**
+- `403` — Missing or invalid `X-Hub-Signature` (only when `STRAVA_WEBHOOK_VERIFY_TOKEN` is configured)
+
+**Dev mode:** When `STRAVA_WEBHOOK_VERIFY_TOKEN` is empty, signature validation is skipped and a warning is logged.
+
+**Setup note:** To register a webhook subscription with Strava (one-time, per deployment):
+```
+POST https://www.strava.com/api/v3/push_subscriptions
+  client_id=<STRAVA_CLIENT_ID>
+  client_secret=<STRAVA_CLIENT_SECRET>
+  callback_url=https://<your-domain>/strava/webhook
+  verify_token=<STRAVA_WEBHOOK_VERIFY_TOKEN>
+```
+
+---
+
 ## Frontend Requests
 *Frontend agent adds requests here when they need a new endpoint or change to an existing one.*
