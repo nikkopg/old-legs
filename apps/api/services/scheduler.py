@@ -36,6 +36,7 @@ prevent double-firing if the sweep runs multiple times within the same window
 (e.g. after a container restart).
 """
 
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -46,6 +47,7 @@ from sqlalchemy.orm import Session
 
 from models.user import User
 from services.database import SessionLocal
+from services.notifications import send_ntfy
 from services.plan import generate_plan_with_ollama
 from services.review import generate_weekly_review
 from services.strava import get_valid_access_token
@@ -142,6 +144,15 @@ async def hourly_scheduler_sweep() -> None:
                     logger.info(
                         "hourly_scheduler_sweep: plan generated for user_id=%d", user.id
                     )
+                    if user.ntfy_topic:
+                        asyncio.create_task(
+                            send_ntfy(
+                                topic=user.ntfy_topic,
+                                title="Old Legs",
+                                message="Your plan for the week is ready. Open the app to see what Pak Har has in store.",
+                                tags=["calendar"],
+                            )
+                        )
                 except Exception:
                     logger.exception(
                         "hourly_scheduler_sweep: plan job failed for user_id=%d -- skipping",
@@ -165,6 +176,15 @@ async def hourly_scheduler_sweep() -> None:
                     logger.info(
                         "hourly_scheduler_sweep: review generated for user_id=%d", user.id
                     )
+                    if user.ntfy_topic:
+                        asyncio.create_task(
+                            send_ntfy(
+                                topic=user.ntfy_topic,
+                                title="Old Legs",
+                                message="Pak Har has reviewed your week. Go see what he thinks.",
+                                tags=["memo"],
+                            )
+                        )
                 except Exception:
                     logger.exception(
                         "hourly_scheduler_sweep: review job failed for user_id=%d -- skipping",

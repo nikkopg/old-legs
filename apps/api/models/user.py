@@ -86,6 +86,11 @@ class User(Base):
     last_auto_plan_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_auto_review_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # Ntfy.sh push notification topic (optional).
+    # If set, the scheduler sends a notification after each auto-generated plan or review.
+    # Topic may be a bare name (prepend https://ntfy.sh/) or a full URL for self-hosted instances.
+    ntfy_topic: Mapped[str | None] = mapped_column(String(256), nullable=True)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(

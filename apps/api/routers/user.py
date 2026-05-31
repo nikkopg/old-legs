@@ -84,6 +84,10 @@ async def save_onboarding(
     current_user.coach_voice = body.coach_voice
     if body.timezone is not None:
         current_user.timezone = body.timezone
+    if body.ntfy_topic is not None:
+        # Empty string clears the topic; store as None so the scheduler can
+        # distinguish "not set" from a valid topic without string checks.
+        current_user.ntfy_topic = body.ntfy_topic if body.ntfy_topic else None
     current_user.onboarding_completed = True
 
     db.commit()
@@ -157,6 +161,7 @@ async def get_me(
         auto_review_enabled=current_user.auto_review_enabled,
         coach_voice=current_user.coach_voice,
         timezone=current_user.timezone,
+        ntfy_topic=current_user.ntfy_topic,
         created_at=current_user.created_at,
         updated_at=current_user.updated_at,
         total_activities=total_activities,

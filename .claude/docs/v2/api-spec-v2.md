@@ -118,6 +118,7 @@ Returns current user profile and stored preferences. The `onboarding_completed` 
 | `auto_review_enabled` | `bool` | If `true`, a weekly review is generated automatically when the user's local time is Sunday 20:00–21:00. Defaults to `true`. |
 | `coach_voice` | `string` | Controls how blunt Pak Har is. One of: `"gentle"`, `"standard"`, `"unfiltered"`. Defaults to `"standard"`. |
 | `timezone` | `string` | IANA timezone key used to fire scheduled jobs at the user's local time. Defaults to `"Asia/Jakarta"`. |
+| `ntfy_topic` | `string \| null` | ntfy.sh topic name or full self-hosted URL. When set, the scheduler sends a push notification after each auto-generated plan or review. Null means notifications are off. |
 
 **Errors:** 401
 
@@ -153,6 +154,7 @@ Save or update user onboarding preferences. Sets `onboarding_completed = true` o
 - `auto_review_enabled` — optional boolean; defaults to `true`. Persisted as-is.
 - `coach_voice` — optional string; one of `"gentle"`, `"standard"`, `"unfiltered"`. Defaults to `"standard"`. Any other value returns 422.
 - `timezone` — optional IANA timezone key (e.g. `"Asia/Jakarta"`, `"America/New_York"`). If provided, must be a valid IANA key — 422 otherwise. Null leaves existing value unchanged. Defaults to `"Asia/Jakarta"` on new users.
+- `ntfy_topic` — optional string (max 256 chars). Bare topic name (`"my-topic"`) or full URL for self-hosted ntfy (`"https://ntfy.example.com/my-topic"`). Empty string clears the topic (stored as `null`). Null omits the field and leaves the existing value unchanged.
 
 **Response (200):** `{ "message": "Preferences saved." }`
 
