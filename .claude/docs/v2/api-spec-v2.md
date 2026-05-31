@@ -124,6 +124,39 @@ Returns current user profile and stored preferences. The `onboarding_completed` 
 
 ---
 
+#### `GET /user/export`
+> Status: ✅ v2 (T5) — implemented 2026-05-31
+
+Download all user data as a ZIP archive. No Ollama call. No Strava call.
+
+**Auth:** Required.
+
+**Request:** No body. Auth cookie only.
+
+**Response (200):** `application/zip` file download.
+
+| Header | Value |
+|---|---|
+| `Content-Type` | `application/zip` |
+| `Content-Disposition` | `attachment; filename="old-legs-export-YYYY-MM-DD.zip"` |
+
+**ZIP contents (six JSON files):**
+
+| File | Contents |
+|---|---|
+| `profile.json` | User profile fields: `name`, `avatar_url`, `weekly_km_target`, `days_available`, `available_days`, `biggest_struggle`, `resting_hr`, `max_hr`, `goal_event`, `race_date`, `coach_voice`, `timezone`, `auto_plan_enabled`, `auto_review_enabled`, `created_at`. **Never** includes `strava_access_token`, `strava_refresh_token`, or any encrypted field. |
+| `activities.json` | All `Activity` records: `id`, `name`, `start_date`, `distance_m`, `moving_time_s`, `avg_hr`, `max_hr`, `avg_speed_ms`, `splits`, `grade_adjusted_pace`, `verdict_short`, `verdict_tag`, `tone`. |
+| `plans.json` | All `TrainingPlan` records: `id`, `week_start_date`, `is_active`, `days`, `created_at`. |
+| `reviews.json` | All `WeeklyReview` records: `id`, `week_start_date`, `content`, `created_at`. |
+| `chat.json` | All `ChatMessage` records: `id`, `role`, `content`, `created_at`. |
+| `insights.json` | Always an empty list — insights are computed on demand, not stored. |
+
+All datetime values are serialised as ISO strings via `json.dumps(..., default=str)`. Arrays are empty (not omitted) when the user has no data.
+
+**Errors:** 401
+
+---
+
 #### `POST /user/onboarding`
 > Status: ✅ v2 (TASK-102) — implemented 2026-04-19
 
