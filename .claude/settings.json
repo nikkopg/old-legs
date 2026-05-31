@@ -1,0 +1,55 @@
+{
+  "permissions": {
+    "allow": [
+      "Write(apps/web/tests/**)",
+      "Edit(apps/web/tests/**)",
+      "Write(.claude/docs/v2/**)",
+      "Write(apps/api/tests/**)",
+      "Edit(apps/api/tests/**)",
+      "Edit(.claude/docs/v2/**)",
+      "Edit(apps/api/routers/**)",
+      "Edit(apps/api/services/**)",
+      "Edit(apps/api/prompts/**)",
+      "Edit(apps/api/models/**)",
+      "Edit(apps/api/schemas/**)",
+      "Write(apps/api/schemas/**)",
+      "Edit(apps/api/alembic/**)",
+      "Write(apps/api/alembic/**)",
+      "Edit(apps/web/src/**)",
+      "Write(.claude/memory/**)",
+      "Edit(.claude/memory/**)",
+      "Write(.claude/docs/**)",
+      "Edit(.claude/docs/**)",
+      "Bash(ls*)",
+      "Bash(grep*)",
+      "Bash(find*)",
+      "Bash(cat*)",
+      "Bash(echo*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(mkdir*)",
+      "Bash(python -m pytest*)",
+      "Bash(cd /home/nikko/nikko/projects/old-legs/apps/api && python -m pytest*)",
+      "Bash(cd /home/nikko/nikko/projects/old-legs/apps/web && npm test*)",
+      "Bash(npx vitest run*)",
+      "Bash(cd /home/nikko/nikko/projects/old-legs/apps/web && npx vitest run*)",
+      "Bash(cd /home/nikko/nikko/projects/old-legs/apps/api && alembic*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "CMD=$(python3 -c \"import json,sys; d=json.load(sys.stdin); print(d.get('tool_input',d).get('command',''))\" 2>/dev/null || true); case \"$CMD\" in *grep*|*rg\\ *|*ripgrep*|*find\\ *|*fd\\ *|*ack\\ *|*ag\\ *)   [ -f graphify-out/graph.json ] &&   echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"graphify: knowledge graph at graphify-out/. For focused questions, run `graphify query \\\"<question>\\\"` (scoped subgraph, usually much smaller than GRAPH_REPORT.md) instead of grepping raw files. Read GRAPH_REPORT.md only for broad architecture context.\"}}'   || true ;; esac"
+          }
+        ]
+      }
+    ]
+  }
+}

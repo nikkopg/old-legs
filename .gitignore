@@ -1,9 +1,14 @@
 .*
+!.claude
 __pycache__
 */__pycache__
 */*/__pycache__
 */*/*/__pycache__
 *.db
-.claude/
+.claude/docs/v2/bugs-v2.md
+.claude/docs/v2/security-audit-v2.md
+.claude/memory/
+.claude/resume-session.md
 apps/web/scripts/auth-state.json
 .gstack/
+graphify-out
