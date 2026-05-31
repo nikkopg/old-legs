@@ -27,15 +27,17 @@ from models.user import User
 from prompts.pak_har import PLAN_PROMPT
 from config import settings
 from services.hr_utils import get_hr_params as _get_hr_params
-from services.ollama import (
-    OLLAMA_BASE_URL,
-    CONNECT_TIMEOUT,
-    READ_TIMEOUT,
+from services.context import (
     build_strava_context,
     build_user_preferences_context,
     build_voice_modifier,
     format_pace,
     goal_event_label,
+)
+from services.ollama import (
+    OLLAMA_BASE_URL,
+    CONNECT_TIMEOUT,
+    READ_TIMEOUT,
 )
 from services.streaming import complete_event, error_event, progress_event
 
