@@ -68,16 +68,75 @@ Each week, the system compares actual volume vs the `RacePlanWeek` target. If th
 ### Backend (Phase A)
 
 **A1. Data model**
-- New `RacePlan` table — `id`, `user_id` (FK, unique active per user), `race_date`, `goal_event`, `target_time` (optional, HH:MM:SS), `weeks_total`, `starting_weekly_km`, `created_at`, `status` ('active' / 'archived')
-- New `RacePlanWeek` table — `id`, `race_plan_id` (FK), `week_number`, `week_start_date`, `phase` ('base' / 'build' / 'sharpen' / 'taper' / 'recovery'), `target_volume_km`, `long_run_km`, `key_session_type` ('easy' / 'tempo' / 'intervals' / 'long' / 'recovery'), `notes` (Pak Har's per-week voice)
+- New `RacePlan` table — `id`, `user_id` (FK), `race_date`, `goal_event`, `target_time` (optional, HH:MM:SS), `weeks_total`, `starting_weekly_km`, `created_at`, `status` ('active' / 'archived')
+- **DB-level uniqueness:** add a partial unique index `UniqueConstraint("user_id", name="uq_race_plan_active_per_user", postgresql_where="status='active'")` in the Alembic migration. Application-level archiving alone races under concurrent requests.
+- New `RacePlanWeek` table — `id`, `race_plan_id` (FK), `week_number`, `week_start_date` (always a Monday — snap to Monday of the current week at plan generation time), `phase` ('base' / 'build' / 'sharpen' / 'taper' / 'recovery'), `target_volume_km`, `long_run_km`, `key_session_type` ('easy' / 'tempo' / 'intervals' / 'long' / 'recovery'), `notes` (Pak Har's per-week voice, 1 sentence max, generated in a single batch Ollama call for all weeks — not one call per week)
 - Alembic migration
 
 **A2. Race plan generation service** — `apps/api/services/race_plan.py`
 - `generate_race_plan(user, db) -> RacePlan`
 - Takes: user fitness baseline (recent 4-week avg km from activities), race distance, weeks to race
-- Strategy decision needed (see Open Decisions §1): template-based vs Ollama-generated
-- Validates: max 10% week-over-week volume increase, mandatory recovery week every 3–4 weeks, taper structure (3-week / 2-week / 1-week patterns by race distance)
+- Strategy: template-based (Decision §1 resolved). Pak Har writes per-week `notes` via Ollama. Skeleton math is deterministic.
 - Returns persisted `RacePlan` with all `RacePlanWeek` rows
+
+#### Template Algorithm Spec (scientifically-backed)
+
+Sources: Jack Daniels' Running Formula, Pfitzinger & Douglas Advanced Marathoning,
+BJSM 2026 volume progression study, Seiler polarized training research.
+
+**Phase distribution by race distance and weeks available:**
+
+| Event | Min weeks | Base | Build | Sharpen | Taper |
+|---|---|---|---|---|---|
+| 5k | 8 | 2 | 3 | 2 | 1 |
+| 10k | 10 | 3 | 4 | 2 | 1 |
+| half_marathon | 12 | 4 | 5 | 2 | 1 |
+| marathon | 16 | 5 | 7 | 2 | 2 |
+| ultra | 20 | 6 | 10 | 2 | 2 |
+
+For weeks > minimum: add extra weeks to Build phase only. Base, Sharpen, and Taper
+lengths are fixed. Insert a Recovery week (reduce 30%) every 4th week within Build.
+
+**Volume progression formula:**
+```
+week_1_km = starting_weekly_km  (4-week avg from Strava activities, minimum 15 km)
+peak_km = min(starting_weekly_km * 1.5, PEAK_KM_CAP[goal_event])
+weekly_increase = (peak_km - week_1_km) / build_weeks
+max_weekly_increase = week_n_km * 0.10  # hard cap: never exceed 10% jump
+
+PEAK_KM_CAP = {
+    "5k": 55, "10k": 65, "half_marathon": 75,
+    "marathon": 100, "ultra": 120
+}
+```
+
+Recovery weeks (every 4th week in Build phase): `week_km = prev_week_km * 0.70`
+
+**Long run per week:**
+```
+long_run_km = week_target_km * 0.28  # 28% of weekly volume (Pfitzinger)
+# Hard limits by event:
+MAX_LONG_RUN = {"5k": 14, "10k": 18, "half_marathon": 22,
+                "marathon": 32, "ultra": 40}
+long_run_km = min(long_run_km, MAX_LONG_RUN[goal_event])
+```
+
+**Taper:**
+- Week -2: reduce to 60% of peak volume, long run capped at 60% of peak long run
+- Week -1 (race week): reduce to 40% of peak volume, long run capped at 40% of peak long run
+
+**Intensity distribution (polarized — Seiler et al.):**
+- Base phase: 100% easy (Zone 1-2). No quality sessions.
+- Build phase: 80% easy, 15% tempo (Zone 3), 5% intervals (Zone 4-5). Key session = tempo.
+- Sharpen phase: 75% easy, 10% tempo, 15% race-pace intervals. Key session = intervals.
+- Taper phase: 85% easy, 10% race-pace strides, 5% race rehearsal. Key session = easy.
+- Recovery weeks: 100% easy regardless of phase.
+
+**Pak Har notes generation (Ollama):**
+After the skeleton is computed, one Ollama call generates all `notes` fields for the
+entire plan in a single request (not one call per week). Pass the full week array as
+JSON and ask Pak Har to write one sentence per week in voice. This bounds the SSE
+streaming time to one inference run, not 12-16.
 
 **A3. Race plan endpoints** — `apps/api/routers/race_plan.py`
 - `POST /race-plan/generate` — creates new active race plan, archives any existing active plan
@@ -85,24 +144,51 @@ Each week, the system compares actual volume vs the `RacePlanWeek` target. If th
 - `POST /race-plan/regenerate` — re-derive from current fitness (keeps race_date, recomputes progression)
 - `DELETE /race-plan/{id}` — archive
 
-**A4. Weekly plan integration** — modify `apps/api/services/plan.py`
-- Stage 2 (or new stage) — fetch active `RacePlan` + current `RacePlanWeek`
-- Inject `{race_plan_context}` placeholder into `PLAN_PROMPT` with: "Week N of M, [phase], target volume X km, long run Y km, [key session]. Drift so far: Z."
-- New interpretation rules in `PLAN_PROMPT`: weekly plan must hit target volume ±10%, must include long run as specified, key session must match phase
-- Fallback: if no active `RacePlan`, current behaviour unchanged (`general_fitness` users unaffected)
+**A4. Weekly plan integration** — implement `get_race_plan_week()` in `services/tools/plan_tools.py`
+- **This is a tool call, not a PLAN_PROMPT string injection.** The v3 agent calls `get_race_plan_week()` which returns the current `RacePlanWeek` context as a string: "Week N of M, [phase], target volume X km, long run Y km, [key session]. Drift so far: Z."
+- The weekly plan generator reads this context from the tool result, not from a pre-assembled prompt placeholder.
+- New interpretation rules still go in `PLAN_PROMPT` (the model reads them) but the data arrives via tool call, not `{race_plan_context}` f-string injection.
+- Fallback: `get_race_plan_week()` returns empty string when no active `RacePlan` — `general_fitness` users unaffected, tool result is empty, PLAN_PROMPT interpretation rules are skipped.
 
-**A5. Drift detection**
+**A5. Drift detection + injury signal**
 - New field `last_drift_check` on `RacePlan`
-- Service function `compute_drift(race_plan, db)` — returns dict of week-by-week actual km vs target
-- Called from weekly review generation; sets `needs_regeneration` flag if >20% drift for 2+ weeks
-- Surfaced via `GET /race-plan/current` response
+- Service function `compute_drift(race_plan, db)` — returns dict with:
+  - `week_by_week`: list of `{week_number, target_km, actual_km, pct_diff}`
+  - `needs_regeneration`: bool
+  - `signal`: `"volume_drift"` | `"injury_signal"` | `"overtraining"` | None
+- Called from `GET /race-plan/current` response assembly (NOT from weekly review generation).
+- Implementation: single aggregated query (`SELECT SUM(distance) GROUP BY week_number`) — do NOT run one query per week.
+- **Volume drift:** `needs_regeneration = True` if >20% off-target for 2+ consecutive weeks (under OR over)
+- **Injury signal (new):** `needs_regeneration = True` if 3+ consecutive days in Build phase where plan type != 'rest' but no matching Activity recorded. Only fires in Build phase — Base and Taper have expected easy/rest days that should not trigger.
+- Surfaced via `GET /race-plan/current` response. Frontend B4 shows "Pak Har wants to redraft the arc" CTA for both signals.
 
 **A6. SSE streaming for race plan generation** — same pattern as TASK-189
 - `generate_race_plan` converted to async generator
 - Stages: `Reading your fitness baseline` → `Mapping the arc` → `Drafting each week` → `Filing`
 - Frontend uses existing `useProgressStream` hook
 
-**A7. `api-spec-v2.md` → `api-spec-v3.md`** — document all new endpoints and the modified plan generation response
+**A7. `api-spec-v3.md`** — document all new endpoints and the modified plan generation response. **Must ship immediately after A3** (before B6 and B7 start — Frontend types and API client depend on this spec).
+
+**A8. Pace calculation service** — `calculate_training_paces(target_time_seconds, goal_event)` in `services/race_plan.py`
+
+Uses Jack Daniels VDOT tables (public domain values). Returns:
+```python
+{
+  "easy_pace":     float,  # min/km — aerobic base pace
+  "tempo_pace":    float,  # min/km — lactate threshold pace
+  "interval_pace": float,  # min/km — VO2max interval pace
+  "long_run_pace": float,  # min/km — long run pace (between easy and marathon pace)
+}
+```
+
+VDOT lookup (representative values — include full 30–85 VDOT table in the service):
+- VDOT derived from `target_time_seconds` + `goal_event` using Daniels' formula
+- Easy: VDOT pace + 37–59s/km above marathon pace
+- Tempo: ~15s/km faster than marathon pace
+- Interval: 5k race pace equivalent
+- Long run: ~10–20s/km slower than marathon pace
+
+Called only when `RacePlan.target_time` is not null. Output injected into `get_race_plan_week()` tool return string when paces are set: "Week 4 of 12, build phase, 42 km target, long run 16 km. Your paces: easy 6:30/km, tempo 5:41/km."
 
 ### Frontend (Phase B)
 
@@ -149,6 +235,18 @@ Each week, the system compares actual volume vs the `RacePlanWeek` target. If th
 - Race week: "Less is more. The work is done. Don't undo it."
 - Target time copy: "You said {time}. The plan is built around that. Don't change it mid-build unless something is broken."
 - Add 6–8 new voice test cases to `pak_har_voice_tests.md`
+
+**C2a. `RacePlanWeek.notes` voice spec (needed before A2 Ollama batch call is written)**
+
+One sentence per week. Blunt, specific, no hype. Examples by phase:
+- Base: "Thirty-six km this week. All of it easy. If you race any of it, you're doing it wrong."
+- Build: "Forty-two km and a tempo run on Thursday. The tempo matters. Don't turn it into another easy day."
+- Recovery: "Back to thirty km. This is not a setback. This is how it works."
+- Sharpen: "Less volume, more intensity. Two quality sessions. Your legs should feel fast by Sunday."
+- Taper week -2: "You've done the work. The plan says twenty-five km. Run them easy and stop thinking about it."
+- Race week: "Race day is Sunday. This week's only job is to arrive rested."
+
+The Ollama prompt for batch notes generation must include these examples and the full Pak Har persona.
 
 **C3. Onboarding tweaks**
 - Target time input UX — optional, no validation pressure, format hint "HH:MM:SS or leave blank"
@@ -216,8 +314,7 @@ Each week, the system compares actual volume vs the `RacePlanWeek` target. If th
    - Reject race dates <4 weeks or >26 weeks at API level
 
 6. **`target_time` integration**
-   - Just informational, or should it influence pace targets in weekly sessions?
-   - **Recommendation:** v3 — informational only (Pak Har references it in voice). Pace-target injection → v4.
+   - **RESOLVED:** v3 includes pace-target injection via `calculate_training_paces()` (TASK-V3-A8). Not informational-only. Paces derived from VDOT tables and injected into `get_race_plan_week()` tool output and `notes` batch prompt.
 
 7. **What happens after race day?**
    - Auto-archive the race plan on `race_date + 1`?
@@ -231,26 +328,30 @@ Each week, the system compares actual volume vs the `RacePlanWeek` target. If th
 ```
 Phase A — Backend (build the foundation)
   A1: Data model + migration
-  A2: Race plan generation service (template-based per Decision §1)
+  A2: Race plan generation service (template-based)
+  A8: Pace calculation service (can run parallel to A2, no dependency)
   A3: Race plan endpoints
-  A7: api-spec-v3.md
+  A7: api-spec-v3.md  ← ships right after A3, gates B6+B7
   A6: SSE streaming wrapper (after A2 works)
-  A4: Weekly plan integration (after A1-A3)
-  A5: Drift detection (after A4)
+  A4: Weekly plan integration as tool call (after A1-A3 + E3)
+  A5: Drift detection + injury signal (after A4)
 
 Phase B — Frontend (consume the API)
-  B6: Type definitions
-  B7: API client
-  B1: Onboarding/Settings updates
+  B6: Type definitions       ← starts after A7
+  B7: API client             ← starts after A7
+  B1: Onboarding/Settings updates (includes target_time input)
   B2: The Arc page (after A3, B6, B7)
-  B3: Plan page integration (after B2)
-  B4: Drift surface (after A5)
+  B3: Plan page integration + pace display (after B2, A8)
+  B4: Drift surface — handles both volume drift + injury signal (after A5)
   B5: SSE streaming UI (after A6)
+  B8: Agent tool call progress UI (after E3)
+  B9: Training paces display (after A8, B3)
 
 Phase C — UX (parallel with B from start)
   C1: Visual language spec
   C2: Pak Har voice for race copy
   C3: Onboarding tweaks
+  C5: Pace display UX spec
   C4: Cancel the arc affordance
 
 Phase D — SQA (starts after Phase A core, runs in parallel with B/C)
@@ -268,11 +369,11 @@ Phase D — SQA (starts after Phase A core, runs in parallel with B/C)
 
 ## Out of Scope for V3
 
-- Multi-race queueing (queue 10k in 6 weeks + half marathon in 16 weeks)
-- Pace-target injection from `target_time` (target_time is informational only in v3)
-- Adaptive periodization based on injury / illness signals
-- Coaching marketplace / Pak Har personality variants
-- Route map visualization (deferred from v2)
+- Multi-race queueing (queue 10k in 6 weeks + half marathon in 16 weeks) → v4
+- Adaptive periodization (full) — complex multi-week injury modeling, auto-adjust → v4. Simple signal (3+ rest days → flag) IS in v3 via A5.
+- Pace-target injection (full) — race-specific interval sets, HR-zone pace calibration → v4. Basic VDOT pace calculation IS in v3 via A8.
+- Coaching marketplace / Pak Har personality variants → v4
+- Route map visualization (deferred from v2) → v4
 
 ---
 
