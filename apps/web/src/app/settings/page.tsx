@@ -111,6 +111,7 @@ export default function SettingsPage() {
   // Local-only preferences state (no backend yet)
   const [voice, setVoice] = useState<VoiceLevel>('standard')
   const [timezone, setTimezone] = useState<string>('Asia/Jakarta')
+  const [ntfyTopic, setNtfyTopic] = useState<string>('')
   const [deliveryPrefs, setDeliveryPrefs] = useState<DeliveryPreferences>({
     weeklyPlanMonday: true,
     weeklyReviewSunday: true,
@@ -171,6 +172,7 @@ export default function SettingsPage() {
       })
       setVoice(userProfile.coach_voice ?? 'standard')
       setTimezone(userProfile.timezone ?? 'Asia/Jakarta')
+      setNtfyTopic(userProfile.ntfy_topic ?? '')
       setPrefSeeded(true)
     }
   }, [userProfile, prefSeeded])
@@ -287,6 +289,41 @@ export default function SettingsPage() {
     } catch {
       // Revert to previous timezone on failure — silent rollback, no error UI
       setTimezone(previous)
+    }
+  }
+
+  // ntfy.sh topic handler — save-on-blur, optimistic update, silent rollback on failure.
+  // Empty string is normalised to null (clears the topic on the backend).
+  const handleNtfyTopicSave = async () => {
+    const previous = ntfyTopic
+    const valueToSend = ntfyTopic.trim() === '' ? null : ntfyTopic.trim()
+
+    const parsedKm = Number(preferences.weeklyKmTarget)
+    const parsedRestingHr = preferences.restingHr !== '' ? Number(preferences.restingHr) : null
+    const parsedMaxHr = preferences.maxHr !== '' ? Number(preferences.maxHr) : null
+
+    try {
+      await saveOnboarding({
+        weekly_km_target: parsedKm,
+        days_available: preferences.availableDays.length,
+        available_days: preferences.availableDays,
+        biggest_struggle: preferences.biggestStruggle.trim(),
+        resting_hr: parsedRestingHr,
+        max_hr: parsedMaxHr,
+        goal_event: preferences.goalEvent,
+        race_date: preferences.raceDate || null,
+        auto_plan_enabled: deliveryPrefs.weeklyPlanMonday,
+        auto_review_enabled: deliveryPrefs.weeklyReviewSunday,
+        coach_voice: voice,
+        timezone,
+        ntfy_topic: valueToSend,
+      })
+      // Normalise local state to trimmed value (or '' for null) so it stays
+      // consistent with what the backend stored.
+      setNtfyTopic(valueToSend ?? '')
+    } catch {
+      // Revert to previous value on failure — silent rollback, no error UI
+      setNtfyTopic(previous)
     }
   }
 
@@ -457,6 +494,9 @@ export default function SettingsPage() {
       onToggleDelivery={handleToggleDelivery}
       timezone={timezone}
       onTimezoneChange={handleTimezoneChange}
+      ntfyTopic={ntfyTopic}
+      onNtfyTopicChange={setNtfyTopic}
+      onNtfyTopicSave={handleNtfyTopicSave}
       onThemeChange={setTheme}
       onDisconnect={handleDisconnect}
       onNav={onNav}

@@ -134,6 +134,9 @@ interface SettingsPaperProps {
   onToggleDelivery: (key: keyof DeliveryPreferences) => void;
   timezone: string;
   onTimezoneChange: (tz: string) => void;
+  ntfyTopic: string;
+  onNtfyTopicChange: (v: string) => void;
+  onNtfyTopicSave: () => void;
   onThemeChange: (t: Theme) => void;
   onDisconnect: () => void;
   onNav: (key: string) => void;
@@ -188,6 +191,9 @@ export function SettingsPaper({
   onToggleDelivery,
   timezone,
   onTimezoneChange,
+  ntfyTopic,
+  onNtfyTopicChange,
+  onNtfyTopicSave,
   onThemeChange,
   onDisconnect,
   onNav,
@@ -715,6 +721,30 @@ export function SettingsPaper({
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
+            </div>
+            {/* Push Notifications — ntfy.sh topic */}
+            <div style={{ padding: '10px 0 2px' }}>
+              <Caps size={9} ls={2} opacity={0.6}>Push Notifications</Caps>
+              <p style={{ fontFamily: OL.body, fontSize: 12, color: OL.muted, margin: '3px 0 6px' }}>
+                Enter your ntfy.sh topic to receive weekly plan and review alerts.
+              </p>
+              <input
+                type="text"
+                value={ntfyTopic}
+                placeholder="your-topic-name"
+                onChange={(e) => onNtfyTopicChange(e.target.value)}
+                onBlur={onNtfyTopicSave}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  fontFamily: OL.mono,
+                  fontSize: 13,
+                  padding: '6px 8px',
+                  border: `1px solid ${OL.ink}`,
+                  background: 'transparent',
+                  boxSizing: 'border-box' as const,
+                }}
+              />
             </div>
           </section>
 

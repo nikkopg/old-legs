@@ -73,6 +73,9 @@ function buildBaseProps(watchOverrides: {
     onWatchMfaCancel: vi.fn(),
     watchShowPassword: false,
     onWatchShowPasswordToggle: vi.fn(),
+    ntfyTopic: '',
+    onNtfyTopicChange: vi.fn(),
+    onNtfyTopicSave: vi.fn(),
   }
 }
 
