@@ -180,6 +180,20 @@ export default function ActivityDetailPage() {
 
   const { shareState, triggerShare } = useShareCard();
 
+  const handleShare = useCallback(() => {
+    if (!activity) return;
+    const effective = streamedAnalysis !== null && !activity.analysis
+      ? { ...activity, ...streamedAnalysis }
+      : activity;
+    triggerShare({
+      distanceKm: effective.distance_km,
+      avgPaceMinPerKm: effective.average_pace_min_per_km,
+      activityDate: effective.activity_date,
+      avgHr: effective.average_hr,
+      verdictShort: effective.verdict_short ?? null,
+    });
+  }, [triggerShare, activity, streamedAnalysis]);
+
   const {
     data: activity,
     isLoading: activityLoading,
@@ -276,16 +290,6 @@ export default function ActivityDetailPage() {
         tone: streamedAnalysis.tone ?? activity.tone,
       }
     : activity;
-
-  const handleShare = useCallback(() => {
-    triggerShare({
-      distanceKm: effectiveActivity.distance_km,
-      avgPaceMinPerKm: effectiveActivity.average_pace_min_per_km,
-      activityDate: effectiveActivity.activity_date,
-      avgHr: effectiveActivity.average_hr,
-      verdictShort: effectiveActivity.verdict_short ?? null,
-    });
-  }, [triggerShare, effectiveActivity]);
 
   return (
     <Dispatch
