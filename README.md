@@ -241,6 +241,38 @@ Check the [CHANGELOG](CHANGELOG.md) before upgrading — breaking changes (new r
 
 ---
 
+## Building & publishing images
+
+For maintainers who want to publish versioned Docker images to a registry:
+
+```bash
+./scripts/build.sh
+```
+
+This reads the latest git tag (e.g. `v2.2.1`) and builds both `api` and `web` images tagged with that version and `latest`. Images are pushed to `ghcr.io/nikkopg/old-legs`.
+
+To deploy using pre-built images instead of building locally, update `docker-compose.yml`:
+
+```yaml
+services:
+  api:
+    image: ghcr.io/nikkopg/old-legs/api:${VERSION:-latest}
+  web:
+    image: ghcr.io/nikkopg/old-legs/web:${VERSION:-latest}
+```
+
+Then pull and start:
+
+```bash
+docker pull ghcr.io/nikkopg/old-legs/api:latest
+docker pull ghcr.io/nikkopg/old-legs/web:latest
+docker compose up -d
+```
+
+Images are public — no login or token required to pull.
+
+---
+
 ## Running tests
 
 ```bash
