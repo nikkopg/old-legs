@@ -177,6 +177,9 @@ interface SettingsPaperProps {
   onWatchMfaCancel: () => void;
   watchShowPassword: boolean;
   onWatchShowPasswordToggle: () => void;
+  // Data export
+  onExportData?: () => void;
+  exportState?: 'idle' | 'loading' | 'error';
 }
 
 // ---------- component ----------
@@ -225,6 +228,8 @@ export function SettingsPaper({
   onWatchMfaCancel,
   watchShowPassword,
   onWatchShowPasswordToggle,
+  onExportData,
+  exportState = 'idle',
 }: SettingsPaperProps) {
   const voiceOptions: Array<{ opt: VoiceLevel; label: string; description: string }> = [
     { opt: 'gentle', label: 'Gentle', description: 'Mentor. Still honest. Less bite.' },
@@ -965,6 +970,39 @@ export function SettingsPaper({
             }}>
               Disconnect Strava and delete your data. No farewell edition. No retention dance. You come back, you come back.
             </p>
+            {/* Download my data */}
+            <div style={{ marginBottom: 16 }}>
+              <button
+                onClick={onExportData}
+                disabled={exportState === 'loading'}
+                style={{
+                  background: 'transparent',
+                  color: OL.muted,
+                  border: `1px solid ${OL.muted}`,
+                  padding: '10px 20px',
+                  fontFamily: OL.sans,
+                  fontSize: 11,
+                  letterSpacing: 3,
+                  fontWeight: 700,
+                  textTransform: 'uppercase' as const,
+                  cursor: exportState === 'loading' ? 'not-allowed' : 'pointer',
+                  opacity: exportState === 'loading' ? 0.5 : 1,
+                }}
+              >
+                {exportState === 'loading' ? 'Preparing export...' : 'Download my data →'}
+              </button>
+              {exportState === 'error' && (
+                <p style={{
+                  fontFamily: OL.body,
+                  fontSize: 13,
+                  color: OL.accent,
+                  margin: '8px 0 0',
+                }}>
+                  Export failed. Try again.
+                </p>
+              )}
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'flex-start' }}>
               <button
                 onClick={onDisconnect}

@@ -22,6 +22,26 @@
 //   - onDisconnect → disconnectStrava() called, then router.replace('/')
 //   - disconnectStrava() throws → error is swallowed, redirect still happens
 // READY FOR QA
+// Feature: Download my data button (T5 — GET /user/export)
+// What was built:
+//   exportUserData() in lib/api.ts — raw fetch (not apiFetch) to avoid json() on binary response.
+//   Reads filename from Content-Disposition header; falls back to date-stamped default.
+//   handleExportData in settings/page.tsx — sets exportState to 'loading' during request,
+//     reverts to 'idle' on success, 'error' on failure.
+//   SettingsPaper receives onExportData + exportState props.
+//   Button rendered in Section 7 above the danger actions (Cancel Subscription, Reset Context).
+//   Loading state: button label becomes "Preparing export..." and is disabled.
+//   Error state: inline message "Export failed. Try again." appears below the button.
+//   Style: secondary/muted — border: 1px solid muted, color: muted — matches visual weight of
+//     "Reset Pak Har's context" underline link, lighter than the accent-bordered danger actions.
+// Edge cases to test:
+//   - Click while loading → button is disabled, second click not possible
+//   - 401 response → exportState set to 'error', inline message shown
+//   - Network failure → exportState set to 'error', inline message shown
+//   - Success → ZIP download triggers in browser, state returns to 'idle'
+//   - Content-Disposition present → filename from header used
+//   - Content-Disposition absent → date-stamped fallback filename used
+// READY FOR QA
 // Feature: Auto-save voice card selection + timezone selector (T1)
 // What was built:
 //   handleVoiceChange — optimistic update + silent rollback on failure,
@@ -60,7 +80,7 @@ import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { SettingsPaper } from '@/components/redesign/SettingsPaper'
 import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton'
-import { getAuthStatus, disconnectStrava, resetPakHarContext, saveOnboarding, getWatchStatus, connectWatch, connectWatchMfa, disconnectWatch } from '@/lib/api'
+import { getAuthStatus, disconnectStrava, resetPakHarContext, saveOnboarding, getWatchStatus, connectWatch, connectWatchMfa, disconnectWatch, exportUserData } from '@/lib/api'
 import type { WatchStatusResponse } from '@/lib/api'
 import { useUser } from '@/hooks/useUser'
 import { useChatStore } from '@/store/chat'
@@ -77,6 +97,7 @@ interface DeliveryPreferences {
 }
 
 type ResetContextState = 'idle' | 'confirming' | 'loading' | 'error'
+type ExportState = 'idle' | 'loading' | 'error'
 
 // ---------------------------------------------------------------------------
 // Page
@@ -134,6 +155,9 @@ export default function SettingsPage() {
 
   // Reset context state machine
   const [resetContextState, setResetContextState] = useState<ResetContextState>('idle')
+
+  // Export state
+  const [exportState, setExportState] = useState<ExportState>('idle')
 
   // Watch integration state
   const [watchEmail, setWatchEmail] = useState('')
@@ -410,6 +434,17 @@ export default function SettingsPage() {
     }
   }
 
+  // Export handler
+  const handleExportData = async () => {
+    setExportState('loading')
+    try {
+      await exportUserData()
+      setExportState('idle')
+    } catch {
+      setExportState('error')
+    }
+  }
+
   // Watch integration handlers
   async function handleConnectWatch() {
     setWatchConnectLoading(true)
@@ -528,6 +563,8 @@ export default function SettingsPage() {
       onWatchMfaCancel={handleWatchMfaCancel}
       watchShowPassword={watchShowPassword}
       onWatchShowPasswordToggle={() => setWatchShowPassword((v) => !v)}
+      onExportData={handleExportData}
+      exportState={exportState}
     />
   )
 }

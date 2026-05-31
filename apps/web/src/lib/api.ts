@@ -303,6 +303,43 @@ export async function syncToWatch(): Promise<WatchSyncResponse> {
 }
 
 // ---------------------------------------------------------------------------
+// User data export — returns raw Response so caller can stream the ZIP blob
+// ---------------------------------------------------------------------------
+
+export async function exportUserData(): Promise<void> {
+  const res = await fetch(`${API_BASE}/user/export`, {
+    method: 'GET',
+    credentials: 'include',
+  })
+
+  if (!res.ok) {
+    let detail = `API error ${res.status}`
+    try {
+      const body = await res.json()
+      if (typeof body.detail === 'string') detail = body.detail
+    } catch {
+      // not JSON
+    }
+    const err: ApiError = { detail, status: res.status }
+    throw err
+  }
+
+  // Derive filename from Content-Disposition header, falling back to a
+  // date-stamped default so the download always has a recognisable name.
+  const disposition = res.headers.get('content-disposition') ?? ''
+  const match = disposition.match(/filename="?([^";\s]+)"?/)
+  const filename = match?.[1] ?? `old-legs-export-${new Date().toISOString().split('T')[0]}.zip`
+
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// ---------------------------------------------------------------------------
 // Share image — upload PNG blob, get back a short-lived token
 // ---------------------------------------------------------------------------
 
