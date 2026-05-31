@@ -213,3 +213,19 @@ Key routing rules:
 - Ship/deploy/PR → invoke /ship or /land-and-deploy
 - Save progress → invoke /context-save
 - Resume context → invoke /context-restore
+
+## Agent routing
+
+When a skill surfaces implementation work, delegate to the appropriate specialist agent via the Agent tool. Do not implement directly — route to the right agent.
+
+| Task type | Agent | Owns |
+|---|---|---|
+| API endpoints, models, services, migrations, Ollama, Strava OAuth | `backend` | `apps/api/**` |
+| Pages, data fetching, hooks, API client, TypeScript types | `frontend` | `apps/web/src/**` |
+| UI components, design tokens, layout, visual decisions | `ux` | `apps/web/src/components/**` |
+| Tests (pytest, Vitest, Playwright), bug log | `sqa` | `apps/api/tests/**`, `apps/web/tests/**` |
+
+Rules:
+- A task touching both API and UI → backend first, then frontend, then ux if needed
+- Always verify agent output against `.claude/docs/v2/api-spec-v2.md` for backend/frontend handoffs
+- After implementation, route to `sqa` to write tests
