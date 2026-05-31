@@ -1,4 +1,29 @@
 // READY FOR QA
+// Feature: Share card on Dispatch page (T6)
+// What was built:
+//   - useShareCard hook (src/hooks/useShareCard.ts): canvas draw (800×400 @2×) → upload to
+//     /share-image → copy /share/{token} URL to clipboard → state machine idle→generating→
+//     uploading→copied→idle (auto-revert after 2s) / error branch
+//   - Canvas card content: "OLD LEGS" masthead, distance + pace + date stats strip, verdict_short
+//     headline (Abril Fatface, auto-sized 44/36/28px), footer "BY PAK HAR · OLD LEGS" + "oldlegs.app"
+//   - If verdict_short is null, headline falls back to "{distance} KM"
+//   - ShareButton sub-component in Dispatch.tsx: label cycles idle→Preparing…→Uploading…→
+//     Link copied!→Share run; style matches existing ghost buttons
+//   - Button rendered in both action rows: no-analysis (beside "Get his take →") and
+//     has-analysis (beside "Share this take →" modal and "Refresh his take →")
+//   - New DispatchProps: onShare?: () => void, shareState?: ShareCardState
+//   - handleShare in page.tsx built from effectiveActivity (uses optimistic streamed data if live)
+// Edge cases to test:
+//   - No verdict_short: headline shows distance e.g. "8.40 KM"
+//   - verdict_short > 120 chars: truncated to 117 + "..."
+//   - Long verdict_short that wraps: font auto-sizes down 44→36→28
+//   - No HR data: DATE column shown in place of HR, card still renders
+//   - Clipboard API unavailable (e.g. non-https in some browsers): error state shown
+//   - Upload fails (network error, API 4xx): state→error, button label "Try again →"
+//   - Double-click Share while generating/uploading: no-op (state guard)
+//   - "Link copied!" reverts to "Share run" after 2 seconds
+//   - Very short run (<1km): distance renders as "0.xx KM" — no crash
+//
 // Feature: Activity detail page — streamed analysis tokens in Dispatch (TASK-191)
 // What was built:
 //   - /activities/[id] replaced analyzeActivity mutation + isAnalyzing state with useProgressStream
@@ -38,6 +63,7 @@ import { formatPace } from '@/lib/formatters';
 import { computeWeeklyKm } from '@/lib/weeklyKm';
 import { useUser } from '@/hooks/useUser';
 import { useProgressStream } from '@/hooks/useProgressStream';
+import { useShareCard } from '@/hooks/useShareCard';
 import type { Activity, ApiError } from '@/types/api';
 
 // ---------------------------------------------------------------------------
@@ -152,6 +178,8 @@ export default function ActivityDetailPage() {
     }
   }
 
+  const { shareState, triggerShare } = useShareCard();
+
   const {
     data: activity,
     isLoading: activityLoading,
@@ -249,6 +277,16 @@ export default function ActivityDetailPage() {
       }
     : activity;
 
+  const handleShare = useCallback(() => {
+    triggerShare({
+      distanceKm: effectiveActivity.distance_km,
+      avgPaceMinPerKm: effectiveActivity.average_pace_min_per_km,
+      activityDate: effectiveActivity.activity_date,
+      avgHr: effectiveActivity.average_hr,
+      verdictShort: effectiveActivity.verdict_short ?? null,
+    });
+  }, [triggerShare, effectiveActivity]);
+
   return (
     <Dispatch
       activity={effectiveActivity}
@@ -267,6 +305,8 @@ export default function ActivityDetailPage() {
       rpe={activity?.rpe ?? null}
       onRpeChange={handleRpeChange}
       rpeSaveState={rpeSaveState}
+      onShare={handleShare}
+      shareState={shareState}
       onNav={(key) => {
         const routes: Record<string, string> = {
           dashboard: '/dashboard',

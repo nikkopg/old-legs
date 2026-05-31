@@ -69,6 +69,8 @@ export interface DispatchProps {
   rpe?: number | null;
   onRpeChange?: (rpe: number | null) => void;
   rpeSaveState?: 'idle' | 'saving' | 'saved';
+  onShare?: () => void;
+  shareState?: 'idle' | 'generating' | 'uploading' | 'copied' | 'error';
 }
 
 // ---- Streams chart helpers ----
@@ -500,9 +502,53 @@ function RpeInput({ rpe, onRpeChange, rpeSaveState = 'idle' }: RpeInputProps) {
   );
 }
 
+// ---- Share button ----
+
+interface ShareButtonProps {
+  shareState: 'idle' | 'generating' | 'uploading' | 'copied' | 'error';
+  onClick: () => void;
+}
+
+function ShareButton({ shareState, onClick }: ShareButtonProps) {
+  const isActive = shareState === 'generating' || shareState === 'uploading';
+  const label =
+    shareState === 'generating' ? 'Preparing...' :
+    shareState === 'uploading'  ? 'Uploading...' :
+    shareState === 'copied'     ? 'Link copied!' :
+    shareState === 'error'      ? 'Try again →'  :
+    'Share run';
+
+  return (
+    <button
+      onClick={onClick}
+      disabled={isActive}
+      style={{
+        background: shareState === 'copied' ? 'var(--color-ink)' : 'transparent',
+        color: shareState === 'copied' ? 'var(--color-ink-on-ink)' : 'var(--color-muted)',
+        border: shareState === 'copied'
+          ? '1px solid var(--color-ink)'
+          : shareState === 'error'
+          ? '1px solid var(--color-accent)'
+          : '1px solid var(--color-hairline-strong)',
+        padding: '10px 18px',
+        fontFamily: 'var(--font-sans)',
+        fontSize: 11,
+        letterSpacing: 3,
+        fontWeight: 700,
+        textTransform: 'uppercase' as const,
+        cursor: isActive ? 'wait' : 'pointer',
+        opacity: isActive ? 0.6 : 1,
+        transition: 'background 0.15s, color 0.15s, border-color 0.15s',
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 // ---- Main component ----
 
-export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBack, onNav, onAnalyze, isAnalyzing, analysisSteps = [], analysisElapsedMs = 0, analysisStreamedText = '', verdictStreamedText = '', analysisError = null, rpe = null, onRpeChange, rpeSaveState = 'idle' }: DispatchProps) {
+export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBack, onNav, onAnalyze, isAnalyzing, analysisSteps = [], analysisElapsedMs = 0, analysisStreamedText = '', verdictStreamedText = '', analysisError = null, rpe = null, onRpeChange, rpeSaveState = 'idle', onShare, shareState = 'idle' }: DispatchProps) {
   const dateInfo = formatActivityDate(activity.activity_date);
   const headline = getVerdictHeadline(activity);
   const paragraphs = activity.analysis ? getAnalysisParagraphs(activity.analysis) : [];
@@ -1383,26 +1429,30 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                       <p className="font-body italic text-[13px] opacity-60">
                         Pak Har hasn't seen this run yet.
                       </p>
-                      {onAnalyze && (
-                        <button
-                          onClick={onAnalyze}
-                          style={{
-                            marginTop: 12,
-                            background: 'var(--color-ink)',
-                            color: 'var(--color-ink-on-ink)',
-                            border: '1px solid var(--color-ink)',
-                            padding: '10px 24px',
-                            fontFamily: 'var(--font-sans)',
-                            fontSize: 11,
-                            letterSpacing: 3,
-                            fontWeight: 700,
-                            textTransform: 'uppercase' as const,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          Get his take →
-                        </button>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
+                        {onAnalyze && (
+                          <button
+                            onClick={onAnalyze}
+                            style={{
+                              background: 'var(--color-ink)',
+                              color: 'var(--color-ink-on-ink)',
+                              border: '1px solid var(--color-ink)',
+                              padding: '10px 24px',
+                              fontFamily: 'var(--font-sans)',
+                              fontSize: 11,
+                              letterSpacing: 3,
+                              fontWeight: 700,
+                              textTransform: 'uppercase' as const,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Get his take →
+                          </button>
+                        )}
+                        {onShare && (
+                          <ShareButton shareState={shareState} onClick={onShare} />
+                        )}
+                      </div>
                     </>
                   )}
                 </>
@@ -1497,7 +1547,10 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                               </button>
                             </div>
                           ) : (
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16 }}>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                              {onShare && (
+                                <ShareButton shareState={shareState} onClick={onShare} />
+                              )}
                               {activity.verdict_short && (
                                 <button
                                   onClick={() => setShowShareCard(true)}
