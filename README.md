@@ -190,8 +190,8 @@ All five services (`postgres`, `ollama`, `ollama-init`, `api`, `web`) should sho
 
 ```bash
 cd apps/api
-python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
+uv venv && source .venv/bin/activate
+uv pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
@@ -277,7 +277,7 @@ Images are public — no login or token required to pull.
 
 ```bash
 cd apps/api
-pip install -r requirements-test.txt
+uv pip install -r requirements-test.txt
 pytest
 ```
 
