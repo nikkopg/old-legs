@@ -33,7 +33,25 @@ import { OL } from '@/components/redesign/NewspaperChrome'
 import { getCurrentPlan, getActivities, getPlanNextTarget, getPlanVerdict, getWatchStatus, syncToWatch } from '@/lib/api'
 import type { WatchSyncResponse } from '@/lib/api'
 import { useProgressStream } from '@/hooks/useProgressStream'
-import type { ApiError, PlanNextTarget, TrainingPlan as ApiTrainingPlan, PlanDay as ApiPlanDay, Activity } from '@/types/api'
+import { useUser } from '@/hooks/useUser'
+import type { ApiError, GoalEvent, PlanNextTarget, TrainingPlan as ApiTrainingPlan, PlanDay as ApiPlanDay, Activity } from '@/types/api'
+
+// ---------- Race goal helpers ----------
+
+const GOAL_EVENT_LABELS: Record<GoalEvent, string> = {
+  general_fitness: 'General Fitness',
+  '5k': '5K',
+  '10k': '10K',
+  half_marathon: 'Half Marathon',
+  marathon: 'Marathon',
+  ultra: 'Ultra',
+}
+
+function formatRaceDate(isoDate: string): string {
+  // Format as "20 Jul 2026" (day, no leading zero, short month, full year)
+  const d = new Date(isoDate + 'T00:00:00')
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -299,6 +317,13 @@ export default function PlanPage() {
     useState<'idle' | 'syncing' | 'done' | 'error'>('idle')
   const [syncResults, setSyncResults] = useState<Record<string, string>>({})
 
+  const { user } = useUser()
+
+  const raceGoal =
+    user?.goal_event && user?.race_date
+      ? { event: GOAL_EVENT_LABELS[user.goal_event], date: formatRaceDate(user.race_date) }
+      : null
+
   async function handleSyncToWatch() {
     setSyncState('syncing')
     try {
@@ -401,6 +426,7 @@ export default function PlanPage() {
     <>
       <PlanPaper
         plan={mappedPlan}
+        raceGoal={raceGoal}
         isStreaming={isStreaming}
         steps={steps}
         elapsedMs={elapsedMs}

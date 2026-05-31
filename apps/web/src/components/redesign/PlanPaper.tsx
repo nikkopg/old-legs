@@ -79,8 +79,17 @@ interface PlanVerdictResult {
   tone: string | null;
 }
 
+interface RaceGoal {
+  /** Display name, e.g. "Half Marathon" */
+  event: string;
+  /** Formatted date string, e.g. "20 Jul 2026" */
+  date: string;
+}
+
 interface PlanPaperProps {
   plan: TrainingPlan | null;
+  /** Race goal derived from user profile goal_event + race_date. Null if not set. */
+  raceGoal?: RaceGoal | null;
   /** Replaces the old isGenerating boolean — true while the SSE stream is open. */
   isStreaming: boolean;
   /** Step labels + statuses from useProgressStream. */
@@ -165,6 +174,7 @@ function isoDatePlusDays(isoDate: string, days: number): string {
 
 export function PlanPaper({
   plan,
+  raceGoal = null,
   isStreaming,
   steps,
   elapsedMs,
@@ -410,6 +420,19 @@ export function PlanPaper({
             {/* Left: week label + h1 + tagline */}
             <div>
               <Caps size={10} ls={3}>The Fixtures · {plan.weekLabel}</Caps>
+              {raceGoal && (
+                <p
+                  style={{
+                    fontFamily: OL.mono,
+                    fontSize: 11,
+                    color: OL.muted,
+                    margin: '3px 0 0',
+                    letterSpacing: 0.3,
+                  }}
+                >
+                  Training toward: {raceGoal.event} · {raceGoal.date}
+                </p>
+              )}
               <h1
                 className="ol-masthead-settle"
                 style={{
