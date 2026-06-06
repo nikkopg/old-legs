@@ -30,7 +30,7 @@ import { PlanPaper } from '@/components/redesign/PlanPaper'
 import { OfflinePage } from '@/components/redesign/OfflinePage'
 import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton'
 import { OL } from '@/components/redesign/NewspaperChrome'
-import { getCurrentPlan, getActivities, getPlanNextTarget, getPlanVerdict, getWatchStatus, syncToWatch } from '@/lib/api'
+import { getCurrentPlan, getActivities, getPlanNextTarget, getPlanVerdict, getWatchStatus, syncToWatch, getPlans } from '@/lib/api'
 import type { WatchSyncResponse } from '@/lib/api'
 import { useProgressStream } from '@/hooks/useProgressStream'
 import { useUser } from '@/hooks/useUser'
@@ -254,6 +254,9 @@ export default function PlanPage() {
   const [streamedPlan, setStreamedPlan] = useState<ApiTrainingPlan | null>(null)
   const [streamError, setStreamError] = useState<string | null>(null)
 
+  // Archive dropdown
+  const [archiveOpen, setArchiveOpen] = useState(false)
+
   // Replace-confirmation modal (TASK-201-F4)
   const [showReplaceModal, setShowReplaceModal] = useState(false)
 
@@ -304,6 +307,14 @@ export default function PlanPage() {
   const { data: nextTarget } = useQuery<PlanNextTarget, ApiError>({
     queryKey: ['plan', 'next-target'],
     queryFn: getPlanNextTarget,
+    staleTime: 60_000,
+    retry: false,
+  })
+
+  // Plan archive
+  const { data: plansData } = useQuery<ApiTrainingPlan[], ApiError>({
+    queryKey: ['plans'],
+    queryFn: getPlans,
     staleTime: 60_000,
     retry: false,
   })
@@ -443,6 +454,9 @@ export default function PlanPage() {
         syncState={syncState}
         syncResults={syncResults}
         hasConnectedWatch={hasConnectedWatch}
+        plans={plansData?.map(p => ({ id: p.id, week_start_date: p.week_start_date, is_active: p.is_active }))}
+        archiveOpen={archiveOpen}
+        onArchiveToggle={() => setArchiveOpen((v) => !v)}
       />
 
       {/* TASK-201-F4: Replace-confirmation modal */}

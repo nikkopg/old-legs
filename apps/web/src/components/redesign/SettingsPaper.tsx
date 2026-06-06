@@ -34,7 +34,6 @@
 //   - Reset Context: onResetContext prop omitted → button still renders (no-op on confirm)
 
 import React from 'react';
-import Link from 'next/link';
 import {
   OL,
   Caps,
@@ -45,7 +44,7 @@ import {
   FooterRail,
   NewspaperChrome,
 } from './NewspaperChrome';
-import type { GoalEvent, VoiceLevel, TrainingPlan } from '@/types/api';
+import type { GoalEvent, VoiceLevel } from '@/types/api';
 import type { WatchStatusResponse } from '@/lib/api';
 
 // ---------------------------------------------------------------------------
@@ -181,28 +180,6 @@ interface SettingsPaperProps {
   // Data export
   onExportData?: () => void;
   exportState?: 'idle' | 'loading' | 'error';
-  // Plan archive
-  plans: TrainingPlan[];
-}
-
-// ---------- Plan archive helpers ----------
-
-function formatWeekRange(weekStartDate: string): string {
-  const start = new Date(weekStartDate + 'T00:00:00')
-  const end = new Date(start)
-  end.setDate(end.getDate() + 6)
-  const fmt = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-  return `${fmt(start)} – ${fmt(end)} ${start.getFullYear()}`
-}
-
-function formatRelativeFiled(isoString: string): string {
-  const filed = new Date(isoString)
-  const now = new Date()
-  const diffMs = now.getTime() - filed.getTime()
-  const diffDays = Math.floor(diffMs / 86400000)
-  if (diffDays === 0) return 'today'
-  if (diffDays < 7) return `${diffDays}d ago`
-  return filed.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
 
 // ---------- component ----------
@@ -253,7 +230,6 @@ export function SettingsPaper({
   onWatchShowPasswordToggle,
   onExportData,
   exportState = 'idle',
-  plans,
 }: SettingsPaperProps) {
   const voiceOptions: Array<{ opt: VoiceLevel; label: string; description: string }> = [
     { opt: 'gentle', label: 'Gentle', description: 'Mentor. Still honest. Less bite.' },
@@ -982,67 +958,7 @@ export function SettingsPaper({
             })()}
           </section>
 
-          {/* Section 7 — Plan Archive */}
-          <section style={{ padding: '14px 0', borderBottom: `1px solid ${OL.ink}` }}>
-            <SectionLabel>Plan Archive</SectionLabel>
-            <p style={{ fontFamily: OL.mono, fontSize: 12, color: OL.muted, margin: '4px 0 10px' }}>
-              Every plan Pak Har has filed for you, in order.
-            </p>
-            {plans.length === 0 ? (
-              <p style={{
-                fontFamily: OL.mono,
-                fontSize: 12,
-                color: OL.muted,
-                fontStyle: 'italic',
-                margin: 0,
-              }}>
-                No plans filed yet.
-              </p>
-            ) : (
-              <div>
-                {plans.map((plan) => (
-                  <Link
-                    key={plan.id}
-                    href={`/plan/${plan.id}`}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'baseline',
-                      padding: '10px 0',
-                      borderBottom: '1px dotted var(--color-hairline)',
-                      cursor: 'pointer',
-                      textDecoration: 'none',
-                      color: 'inherit',
-                      opacity: 1,
-                    }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.opacity = '0.65' }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.opacity = '1' }}
-                  >
-                    <span style={{ fontFamily: OL.mono, fontSize: 13, color: OL.ink }}>
-                      {formatWeekRange(plan.week_start_date)}
-                      {plan.is_active && (
-                        <span style={{
-                          marginLeft: 10,
-                          fontFamily: OL.mono,
-                          fontSize: 10,
-                          color: OL.muted,
-                          letterSpacing: 2,
-                          textTransform: 'uppercase',
-                        }}>
-                          Active
-                        </span>
-                      )}
-                    </span>
-                    <span style={{ fontFamily: OL.mono, fontSize: 12, color: OL.muted, flexShrink: 0, marginLeft: 16 }}>
-                      Filed {formatRelativeFiled(plan.created_at)}
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </section>
-
-          {/* Section 8 — Cancel the Subscription */}
+          {/* Section 7 — Cancel the Subscription */}
           <section style={{ padding: '14px 0' }}>
             <SectionLabel>Cancel the Subscription</SectionLabel>
             <p style={{

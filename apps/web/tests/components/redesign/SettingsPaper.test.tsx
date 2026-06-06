@@ -76,7 +76,6 @@ function buildBaseProps(watchOverrides: {
     ntfyTopic: '',
     onNtfyTopicChange: vi.fn(),
     onNtfyTopicSave: vi.fn(),
-    plans: [],
   }
 }
 

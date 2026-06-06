@@ -26,7 +26,8 @@
 //   - REST day where user ran anyway: data shown with small "RAN" caps label in accent
 //   - INSTRUCTION/VERDICT: shows verdictShort+ToneBadge when realization exists, else notes
 
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
+import Link from 'next/link';
 import {
   OL,
   Caps,
@@ -113,6 +114,10 @@ interface PlanPaperProps {
   syncState?: 'idle' | 'syncing' | 'done' | 'error';
   syncResults?: Record<string, string>;
   hasConnectedWatch?: boolean;
+  /** Plan archive dropdown */
+  plans?: Array<{ id: number; week_start_date: string; is_active: boolean }>;
+  archiveOpen?: boolean;
+  onArchiveToggle?: () => void;
 }
 
 // ---------- helpers ----------
@@ -154,6 +159,16 @@ function deriveH1(runCount: number): string {
   return 'Seven days. The plan is filed.';
 }
 
+// ---------- helpers: archive dropdown ----------
+
+function formatArchiveWeekRange(weekStartDate: string): string {
+  const start = new Date(weekStartDate + 'T00:00:00')
+  const end = new Date(start)
+  end.setDate(end.getDate() + 6)
+  const fmt = (d: Date) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+  return `${fmt(start)} – ${fmt(end)}`
+}
+
 // ---------- component ----------
 
 // ---------- helpers: date formatting for next-target preview ----------
@@ -191,7 +206,22 @@ export function PlanPaper({
   syncState = 'idle',
   syncResults = {},
   hasConnectedWatch = false,
+  plans,
+  archiveOpen = false,
+  onArchiveToggle,
 }: PlanPaperProps) {
+  const archiveRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!archiveOpen) return
+    function handleMousedown(e: MouseEvent) {
+      if (archiveRef.current && !archiveRef.current.contains(e.target as Node)) {
+        onArchiveToggle?.()
+      }
+    }
+    document.addEventListener('mousedown', handleMousedown)
+    return () => document.removeEventListener('mousedown', handleMousedown)
+  }, [archiveOpen, onArchiveToggle])
   const nav = [
     { key: 'dashboard', label: 'Front Page' },
     { key: 'activities', label: 'Dispatches' },
@@ -419,7 +449,96 @@ export function PlanPaper({
           >
             {/* Left: week label + h1 + tagline */}
             <div>
-              <Caps size={10} ls={3}>The Fixtures · {plan.weekLabel}</Caps>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 14 }}>
+                <Caps size={10} ls={3}>The Fixtures · {plan.weekLabel}</Caps>
+                {/* Archive dropdown toggle */}
+                {plans !== undefined && (
+                  <div ref={archiveRef} style={{ position: 'relative' }}>
+                    <button
+                      onClick={onArchiveToggle}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        fontFamily: OL.mono,
+                        fontSize: 11,
+                        letterSpacing: 1.5,
+                        color: OL.muted,
+                        cursor: 'pointer',
+                        textDecoration: archiveOpen ? 'none' : 'underline',
+                        textUnderlineOffset: 2,
+                      }}
+                    >
+                      {archiveOpen ? 'Archive ▴' : 'Archive ▾'}
+                    </button>
+                    {archiveOpen && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: '100%',
+                          left: 0,
+                          marginTop: 4,
+                          background: 'var(--color-paper)',
+                          border: `1px solid ${OL.ink}`,
+                          zIndex: 10,
+                          minWidth: 260,
+                        }}
+                      >
+                        {!plans || plans.length === 0 ? (
+                          <div
+                            style={{
+                              padding: '10px 14px',
+                              fontFamily: OL.mono,
+                              fontSize: 12,
+                              color: OL.muted,
+                              fontStyle: 'italic',
+                            }}
+                          >
+                            No past plans.
+                          </div>
+                        ) : (
+                          plans.map((p, idx) => (
+                            <Link
+                              key={p.id}
+                              href={`/plan/${p.id}`}
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'baseline',
+                                padding: '8px 14px',
+                                borderBottom: idx < plans.length - 1
+                                  ? '1px dotted var(--color-hairline)'
+                                  : 'none',
+                                textDecoration: 'none',
+                                color: 'inherit',
+                                opacity: 1,
+                              }}
+                              onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.opacity = '0.7' }}
+                              onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.opacity = '1' }}
+                            >
+                              <span style={{ fontFamily: OL.mono, fontSize: 12, color: OL.ink }}>
+                                {formatArchiveWeekRange(p.week_start_date)}
+                                {p.is_active && (
+                                  <span style={{
+                                    marginLeft: 8,
+                                    fontFamily: OL.mono,
+                                    fontSize: 10,
+                                    color: OL.muted,
+                                    letterSpacing: 2,
+                                    textTransform: 'uppercase',
+                                  }}>
+                                    Active
+                                  </span>
+                                )}
+                              </span>
+                            </Link>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               {raceGoal && (
                 <p
                   style={{
