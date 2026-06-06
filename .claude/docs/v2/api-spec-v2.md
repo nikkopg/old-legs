@@ -576,6 +576,72 @@ Returns the most recently generated active plan. DB lookup only.
 
 ---
 
+#### `GET /plan/list`
+> Status: ✅ v2 (feat/v2-finalization) — implemented 2026-05-31
+
+Returns all training plans for the current user, newest first. DB lookup only — no Ollama call.
+
+**Auth:** Required.
+
+**Request:** No body. Auth cookie only.
+
+**Response (200):** Array of `TrainingPlanRead` objects, ordered by `week_start_date` descending. Returns an empty array if the user has no plans.
+
+```json
+[
+  {
+    "id": 3,
+    "user_id": 1,
+    "week_start_date": "2026-05-25",
+    "plan_data": { "monday": { "type": "easy", "description": "...", "duration_minutes": 40, "target": "40 min, HR ≤ 145 bpm" } },
+    "pak_har_notes": { "week_summary": "...", "monday": "..." },
+    "is_active": true,
+    "created_at": "2026-05-25T09:00:00",
+    "updated_at": "2026-05-25T09:00:00"
+  }
+]
+```
+
+**Errors:** 401
+
+---
+
+#### `GET /plan/{plan_id}`
+> Status: ✅ v2 (feat/v2-finalization) — implemented 2026-05-31
+
+Returns a single training plan by primary key. Ownership-guarded — returns 404 if the plan does not exist or belongs to a different user.
+
+**Auth:** Required.
+
+**Path param:** `plan_id` — integer primary key of the `TrainingPlan` row.
+
+**Response (200):** Single `TrainingPlanRead` object (same shape as `GET /plan/current`).
+
+**Errors:**
+- `401` — Not authenticated
+- `404` — Plan not found or belongs to a different user
+
+---
+
+#### `DELETE /plan/{plan_id}`
+> Status: ✅ v2 (feat/v2-finalization) — implemented 2026-05-31
+
+Permanently deletes a training plan by primary key. Ownership-guarded — returns 404 if the plan does not exist or belongs to a different user. Idempotent per-user: calling it twice returns 404 on the second call (row is gone).
+
+**Auth:** Required.
+
+**Path param:** `plan_id` — integer primary key of the `TrainingPlan` row.
+
+**Request body:** None.
+
+**Response (204):** No content.
+
+**Errors:**
+- `401` — Not authenticated
+- `404` — Plan not found or belongs to a different user
+
+---
+
 ### Weekly Review
 
 #### `POST /review/generate`

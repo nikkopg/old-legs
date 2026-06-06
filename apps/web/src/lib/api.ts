@@ -139,6 +139,18 @@ export async function getCurrentPlan(): Promise<TrainingPlan> {
   return apiFetch<TrainingPlan>('/plan/current')
 }
 
+export async function getPlans(): Promise<TrainingPlan[]> {
+  return apiFetch<TrainingPlan[]>('/plan/list')
+}
+
+export async function getPlan(id: number): Promise<TrainingPlan> {
+  return apiFetch<TrainingPlan>(`/plan/${id}`)
+}
+
+export async function deletePlan(id: number): Promise<void> {
+  return apiFetch<void>(`/plan/${id}`, { method: 'DELETE' })
+}
+
 export async function getPlanNextTarget(): Promise<PlanNextTarget> {
   return apiFetch<PlanNextTarget>('/plan/next-target')
 }

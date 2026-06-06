@@ -80,11 +80,11 @@ import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { SettingsPaper } from '@/components/redesign/SettingsPaper'
 import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton'
-import { getAuthStatus, disconnectStrava, resetPakHarContext, saveOnboarding, getWatchStatus, connectWatch, connectWatchMfa, disconnectWatch, exportUserData } from '@/lib/api'
+import { getAuthStatus, disconnectStrava, resetPakHarContext, saveOnboarding, getWatchStatus, connectWatch, connectWatchMfa, disconnectWatch, exportUserData, getPlans } from '@/lib/api'
 import type { WatchStatusResponse } from '@/lib/api'
 import { useUser } from '@/hooks/useUser'
 import { useChatStore } from '@/store/chat'
-import type { ApiError, GoalEvent, VoiceLevel } from '@/types/api'
+import type { ApiError, GoalEvent, VoiceLevel, TrainingPlan } from '@/types/api'
 import { useTheme } from '@/hooks/useTheme'
 
 // ---------------------------------------------------------------------------
@@ -126,6 +126,10 @@ export default function SettingsPage() {
   // Watch status query
   const { data: watchStatus, refetch: refetchWatch } =
     useQuery<WatchStatusResponse[], ApiError>({ queryKey: ['watchStatus'], queryFn: getWatchStatus })
+
+  // Plans archive query
+  const { data: plansData } =
+    useQuery<TrainingPlan[], ApiError>({ queryKey: ['plans'], queryFn: getPlans, retry: 1 })
 
   const isLoading = authLoading || userLoading
 
@@ -565,6 +569,7 @@ export default function SettingsPage() {
       onWatchShowPasswordToggle={() => setWatchShowPassword((v) => !v)}
       onExportData={handleExportData}
       exportState={exportState}
+      plans={plansData ?? []}
     />
   )
 }
