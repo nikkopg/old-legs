@@ -268,6 +268,7 @@ export default function PlanPage() {
       // Invalidate so GET /plan/current and GET /plan/next-target return fresh data
       queryClient.invalidateQueries({ queryKey: ['plan', 'current'] })
       queryClient.invalidateQueries({ queryKey: ['plan', 'next-target'] })
+      queryClient.invalidateQueries({ queryKey: ['plans'] })
     }
   }, [queryClient])
 
