@@ -458,15 +458,13 @@ export function PlanPaper({
                       onClick={onArchiveToggle}
                       style={{
                         background: 'none',
-                        border: 'none',
-                        padding: 0,
+                        border: `1px solid rgba(26, 20, 12, 0.4)`,
+                        padding: '6px 12px',
                         fontFamily: OL.mono,
-                        fontSize: 11,
+                        fontSize: 13,
                         letterSpacing: 1.5,
-                        color: OL.muted,
+                        color: OL.ink,
                         cursor: 'pointer',
-                        textDecoration: archiveOpen ? 'none' : 'underline',
-                        textUnderlineOffset: 2,
                       }}
                     >
                       {archiveOpen ? 'Archive ▴' : 'Archive ▾'}
@@ -477,19 +475,19 @@ export function PlanPaper({
                           position: 'absolute',
                           top: '100%',
                           left: 0,
-                          marginTop: 4,
+                          marginTop: 6,
                           background: 'var(--color-paper)',
-                          border: `1px solid ${OL.ink}`,
+                          border: `2px solid ${OL.ink}`,
                           zIndex: 10,
-                          minWidth: 260,
+                          minWidth: 320,
                         }}
                       >
                         {!plans || plans.length === 0 ? (
                           <div
                             style={{
-                              padding: '10px 14px',
+                              padding: '12px 16px',
                               fontFamily: OL.mono,
-                              fontSize: 12,
+                              fontSize: 13,
                               color: OL.muted,
                               fontStyle: 'italic',
                             }}
@@ -505,7 +503,7 @@ export function PlanPaper({
                                 display: 'flex',
                                 justifyContent: 'space-between',
                                 alignItems: 'baseline',
-                                padding: '8px 14px',
+                                padding: '12px 16px',
                                 borderBottom: idx < plans.length - 1
                                   ? '1px dotted var(--color-hairline)'
                                   : 'none',
@@ -516,14 +514,14 @@ export function PlanPaper({
                               onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.opacity = '0.7' }}
                               onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.opacity = '1' }}
                             >
-                              <span style={{ fontFamily: OL.mono, fontSize: 12, color: OL.ink }}>
+                              <span style={{ fontFamily: OL.mono, fontSize: 13, color: OL.ink }}>
                                 {formatArchiveWeekRange(p.week_start_date)}
                                 {p.is_active && (
                                   <span style={{
                                     marginLeft: 8,
                                     fontFamily: OL.mono,
                                     fontSize: 10,
-                                    color: OL.muted,
+                                    color: OL.accent,
                                     letterSpacing: 2,
                                     textTransform: 'uppercase',
                                   }}>

@@ -20,7 +20,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { PlanPaper } from '@/components/redesign/PlanPaper'
 import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton'
@@ -153,6 +153,7 @@ export default function PlanViewerPage() {
   const id = Number(params.id)
   const router = useRouter()
 
+  const queryClient = useQueryClient()
   const [deleteState, setDeleteState] = useState<DeleteState>('idle')
 
   const {
@@ -190,6 +191,9 @@ export default function PlanViewerPage() {
     setDeleteState('deleting')
     try {
       await deletePlan(id)
+      await queryClient.invalidateQueries({ queryKey: ['plans'] })
+      await queryClient.invalidateQueries({ queryKey: ['plan', 'current'] })
+      await queryClient.invalidateQueries({ queryKey: ['plan', 'next-target'] })
       router.push('/settings')
     } catch {
       // Stay on page — don't swallow silently, reset to idle so user can retry
