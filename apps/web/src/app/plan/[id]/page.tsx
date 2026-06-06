@@ -25,8 +25,8 @@ import Link from 'next/link'
 import { PlanPaper } from '@/components/redesign/PlanPaper'
 import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton'
 import { OL } from '@/components/redesign/NewspaperChrome'
-import { getPlan, deletePlan } from '@/lib/api'
-import type { ApiError, TrainingPlan as ApiTrainingPlan, PlanDay as ApiPlanDay } from '@/types/api'
+import { getPlan, deletePlan, getActivities } from '@/lib/api'
+import type { ApiError, TrainingPlan as ApiTrainingPlan, PlanDay as ApiPlanDay, Activity } from '@/types/api'
 
 // ---------- Local type aliases (mirror of plan/page.tsx) ----------
 
@@ -37,6 +37,62 @@ interface ActivityMatch {
   verdictShort: string | null
   verdictTag: string | null
   tone: 'critical' | 'good' | 'neutral' | null
+}
+
+const DOW_OFFSET: Record<string, number> = {
+  monday: 0,
+  tuesday: 1,
+  wednesday: 2,
+  thursday: 3,
+  friday: 4,
+  saturday: 5,
+  sunday: 6,
+}
+
+function buildRealizations(
+  activities: Activity[],
+  weekStartDate: string,
+  planData: Record<string, ApiPlanDay>,
+): Record<string, ActivityMatch | null> {
+  const result: Record<string, ActivityMatch | null> = {}
+  const base = new Date(weekStartDate)
+
+  for (const dayName of Object.keys(DOW_OFFSET)) {
+    const offset = DOW_OFFSET[dayName]
+    const d = new Date(base)
+    d.setDate(d.getDate() + offset)
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    const isoDate = `${d.getFullYear()}-${mm}-${dd}`
+
+    // Only build the map for days that exist in the plan
+    if (!(dayName in planData)) continue
+
+    const dayActivities = activities.filter(
+      (a) => a.activity_date.slice(0, 10) === isoDate,
+    )
+
+    if (dayActivities.length === 0) {
+      result[isoDate] = null
+    } else {
+      // Use longest run as primary (for plan-verdict call); sum distance + duration across all sessions
+      const primary = dayActivities.reduce((best, a) =>
+        a.distance_km > best.distance_km ? a : best,
+      )
+      result[isoDate] = {
+        activityId: primary.id,
+        distanceKm: dayActivities.reduce((sum, a) => sum + a.distance_km, 0),
+        durationMin: Math.round(
+          dayActivities.reduce((sum, a) => sum + a.moving_time_seconds, 0) / 60,
+        ),
+        verdictShort: primary.verdict_short ?? null,
+        verdictTag: primary.verdict_tag ?? null,
+        tone: primary.tone ?? null,
+      }
+    }
+  }
+
+  return result
 }
 
 interface PlanPaperDay {
@@ -170,6 +226,12 @@ export default function PlanViewerPage() {
     },
   })
 
+  const { data: activities } = useQuery<Activity[], ApiError>({
+    queryKey: ['activities'],
+    queryFn: getActivities,
+    retry: 1,
+  })
+
   useEffect(() => {
     if (isError && error && isUnauthorized(error)) {
       router.replace('/')
@@ -236,7 +298,9 @@ export default function PlanViewerPage() {
   }
 
   const mappedPlan: PlanPaperPlan = mapPlan(rawPlan)
-  const realizations: Record<string, ActivityMatch | null> = {}
+  const realizations: Record<string, ActivityMatch | null> = activities
+    ? buildRealizations(activities, rawPlan.week_start_date, rawPlan.plan_data as Record<string, ApiPlanDay>)
+    : {}
   const planVerdicts: Record<string, { verdict_short: string | null; verdict_tag: string | null; tone: string | null } | null> = {}
 
   return (
