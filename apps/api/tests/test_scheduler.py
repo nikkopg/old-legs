@@ -454,3 +454,103 @@ class TestHourlySchedulerSweep:
 
         # User excluded at DB query level (neither flag set) — no plan call
         assert plan_calls == []
+
+
+class TestNtfyNotifications:
+    """
+    Verify that ntfy notifications are dispatched when ntfy_topic is set.
+
+    Coverage:
+    - Plan job fires send_ntfy when user.ntfy_topic is set
+    - Review job fires send_ntfy when user.ntfy_topic is set
+
+    Design:
+    - asyncio.create_task is patched so the task is run eagerly in the test loop
+    - send_ntfy is patched with AsyncMock so we can assert call args
+    """
+
+    @staticmethod
+    def _patch_session_local(db: Session):
+        mock_session_local = MagicMock(return_value=db)
+        return patch.object(scheduler_module, "SessionLocal", mock_session_local)
+
+    @pytest.mark.asyncio
+    async def test_plan_job_sends_ntfy_when_topic_set(self, db_session: Session):
+        """
+        When the plan job succeeds and user.ntfy_topic is set, send_ntfy must be
+        called exactly once with the user's topic and a message about the plan.
+        """
+        # UTC 2026-06-14 22:05 → Jakarta 2026-06-15 05:05 Mon (weekday=0, hour=5)
+        monday_utc = datetime(2026, 6, 14, 22, 5, 0, tzinfo=timezone.utc)
+        _make_user(
+            db_session,
+            strava_athlete_id="ntfy_plan_user",
+            timezone_str="Asia/Jakarta",
+            auto_plan_enabled=True,
+            ntfy_topic="my-run-topic",
+        )
+
+        async def mock_plan_gen(*args, **kwargs):
+            yield 'data: {"content": "plan chunk"}\n\n'
+
+        mock_send_ntfy = AsyncMock()
+
+        # Patch create_task to run the coroutine eagerly so the AsyncMock is awaited
+        def eager_create_task(coro):
+            return asyncio.ensure_future(coro)
+
+        with (
+            self._patch_session_local(db_session),
+            patch.object(scheduler_module, "generate_plan_with_ollama", mock_plan_gen),
+            patch.object(scheduler_module, "get_valid_access_token", AsyncMock()),
+            patch.object(scheduler_module, "send_ntfy", mock_send_ntfy),
+            patch.object(scheduler_module.asyncio, "create_task", eager_create_task),
+            patch("services.scheduler.datetime", _make_mock_utc_now(monday_utc)),
+        ):
+            await hourly_scheduler_sweep()
+
+        mock_send_ntfy.assert_called_once()
+        call_kwargs = mock_send_ntfy.call_args
+        assert call_kwargs.kwargs["topic"] == "my-run-topic"
+        assert "plan" in call_kwargs.kwargs["message"].lower()
+
+    @pytest.mark.asyncio
+    async def test_review_job_sends_ntfy_when_topic_set(self, db_session: Session):
+        """
+        When the review job succeeds and user.ntfy_topic is set, send_ntfy must be
+        called exactly once with the user's topic and a message about the review.
+        """
+        # UTC 2026-06-14 13:05 → Jakarta 2026-06-14 20:05 Sun (weekday=6, hour=20)
+        sunday_utc = datetime(2026, 6, 14, 13, 5, 0, tzinfo=timezone.utc)
+        _make_user(
+            db_session,
+            strava_athlete_id="ntfy_review_user",
+            timezone_str="Asia/Jakarta",
+            auto_plan_enabled=False,
+            auto_review_enabled=True,
+            ntfy_topic="my-review-topic",
+        )
+
+        async def mock_review_gen(*args, **kwargs):
+            yield 'data: {"content": "review chunk"}\n\n'
+
+        mock_send_ntfy = AsyncMock()
+
+        def eager_create_task(coro):
+            return asyncio.ensure_future(coro)
+
+        with (
+            self._patch_session_local(db_session),
+            patch.object(scheduler_module, "generate_weekly_review", mock_review_gen),
+            patch.object(scheduler_module, "get_valid_access_token", AsyncMock()),
+            patch.object(scheduler_module, "send_ntfy", mock_send_ntfy),
+            patch.object(scheduler_module.asyncio, "create_task", eager_create_task),
+            patch("services.scheduler.datetime", _make_mock_utc_now(sunday_utc)),
+        ):
+            await hourly_scheduler_sweep()
+
+        mock_send_ntfy.assert_called_once()
+        call_kwargs = mock_send_ntfy.call_args
+        assert call_kwargs.kwargs["topic"] == "my-review-topic"
+        # The review message references Pak Har reviewing the week
+        assert "reviewed" in call_kwargs.kwargs["message"].lower() or "week" in call_kwargs.kwargs["message"].lower()
