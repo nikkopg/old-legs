@@ -166,7 +166,7 @@ describe('FrontPage', () => {
       const lead = makeActivity({ id: 1 })
       const prev = makeActivity({ id: 2, verdict_short: 'Easy does it.', activity_date: '2026-04-27T06:00:00Z' })
       render(<FrontPage {...defaultProps} activities={[lead, prev]} />)
-      expect(screen.getByText(/Easy does it/i)).toBeDefined()
+      expect(screen.getAllByText(/Easy does it/i).length).toBeGreaterThan(0)
     })
 
     it('calls onActivityClick with the correct id when a previous edition is clicked', async () => {
@@ -175,7 +175,7 @@ describe('FrontPage', () => {
       const lead = makeActivity({ id: 1 })
       const prev = makeActivity({ id: 2, verdict_short: 'Easy does it.', activity_date: '2026-04-27T06:00:00Z' })
       render(<FrontPage {...defaultProps} activities={[lead, prev]} onActivityClick={onActivityClick} />)
-      await user.click(screen.getByText(/Easy does it/i))
+      await user.click(screen.getAllByText(/Easy does it/i)[0])
       expect(onActivityClick).toHaveBeenCalledWith(2)
     })
   })
