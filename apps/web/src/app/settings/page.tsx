@@ -320,7 +320,7 @@ export default function SettingsPage() {
   // Empty string is normalised to null (clears the topic on the backend).
   const handleNtfyTopicSave = async () => {
     const previous = ntfyTopic
-    const valueToSend = ntfyTopic.trim() === '' ? null : ntfyTopic.trim()
+    const valueToSend = ntfyTopic.trim() === '' ? '' : ntfyTopic.trim()
 
     const parsedKm = Number(preferences.weeklyKmTarget)
     const parsedRestingHr = preferences.restingHr !== '' ? Number(preferences.restingHr) : null
