@@ -31,6 +31,7 @@ activity sync + analysis as a non-blocking background task via asyncio.create_ta
 import asyncio
 import hashlib
 import hmac
+import json
 import logging
 from typing import Optional
 
@@ -246,17 +247,12 @@ async def receive_webhook_event(
             "Skipping signature validation in dev mode."
         )
 
-    # Parse event body
+    # Parse event body (body bytes already fetched above for HMAC validation)
     try:
-        event = await request.json()
-    except Exception:
-        # body was already consumed above — parse manually from bytes
-        import json as _json
-        try:
-            event = _json.loads(body)
-        except Exception as exc:
-            logger.warning("Webhook POST: failed to parse JSON body: %s", exc)
-            return {"status": "ok"}
+        event = json.loads(body)
+    except Exception as exc:
+        logger.warning("Webhook POST: failed to parse JSON body: %s", exc)
+        return {"status": "ok"}
 
     object_type = event.get("object_type")
     aspect_type = event.get("aspect_type")
