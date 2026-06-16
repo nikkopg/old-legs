@@ -1,4 +1,18 @@
 # READY FOR QA
+# Feature: Plan list, get-by-id, and delete endpoints — feat/v2-finalization
+# What was built: GET /plan/list, GET /plan/{plan_id}, DELETE /plan/{plan_id}
+# Edge cases to test:
+#   - GET /plan/list: empty list when user has no plans
+#   - GET /plan/list: plans ordered newest first (week_start_date desc)
+#   - GET /plan/{plan_id}: 404 when plan belongs to a different user
+#   - GET /plan/{plan_id}: 404 when plan_id does not exist
+#   - DELETE /plan/{plan_id}: 404 when plan belongs to a different user
+#   - DELETE /plan/{plan_id}: 404 on second call (row already gone)
+#   - DELETE /plan/{plan_id}: 204 with no response body on success
+#   - All three endpoints: 401 when unauthenticated
+#
+# (Previous QA block for TASK-201-A2 + TASK-201-A3 preserved below)
+#
 # Feature: Plan-page next-week polish — TASK-201-A2 + TASK-201-A3
 # What was built:
 #   - POST /plan/generate — week-aware prompt directive injected in Stage 4 based on
@@ -178,3 +192,90 @@ def get_plan_next_target(
         "reason": reason,
         "replaces_active_plan": replaces_active_plan,
     }
+
+
+@router.get("/list", response_model=list[TrainingPlanRead])
+def list_plans(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[TrainingPlanRead]:
+    """
+    Return all training plans for the authenticated user, newest first.
+
+    Fetches every TrainingPlan row belonging to the current user, ordered by
+    week_start_date descending so the most recently generated plan appears first.
+
+    Returns:
+        List of TrainingPlanRead objects (may be empty if no plans exist yet).
+
+    Raises:
+        401: Not authenticated.
+    """
+    plans = (
+        db.query(TrainingPlan)
+        .filter(TrainingPlan.user_id == user.id)
+        .order_by(TrainingPlan.week_start_date.desc())
+        .all()
+    )
+    return [TrainingPlanRead.model_validate(plan) for plan in plans]
+
+
+@router.get("/{plan_id}", response_model=TrainingPlanRead)
+def get_plan(
+    plan_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TrainingPlanRead:
+    """
+    Return a single training plan by ID.
+
+    Only returns the plan if it belongs to the authenticated user.
+
+    Args:
+        plan_id: Primary key of the TrainingPlan row.
+
+    Returns:
+        TrainingPlanRead for the matching plan.
+
+    Raises:
+        401: Not authenticated.
+        404: Plan not found or belongs to a different user.
+    """
+    plan = (
+        db.query(TrainingPlan)
+        .filter(TrainingPlan.id == plan_id, TrainingPlan.user_id == user.id)
+        .first()
+    )
+    if plan is None:
+        raise HTTPException(status_code=404, detail="Training plan not found.")
+    return TrainingPlanRead.model_validate(plan)
+
+
+@router.delete("/{plan_id}", status_code=204)
+def delete_plan(
+    plan_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    """
+    Delete a training plan by ID.
+
+    Only deletes the plan if it belongs to the authenticated user. Returns 204
+    No Content on success.
+
+    Args:
+        plan_id: Primary key of the TrainingPlan row to delete.
+
+    Raises:
+        401: Not authenticated.
+        404: Plan not found or belongs to a different user.
+    """
+    plan = (
+        db.query(TrainingPlan)
+        .filter(TrainingPlan.id == plan_id, TrainingPlan.user_id == user.id)
+        .first()
+    )
+    if plan is None:
+        raise HTTPException(status_code=404, detail="Training plan not found.")
+    db.delete(plan)
+    db.commit()

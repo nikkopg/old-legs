@@ -14,7 +14,7 @@
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Date, JSON, String, DateTime, Boolean, Float, Integer, Text, func
+from sqlalchemy import Date, JSON, String, DateTime, Boolean, Float, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import Base
@@ -47,9 +47,10 @@ class User(Base):
     # Onboarding preferences (set during onboarding flow — POST /user/onboarding)
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
     weekly_km_target: Mapped[float] = mapped_column(Float, default=0.0)
+    # Deprecated — use available_days. Kept for migration compat.
     days_available: Mapped[int] = mapped_column(Integer, default=3)
     # Replaces days_available for new users — stores specific day names as a JSON array.
-    # Old users who haven't re-saved will retain the count in days_available.
+    # After migration f5a6b7c8d9e0 this is always populated; read this field, not days_available.
     available_days: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     biggest_struggle: Mapped[str | None] = mapped_column(Text, nullable=True)
     resting_hr: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -70,6 +71,25 @@ class User(Base):
         nullable=False,
         server_default="standard",
     )
+
+    # Per-user timezone — IANA key, e.g. "Asia/Jakarta", "America/New_York"
+    # Used by the hourly scheduler sweep to fire jobs at the user's local time.
+    timezone: Mapped[str] = mapped_column(
+        String(64),
+        default="Asia/Jakarta",
+        nullable=False,
+        server_default="Asia/Jakarta",
+    )
+
+    # Scheduler watermarks — prevent double-firing within the same window.
+    # Set to UTC now after each successful scheduled job run.
+    last_auto_plan_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_auto_review_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Ntfy.sh push notification topic (optional).
+    # If set, the scheduler sends a notification after each auto-generated plan or review.
+    # Topic may be a bare name (prepend https://ntfy.sh/) or a full URL for self-hosted instances.
+    ntfy_topic: Mapped[str | None] = mapped_column(String(256), nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))

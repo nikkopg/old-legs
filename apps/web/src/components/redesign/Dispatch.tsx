@@ -1383,26 +1383,27 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                       <p className="font-body italic text-[13px] opacity-60">
                         Pak Har hasn't seen this run yet.
                       </p>
-                      {onAnalyze && (
-                        <button
-                          onClick={onAnalyze}
-                          style={{
-                            marginTop: 12,
-                            background: 'var(--color-ink)',
-                            color: 'var(--color-ink-on-ink)',
-                            border: '1px solid var(--color-ink)',
-                            padding: '10px 24px',
-                            fontFamily: 'var(--font-sans)',
-                            fontSize: 11,
-                            letterSpacing: 3,
-                            fontWeight: 700,
-                            textTransform: 'uppercase' as const,
-                            cursor: 'pointer',
-                          }}
-                        >
-                          Get his take →
-                        </button>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
+                        {onAnalyze && (
+                          <button
+                            onClick={onAnalyze}
+                            style={{
+                              background: 'var(--color-ink)',
+                              color: 'var(--color-ink-on-ink)',
+                              border: '1px solid var(--color-ink)',
+                              padding: '10px 24px',
+                              fontFamily: 'var(--font-sans)',
+                              fontSize: 11,
+                              letterSpacing: 3,
+                              fontWeight: 700,
+                              textTransform: 'uppercase' as const,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Get his take →
+                          </button>
+                        )}
+                      </div>
                     </>
                   )}
                 </>
@@ -1497,7 +1498,7 @@ export function Dispatch({ activity, weeklyKm, splits, userMaxHr, userRhr, onBac
                               </button>
                             </div>
                           ) : (
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 16 }}>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                               {activity.verdict_short && (
                                 <button
                                   onClick={() => setShowShareCard(true)}

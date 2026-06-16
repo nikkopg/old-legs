@@ -60,6 +60,32 @@ const GOAL_OPTIONS: Array<{ value: GoalEvent; label: string }> = [
   { value: 'ultra',           label: 'Ultra' },
 ];
 
+// ---------------------------------------------------------------------------
+// Timezone options — curated list of ~20 common IANA zones
+// ---------------------------------------------------------------------------
+
+const TIMEZONE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'Pacific/Honolulu',    label: 'Pacific/Honolulu (UTC-10)' },
+  { value: 'America/Los_Angeles', label: 'America/Los_Angeles (UTC-8)' },
+  { value: 'America/Denver',      label: 'America/Denver (UTC-7)' },
+  { value: 'America/Chicago',     label: 'America/Chicago (UTC-6)' },
+  { value: 'America/New_York',    label: 'America/New_York (UTC-5)' },
+  { value: 'America/Sao_Paulo',   label: 'America/Sao_Paulo (UTC-3)' },
+  { value: 'Europe/London',       label: 'Europe/London (UTC+0)' },
+  { value: 'Europe/Paris',        label: 'Europe/Paris (UTC+1)' },
+  { value: 'Europe/Helsinki',     label: 'Europe/Helsinki (UTC+2)' },
+  { value: 'Europe/Moscow',       label: 'Europe/Moscow (UTC+3)' },
+  { value: 'Asia/Dubai',          label: 'Asia/Dubai (UTC+4)' },
+  { value: 'Asia/Karachi',        label: 'Asia/Karachi (UTC+5)' },
+  { value: 'Asia/Dhaka',          label: 'Asia/Dhaka (UTC+6)' },
+  { value: 'Asia/Bangkok',        label: 'Asia/Bangkok (UTC+7)' },
+  { value: 'Asia/Jakarta',        label: 'Asia/Jakarta (UTC+7)' },
+  { value: 'Asia/Singapore',      label: 'Asia/Singapore (UTC+8)' },
+  { value: 'Asia/Tokyo',          label: 'Asia/Tokyo (UTC+9)' },
+  { value: 'Australia/Sydney',    label: 'Australia/Sydney (UTC+10)' },
+  { value: 'Pacific/Auckland',    label: 'Pacific/Auckland (UTC+12)' },
+];
+
 // ---------- interfaces ----------
 
 interface UserProfile {
@@ -106,6 +132,11 @@ interface SettingsPaperProps {
   theme: Theme;
   onVoiceChange: (v: VoiceLevel) => void;
   onToggleDelivery: (key: keyof DeliveryPreferences) => void;
+  timezone: string;
+  onTimezoneChange: (tz: string) => void;
+  ntfyTopic: string;
+  onNtfyTopicChange: (v: string) => void;
+  onNtfyTopicSave: () => void;
   onThemeChange: (t: Theme) => void;
   onDisconnect: () => void;
   onNav: (key: string) => void;
@@ -146,6 +177,9 @@ interface SettingsPaperProps {
   onWatchMfaCancel: () => void;
   watchShowPassword: boolean;
   onWatchShowPasswordToggle: () => void;
+  // Data export
+  onExportData?: () => void;
+  exportState?: 'idle' | 'loading' | 'error';
 }
 
 // ---------- component ----------
@@ -158,6 +192,11 @@ export function SettingsPaper({
   theme,
   onVoiceChange,
   onToggleDelivery,
+  timezone,
+  onTimezoneChange,
+  ntfyTopic,
+  onNtfyTopicChange,
+  onNtfyTopicSave,
   onThemeChange,
   onDisconnect,
   onNav,
@@ -189,6 +228,8 @@ export function SettingsPaper({
   onWatchMfaCancel,
   watchShowPassword,
   onWatchShowPasswordToggle,
+  onExportData,
+  exportState = 'idle',
 }: SettingsPaperProps) {
   const voiceOptions: Array<{ opt: VoiceLevel; label: string; description: string }> = [
     { opt: 'gentle', label: 'Gentle', description: 'Mentor. Still honest. Less bite.' },
@@ -655,6 +696,61 @@ export function SettingsPaper({
                 </div>
               );
             })}
+            {/* Timezone selector */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '10px 0 2px',
+              }}
+            >
+              <span style={{ fontFamily: OL.body, fontSize: 13 }}>Timezone</span>
+              <select
+                value={timezone}
+                onChange={(e) => onTimezoneChange(e.target.value)}
+                aria-label="Timezone"
+                style={{
+                  fontFamily: OL.mono,
+                  fontSize: 12,
+                  color: OL.ink,
+                  background: OL.paper,
+                  border: `1px solid ${OL.ink}`,
+                  borderRadius: 0,
+                  padding: '4px 8px',
+                  cursor: 'pointer',
+                  minWidth: 240,
+                }}
+              >
+                {TIMEZONE_OPTIONS.map(({ value, label }) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+            {/* Push Notifications — ntfy.sh topic */}
+            <div style={{ padding: '10px 0 2px' }}>
+              <Caps size={9} ls={2} opacity={0.6}>Push Notifications</Caps>
+              <p style={{ fontFamily: OL.body, fontSize: 12, color: OL.muted, margin: '3px 0 6px' }}>
+                Enter your ntfy.sh topic to receive weekly plan and review alerts.
+              </p>
+              <input
+                type="text"
+                value={ntfyTopic}
+                placeholder="your-topic-name"
+                onChange={(e) => onNtfyTopicChange(e.target.value)}
+                onBlur={onNtfyTopicSave}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  fontFamily: OL.mono,
+                  fontSize: 13,
+                  padding: '6px 8px',
+                  border: `1px solid ${OL.ink}`,
+                  background: 'transparent',
+                  boxSizing: 'border-box' as const,
+                }}
+              />
+            </div>
           </section>
 
           {/* Section 6 — Watch Integration */}
@@ -874,6 +970,39 @@ export function SettingsPaper({
             }}>
               Disconnect Strava and delete your data. No farewell edition. No retention dance. You come back, you come back.
             </p>
+            {/* Download my data */}
+            <div style={{ marginBottom: 16 }}>
+              <button
+                onClick={onExportData}
+                disabled={exportState === 'loading'}
+                style={{
+                  background: 'transparent',
+                  color: OL.muted,
+                  border: `1px solid ${OL.muted}`,
+                  padding: '10px 20px',
+                  fontFamily: OL.sans,
+                  fontSize: 11,
+                  letterSpacing: 3,
+                  fontWeight: 700,
+                  textTransform: 'uppercase' as const,
+                  cursor: exportState === 'loading' ? 'not-allowed' : 'pointer',
+                  opacity: exportState === 'loading' ? 0.5 : 1,
+                }}
+              >
+                {exportState === 'loading' ? 'Preparing export...' : 'Download my data →'}
+              </button>
+              {exportState === 'error' && (
+                <p style={{
+                  fontFamily: OL.body,
+                  fontSize: 13,
+                  color: OL.accent,
+                  margin: '8px 0 0',
+                }}>
+                  Export failed. Try again.
+                </p>
+              )}
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'flex-start' }}>
               <button
                 onClick={onDisconnect}

@@ -146,6 +146,8 @@ export interface UserProfile {
   auto_plan_enabled: boolean
   auto_review_enabled: boolean
   coach_voice: VoiceLevel
+  timezone: string
+  ntfy_topic: string | null
   created_at: string
   updated_at: string
 }
@@ -162,6 +164,8 @@ export interface OnboardingRequest {
   auto_plan_enabled?: boolean
   auto_review_enabled?: boolean
   coach_voice?: VoiceLevel
+  timezone?: string
+  ntfy_topic?: string | null
 }
 
 export interface OnboardingResponse {

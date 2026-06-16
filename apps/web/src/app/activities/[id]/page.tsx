@@ -182,6 +182,7 @@ export default function ActivityDetailPage() {
     },
   });
 
+
   // Redirect to login on 401 from either fetch
   useEffect(() => {
     if (activityError && activityErr && isUnauthorized(activityErr)) {

@@ -14,6 +14,7 @@
 
 from datetime import date, datetime
 from typing import Optional
+from zoneinfo import available_timezones
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -73,6 +74,8 @@ class UserRead(UserBase):
     auto_plan_enabled: bool = True
     auto_review_enabled: bool = True
     coach_voice: str
+    timezone: str = "Asia/Jakarta"
+    ntfy_topic: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -128,6 +131,36 @@ class OnboardingRequest(BaseModel):
             "One of: gentle, standard, unfiltered."
         ),
     )
+    timezone: Optional[str] = Field(
+        None,
+        description=(
+            "IANA timezone key for the runner, e.g. 'Asia/Jakarta', 'America/New_York'. "
+            "If provided, must be a valid IANA timezone. "
+            "Null leaves the existing value unchanged."
+        ),
+    )
+    ntfy_topic: Optional[str] = Field(
+        None,
+        max_length=256,
+        description=(
+            "ntfy.sh topic name or full URL for a self-hosted instance. "
+            "When set, the scheduler posts a push notification after each "
+            "auto-generated plan or review. Empty string clears the topic."
+        ),
+    )
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, v: Optional[str]) -> Optional[str]:
+        """Reject invalid IANA timezone keys with a 422."""
+        if v is None:
+            return v
+        if v not in available_timezones():
+            raise ValueError(
+                f"Invalid timezone '{v}'. Must be a valid IANA timezone key "
+                f"(e.g. 'Asia/Jakarta', 'America/New_York')."
+            )
+        return v
 
     @field_validator("coach_voice")
     @classmethod

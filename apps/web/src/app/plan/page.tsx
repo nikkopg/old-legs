@@ -30,10 +30,28 @@ import { PlanPaper } from '@/components/redesign/PlanPaper'
 import { OfflinePage } from '@/components/redesign/OfflinePage'
 import { PageLoadingSkeleton } from '@/components/redesign/PageLoadingSkeleton'
 import { OL } from '@/components/redesign/NewspaperChrome'
-import { getCurrentPlan, getActivities, getPlanNextTarget, getPlanVerdict, getWatchStatus, syncToWatch } from '@/lib/api'
+import { getCurrentPlan, getActivities, getPlanNextTarget, getPlanVerdict, getWatchStatus, syncToWatch, getPlans } from '@/lib/api'
 import type { WatchSyncResponse } from '@/lib/api'
 import { useProgressStream } from '@/hooks/useProgressStream'
-import type { ApiError, PlanNextTarget, TrainingPlan as ApiTrainingPlan, PlanDay as ApiPlanDay, Activity } from '@/types/api'
+import { useUser } from '@/hooks/useUser'
+import type { ApiError, GoalEvent, PlanNextTarget, TrainingPlan as ApiTrainingPlan, PlanDay as ApiPlanDay, Activity } from '@/types/api'
+
+// ---------- Race goal helpers ----------
+
+const GOAL_EVENT_LABELS: Record<GoalEvent, string> = {
+  general_fitness: 'General Fitness',
+  '5k': '5K',
+  '10k': '10K',
+  half_marathon: 'Half Marathon',
+  marathon: 'Marathon',
+  ultra: 'Ultra',
+}
+
+function formatRaceDate(isoDate: string): string {
+  // Format as "20 Jul 2026" (day, no leading zero, short month, full year)
+  const d = new Date(isoDate + 'T00:00:00')
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -236,6 +254,9 @@ export default function PlanPage() {
   const [streamedPlan, setStreamedPlan] = useState<ApiTrainingPlan | null>(null)
   const [streamError, setStreamError] = useState<string | null>(null)
 
+  // Archive dropdown
+  const [archiveOpen, setArchiveOpen] = useState(false)
+
   // Replace-confirmation modal (TASK-201-F4)
   const [showReplaceModal, setShowReplaceModal] = useState(false)
 
@@ -247,6 +268,7 @@ export default function PlanPage() {
       // Invalidate so GET /plan/current and GET /plan/next-target return fresh data
       queryClient.invalidateQueries({ queryKey: ['plan', 'current'] })
       queryClient.invalidateQueries({ queryKey: ['plan', 'next-target'] })
+      queryClient.invalidateQueries({ queryKey: ['plans'] })
     }
   }, [queryClient])
 
@@ -290,6 +312,14 @@ export default function PlanPage() {
     retry: false,
   })
 
+  // Plan archive
+  const { data: plansData } = useQuery<ApiTrainingPlan[], ApiError>({
+    queryKey: ['plans'],
+    queryFn: getPlans,
+    staleTime: 60_000,
+    retry: false,
+  })
+
   // Watch sync
   const { data: watchStatusData } =
     useQuery({ queryKey: ['watchStatus'], queryFn: getWatchStatus })
@@ -298,6 +328,13 @@ export default function PlanPage() {
   const [syncState, setSyncState] =
     useState<'idle' | 'syncing' | 'done' | 'error'>('idle')
   const [syncResults, setSyncResults] = useState<Record<string, string>>({})
+
+  const { user } = useUser()
+
+  const raceGoal =
+    user?.goal_event && user?.race_date
+      ? { event: GOAL_EVENT_LABELS[user.goal_event], date: formatRaceDate(user.race_date) }
+      : null
 
   async function handleSyncToWatch() {
     setSyncState('syncing')
@@ -401,6 +438,7 @@ export default function PlanPage() {
     <>
       <PlanPaper
         plan={mappedPlan}
+        raceGoal={raceGoal}
         isStreaming={isStreaming}
         steps={steps}
         elapsedMs={elapsedMs}
@@ -417,6 +455,9 @@ export default function PlanPage() {
         syncState={syncState}
         syncResults={syncResults}
         hasConnectedWatch={hasConnectedWatch}
+        plans={plansData?.map(p => ({ id: p.id, week_start_date: p.week_start_date, is_active: p.is_active }))}
+        archiveOpen={archiveOpen}
+        onArchiveToggle={() => setArchiveOpen((v) => !v)}
       />
 
       {/* TASK-201-F4: Replace-confirmation modal */}

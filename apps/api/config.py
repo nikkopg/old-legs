@@ -54,6 +54,13 @@ class Settings(BaseSettings):
             )
         return v
 
+    # Strava Webhook
+    # Set to a random secret string; used to verify incoming Strava webhook POSTs
+    # (HMAC-SHA256, X-Hub-Signature header) and to confirm webhook subscriptions
+    # (hub.verify_token query param on GET /strava/webhook).
+    # When empty, signature validation is skipped (dev mode) — a warning is logged.
+    strava_webhook_verify_token: str = ""
+
     # Ollama
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = ""

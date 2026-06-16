@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
 import { SettingsPaper } from '@/components/redesign/SettingsPaper'
 import type { WatchStatusResponse } from '@/lib/api'
@@ -35,6 +35,8 @@ function buildBaseProps(watchOverrides: {
     theme: 'light' as const,
     onVoiceChange: vi.fn(),
     onToggleDelivery: vi.fn(),
+    timezone: 'Asia/Jakarta',
+    onTimezoneChange: vi.fn(),
     onThemeChange: vi.fn(),
     onDisconnect: vi.fn(),
     onNav: vi.fn(),
@@ -71,6 +73,9 @@ function buildBaseProps(watchOverrides: {
     onWatchMfaCancel: vi.fn(),
     watchShowPassword: false,
     onWatchShowPasswordToggle: vi.fn(),
+    ntfyTopic: '',
+    onNtfyTopicChange: vi.fn(),
+    onNtfyTopicSave: vi.fn(),
   }
 }
 
@@ -96,5 +101,29 @@ describe('SettingsPaper — Watch Integration', () => {
   it('test 3: watchMfaMode=true → "A verification code was sent to your device." renders', () => {
     render(<SettingsPaper {...buildBaseProps({ watchMfaMode: true })} />)
     expect(screen.getByText(/A verification code was sent to your device\./i)).toBeDefined()
+  })
+})
+
+describe('SettingsPaper — Export Button', () => {
+  it('test 4: export button renders with "Download my data" label', () => {
+    render(<SettingsPaper {...buildBaseProps()} />)
+    expect(screen.getByText(/Download my data/i)).toBeDefined()
+  })
+
+  it('test 5: clicking export button calls onExportData', () => {
+    const onExportData = vi.fn()
+    render(<SettingsPaper {...buildBaseProps()} onExportData={onExportData} />)
+    const btn = screen.getByText(/Download my data/i)
+    fireEvent.click(btn)
+    expect(onExportData).toHaveBeenCalledOnce()
+  })
+
+  it('test 6: exportState="loading" disables button and shows loading label', () => {
+    render(<SettingsPaper {...buildBaseProps()} exportState="loading" />)
+    expect(screen.getByText(/Preparing export/i)).toBeDefined()
+    // The button element should be disabled
+    const btn = screen.getByText(/Preparing export/i).closest('button')
+    expect(btn).toBeDefined()
+    expect((btn as HTMLButtonElement).disabled).toBe(true)
   })
 })

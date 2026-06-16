@@ -8,7 +8,7 @@ from dependencies import get_current_user
 router = APIRouter(tags=["share"])
 
 _store: dict[str, tuple[bytes, float]] = {}
-_TTL = 3600
+_TTL = 86400  # 24 hours
 
 
 def _cleanup() -> None:

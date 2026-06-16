@@ -139,6 +139,18 @@ export async function getCurrentPlan(): Promise<TrainingPlan> {
   return apiFetch<TrainingPlan>('/plan/current')
 }
 
+export async function getPlans(): Promise<TrainingPlan[]> {
+  return apiFetch<TrainingPlan[]>('/plan/list')
+}
+
+export async function getPlan(id: number): Promise<TrainingPlan> {
+  return apiFetch<TrainingPlan>(`/plan/${id}`)
+}
+
+export async function deletePlan(id: number): Promise<void> {
+  return apiFetch<void>(`/plan/${id}`, { method: 'DELETE' })
+}
+
 export async function getPlanNextTarget(): Promise<PlanNextTarget> {
   return apiFetch<PlanNextTarget>('/plan/next-target')
 }
@@ -300,6 +312,45 @@ export async function disconnectWatch(platform: string): Promise<void> {
 
 export async function syncToWatch(): Promise<WatchSyncResponse> {
   return apiFetch<WatchSyncResponse>('/watch/sync', { method: 'POST' });
+}
+
+// ---------------------------------------------------------------------------
+// User data export — returns raw Response so caller can stream the ZIP blob
+// ---------------------------------------------------------------------------
+
+export async function exportUserData(): Promise<void> {
+  const res = await fetch(`${API_BASE}/user/export`, {
+    method: 'GET',
+    credentials: 'include',
+  })
+
+  if (!res.ok) {
+    let detail = `API error ${res.status}`
+    try {
+      const body = await res.json()
+      if (typeof body.detail === 'string') detail = body.detail
+    } catch {
+      // not JSON
+    }
+    const err: ApiError = { detail, status: res.status }
+    throw err
+  }
+
+  // Derive filename from Content-Disposition header, falling back to a
+  // date-stamped default so the download always has a recognisable name.
+  const disposition = res.headers.get('content-disposition') ?? ''
+  const match = disposition.match(/filename="?([^";\s]+)"?/)
+  const filename = match?.[1] ?? `old-legs-export-${new Date().toISOString().split('T')[0]}.zip`
+
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 // ---------------------------------------------------------------------------

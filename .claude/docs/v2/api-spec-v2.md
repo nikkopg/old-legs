@@ -114,9 +114,44 @@ Returns current user profile and stored preferences. The `onboarding_completed` 
 | `goal_event` | `string \| null` | Runner's training goal. One of: `general_fitness`, `5k`, `10k`, `half_marathon`, `marathon`, `ultra`. Null until set via onboarding. |
 | `race_date` | `date \| null` | ISO date string (`YYYY-MM-DD`). Target race date. Used by Pak Har for periodization — taper (<2 weeks), sharpening (2–7 weeks), base building (≥8 weeks). Null if no race scheduled. |
 | `available_days` | `string[] \| null` | Specific days the runner can train: `"monday"` … `"sunday"`. Null until set. Supersedes `days_available` (int) for new saves; old int kept as fallback. Pak Har schedules sessions only on listed days. |
-| `auto_plan_enabled` | `bool` | If `true`, a new weekly plan is generated automatically every Monday 05:00 WIB (Sunday 22:00 UTC). Defaults to `true`. |
-| `auto_review_enabled` | `bool` | If `true`, a weekly review is generated automatically every Sunday 20:00 WIB (Sunday 13:00 UTC). Defaults to `true`. |
+| `auto_plan_enabled` | `bool` | If `true`, a new weekly plan is generated automatically when the user's local time is Monday 05:00–06:00. Defaults to `true`. |
+| `auto_review_enabled` | `bool` | If `true`, a weekly review is generated automatically when the user's local time is Sunday 20:00–21:00. Defaults to `true`. |
 | `coach_voice` | `string` | Controls how blunt Pak Har is. One of: `"gentle"`, `"standard"`, `"unfiltered"`. Defaults to `"standard"`. |
+| `timezone` | `string` | IANA timezone key used to fire scheduled jobs at the user's local time. Defaults to `"Asia/Jakarta"`. |
+| `ntfy_topic` | `string \| null` | ntfy.sh topic name or full self-hosted URL. When set, the scheduler sends a push notification after each auto-generated plan or review. Null means notifications are off. |
+
+**Errors:** 401
+
+---
+
+#### `GET /user/export`
+> Status: ✅ v2 (T5) — implemented 2026-05-31
+
+Download all user data as a ZIP archive. No Ollama call. No Strava call.
+
+**Auth:** Required.
+
+**Request:** No body. Auth cookie only.
+
+**Response (200):** `application/zip` file download.
+
+| Header | Value |
+|---|---|
+| `Content-Type` | `application/zip` |
+| `Content-Disposition` | `attachment; filename="old-legs-export-YYYY-MM-DD.zip"` |
+
+**ZIP contents (six JSON files):**
+
+| File | Contents |
+|---|---|
+| `profile.json` | User profile fields: `name`, `avatar_url`, `weekly_km_target`, `days_available`, `available_days`, `biggest_struggle`, `resting_hr`, `max_hr`, `goal_event`, `race_date`, `coach_voice`, `timezone`, `auto_plan_enabled`, `auto_review_enabled`, `created_at`. **Never** includes `strava_access_token`, `strava_refresh_token`, or any encrypted field. |
+| `activities.json` | All `Activity` records: `id`, `name`, `start_date`, `distance_m`, `moving_time_s`, `avg_hr`, `max_hr`, `avg_speed_ms`, `splits`, `grade_adjusted_pace`, `verdict_short`, `verdict_tag`, `tone`. |
+| `plans.json` | All `TrainingPlan` records: `id`, `week_start_date`, `is_active`, `days`, `created_at`. |
+| `reviews.json` | All `WeeklyReview` records: `id`, `week_start_date`, `content`, `created_at`. |
+| `chat.json` | All `ChatMessage` records: `id`, `role`, `content`, `created_at`. |
+| `insights.json` | Always an empty list — insights are computed on demand, not stored. |
+
+All datetime values are serialised as ISO strings via `json.dumps(..., default=str)`. Arrays are empty (not omitted) when the user has no data.
 
 **Errors:** 401
 
@@ -151,6 +186,8 @@ Save or update user onboarding preferences. Sets `onboarding_completed = true` o
 - `auto_plan_enabled` — optional boolean; defaults to `true`. Persisted as-is — no null coercion.
 - `auto_review_enabled` — optional boolean; defaults to `true`. Persisted as-is.
 - `coach_voice` — optional string; one of `"gentle"`, `"standard"`, `"unfiltered"`. Defaults to `"standard"`. Any other value returns 422.
+- `timezone` — optional IANA timezone key (e.g. `"Asia/Jakarta"`, `"America/New_York"`). If provided, must be a valid IANA key — 422 otherwise. Null leaves existing value unchanged. Defaults to `"Asia/Jakarta"` on new users.
+- `ntfy_topic` — optional string (max 256 chars). Bare topic name (`"my-topic"`) or full URL for self-hosted ntfy (`"https://ntfy.example.com/my-topic"`). Empty string clears the topic (stored as `null`). Null omits the field and leaves the existing value unchanged.
 
 **Response (200):** `{ "message": "Preferences saved." }`
 
@@ -539,6 +576,72 @@ Returns the most recently generated active plan. DB lookup only.
 
 ---
 
+#### `GET /plan/list`
+> Status: ✅ v2 (feat/v2-finalization) — implemented 2026-05-31
+
+Returns all training plans for the current user, newest first. DB lookup only — no Ollama call.
+
+**Auth:** Required.
+
+**Request:** No body. Auth cookie only.
+
+**Response (200):** Array of `TrainingPlanRead` objects, ordered by `week_start_date` descending. Returns an empty array if the user has no plans.
+
+```json
+[
+  {
+    "id": 3,
+    "user_id": 1,
+    "week_start_date": "2026-05-25",
+    "plan_data": { "monday": { "type": "easy", "description": "...", "duration_minutes": 40, "target": "40 min, HR ≤ 145 bpm" } },
+    "pak_har_notes": { "week_summary": "...", "monday": "..." },
+    "is_active": true,
+    "created_at": "2026-05-25T09:00:00",
+    "updated_at": "2026-05-25T09:00:00"
+  }
+]
+```
+
+**Errors:** 401
+
+---
+
+#### `GET /plan/{plan_id}`
+> Status: ✅ v2 (feat/v2-finalization) — implemented 2026-05-31
+
+Returns a single training plan by primary key. Ownership-guarded — returns 404 if the plan does not exist or belongs to a different user.
+
+**Auth:** Required.
+
+**Path param:** `plan_id` — integer primary key of the `TrainingPlan` row.
+
+**Response (200):** Single `TrainingPlanRead` object (same shape as `GET /plan/current`).
+
+**Errors:**
+- `401` — Not authenticated
+- `404` — Plan not found or belongs to a different user
+
+---
+
+#### `DELETE /plan/{plan_id}`
+> Status: ✅ v2 (feat/v2-finalization) — implemented 2026-05-31
+
+Permanently deletes a training plan by primary key. Ownership-guarded — returns 404 if the plan does not exist or belongs to a different user. Idempotent per-user: calling it twice returns 404 on the second call (row is gone).
+
+**Auth:** Required.
+
+**Path param:** `plan_id` — integer primary key of the `TrainingPlan` row.
+
+**Request body:** None.
+
+**Response (204):** No content.
+
+**Errors:**
+- `401` — Not authenticated
+- `404` — Plan not found or belongs to a different user
+
+---
+
 ### Weekly Review
 
 #### `POST /review/generate`
@@ -713,6 +816,78 @@ Full AI context reset for the currently authenticated user. Wipes all AI-generat
 **Response (200):** `{ "message": "Context reset" }`
 
 **Errors:** 401
+
+---
+
+### Strava Webhooks
+
+#### `GET /strava/webhook`
+> Status: ✅ v2 (T8) — implemented 2026-05-31
+
+One-time subscription verification handshake. Strava sends this GET when you register a webhook subscription via the Strava API. Not called by the frontend.
+
+**Query params (all required, sent by Strava):**
+| Param | Type | Notes |
+|---|---|---|
+| `hub.mode` | string | Always `"subscribe"` |
+| `hub.verify_token` | string | Must match `STRAVA_WEBHOOK_VERIFY_TOKEN` env var |
+| `hub.challenge` | string | Random string Strava expects echoed back |
+
+**Response (200):**
+```json
+{ "hub.challenge": "<value>" }
+```
+
+**Errors:**
+- `403` — `hub.verify_token` does not match `STRAVA_WEBHOOK_VERIFY_TOKEN`
+- `422` — Missing required query params
+
+**Dev mode:** When `STRAVA_WEBHOOK_VERIFY_TOKEN` is empty, any token is accepted and a warning is logged.
+
+---
+
+#### `POST /strava/webhook`
+> Status: ✅ v2 (T8) — implemented 2026-05-31
+
+Real-time activity event delivery from Strava. Strava POSTs here when activities are created, updated, or deleted on a connected athlete's account.
+
+**This endpoint is not called by the frontend.** It is a server-to-server webhook from Strava.
+
+**Request headers:**
+| Header | Notes |
+|---|---|
+| `X-Hub-Signature` | `sha256=<HMAC-SHA256 of body using STRAVA_WEBHOOK_VERIFY_TOKEN>`. Required when the token is configured. |
+
+**Request body (from Strava):**
+```json
+{
+  "object_type": "activity",
+  "aspect_type": "create",
+  "owner_id": 112542884,
+  "object_id": 9876543210
+}
+```
+
+**Behaviour:**
+- Only `{"object_type": "activity", "aspect_type": "create"}` events trigger a sync. All other events return 200 immediately with no action.
+- User is looked up by `owner_id` (Strava athlete ID). Unknown athletes return 200 with no action.
+- On a matched activity-create event, `sync_activities()` + auto-analysis runs non-blocking via `asyncio.create_task()`. Response is returned before the sync completes.
+
+**Response (200):** `{"status": "ok"}` — always, for all accepted events.
+
+**Errors:**
+- `403` — Missing or invalid `X-Hub-Signature` (only when `STRAVA_WEBHOOK_VERIFY_TOKEN` is configured)
+
+**Dev mode:** When `STRAVA_WEBHOOK_VERIFY_TOKEN` is empty, signature validation is skipped and a warning is logged.
+
+**Setup note:** To register a webhook subscription with Strava (one-time, per deployment):
+```
+POST https://www.strava.com/api/v3/push_subscriptions
+  client_id=<STRAVA_CLIENT_ID>
+  client_secret=<STRAVA_CLIENT_SECRET>
+  callback_url=https://<your-domain>/strava/webhook
+  verify_token=<STRAVA_WEBHOOK_VERIFY_TOKEN>
+```
 
 ---
 
