@@ -138,7 +138,8 @@ async def hourly_scheduler_sweep() -> None:
             ):
                 try:
                     await get_valid_access_token(user=user, db=db)
-                    await generate_plan_with_ollama(user=user, db=db)
+                    async for _ in generate_plan_with_ollama(user=user, db=db):
+                        pass  # consume the async generator; DB writes happen inside
                     user.last_auto_plan_at = datetime.now(timezone.utc)
                     db.commit()
                     logger.info(
@@ -170,7 +171,8 @@ async def hourly_scheduler_sweep() -> None:
             ):
                 try:
                     await get_valid_access_token(user=user, db=db)
-                    await generate_weekly_review(user=user, db=db)
+                    async for _ in generate_weekly_review(user=user, db=db):
+                        pass  # consume the async generator; DB writes happen inside
                     user.last_auto_review_at = datetime.now(timezone.utc)
                     db.commit()
                     logger.info(
