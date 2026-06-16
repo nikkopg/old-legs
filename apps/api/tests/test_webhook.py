@@ -136,15 +136,13 @@ class TestWebhookEventHandling:
 
         monkeypatch.setattr(wh.asyncio, "create_task", fake_create_task)
 
-        body = json.dumps(
-            _activity_create_event(owner_id=int(test_user.strava_athlete_id.replace("test_athlete_", "") or 123))
-        ).encode()
-
-        # Use the actual strava_athlete_id stored on test_user
+        # Build event using the strava_athlete_id stored on test_user.
+        # The webhook router does str(owner_id) for the DB lookup, so the
+        # string value must round-trip exactly through JSON as a string.
         event = {
             "object_type": "activity",
             "aspect_type": "create",
-            "owner_id": test_user.strava_athlete_id,  # stored as str in our model
+            "owner_id": test_user.strava_athlete_id,
             "object_id": 9999001,
         }
         body = json.dumps(event).encode()
