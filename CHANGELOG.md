@@ -4,17 +4,17 @@
 
 ### Fixed
 - **Scheduler auto-plan/auto-review never executed** — `generate_plan_with_ollama` and `generate_weekly_review` are async generators (they `yield` chunks); the scheduler was calling them with `await`, which raises `TypeError` immediately. Both jobs are now consumed correctly with `async for _ in fn(): pass`. Auto-plan and auto-review had been silently broken since written.
-- **ntfy_topic clear sends null** — the Settings page was sending `null` for an empty topic field, but the backend gates on `if body.ntfy_topic is not None`, treating null as "no change". Sending `""` (empty string) now correctly clears the topic.
-- **Firefox download failure** — the ZIP export anchor element was not appended to the DOM before `.click()`, which works in Chrome but fails silently in Firefox. Now appended and removed after click.
-- **Webhook JSON double-parse** — removed an unreachable fallback parse path in `webhook.py` that was dead code after the primary `json.loads(body)` call.
+- **Clearing push notification topic now works** — the Settings page was sending `null` for an empty topic field, but the backend treated `null` as "no change". Sending `""` now correctly clears the topic so notifications stop.
+- **Data export works in Firefox** — the ZIP download anchor was not appended to the DOM before `.click()`. Works in Chrome without it; Firefox requires it. Fixed.
+- **Webhook JSON parser cleanup** — removed dead-code fallback parse path in `webhook.py`.
 
-### Tests
-- `test_scheduler.py` — 14 new tests covering `_is_eligible()` boundary cases and `hourly_scheduler_sweep()` integration (timezone skip, plan/review trigger windows, ntfy notification on trigger, per-user exception isolation, disabled user excluded)
-- `test_notifications.py` — 8 new tests covering `_resolve_url` and `send_ntfy` (happy path, non-2xx no-raise, ConnectError no-raise, TimeoutException no-raise)
-- `test_plan_archive.py` — 13 new tests covering `GET /plan/list`, `GET /plan/{id}`, `DELETE /plan/{id}` (ordering, ownership isolation, 401/404)
-- `tests/lib/api.test.ts` — new frontend unit tests for `getPlans`, `getPlan`, `deletePlan`, `exportUserData`
-- `tests/app/plan/PlanViewerPage.test.tsx` — new frontend tests for the delete state machine (idle → confirming → deleted/cancelled)
-- `SettingsPaper.test.tsx` — 3 new tests for export button render, click, and loading state
+### For contributors
+- `test_scheduler.py` — 14 new tests: `_is_eligible()` boundary cases and `hourly_scheduler_sweep()` integration (timezone skip, plan/review trigger windows, ntfy on trigger, per-user exception isolation, disabled user excluded)
+- `test_notifications.py` — 8 new tests: `_resolve_url` and `send_ntfy` (happy path, non-2xx no-raise, ConnectError no-raise, TimeoutException no-raise)
+- `test_plan_archive.py` — 13 new tests: `GET /plan/list`, `GET /plan/{id}`, `DELETE /plan/{id}` (ordering, ownership isolation, 401/404)
+- `tests/lib/api.test.ts` — frontend unit tests: `getPlans`, `getPlan`, `deletePlan`, `exportUserData`
+- `tests/app/plan/PlanViewerPage.test.tsx` — delete state machine (idle → confirming → deleted/cancelled)
+- `SettingsPaper.test.tsx` — export button render, click, and loading state
 
 ## v2.2.1 — 2026-05-30
 

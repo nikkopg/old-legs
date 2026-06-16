@@ -61,7 +61,9 @@ No subscription. No OpenAI or Anthropic. No cheerleading. The default model uses
 
 - **Onboarding** — first-run questions to calibrate coaching: weekly km capacity, available days, biggest struggle, goal event, race date, resting HR, max HR
 - **Sync to Watch** — push your weekly training plan to your Garmin Connect watch calendar. Each day maps to a structured workout with HR-zone targets. Rest days are skipped. Connect your Garmin account in Settings.
-- **Settings** — editable preferences, coach voice level (gentle / standard / unfiltered), automatic delivery toggles, watch platform connection (Garmin Connect), Strava disconnect, full context reset
+- **Plan archive** — every generated training plan is saved. Browse and delete historical plans from the Plan page.
+- **Real-time sync** — Strava webhook delivers new runs to Old Legs as soon as Strava processes them. No manual refresh needed.
+- **Settings** — editable preferences, coach voice level (gentle / standard / unfiltered), automatic delivery toggles, push notifications (ntfy.sh), timezone, data export (ZIP), watch platform connection (Garmin Connect), Strava disconnect, full context reset
 
 ---
 

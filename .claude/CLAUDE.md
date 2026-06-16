@@ -31,7 +31,7 @@ Old Legs is a badge of honor. The people with old legs are the ones who actually
 
 ---
 
-## 🎯 Current Version: v2.2.0
+## 🎯 Current Version: v2.2.2
 
 v1 shipped 2026-04-18. v2 has been shipping iteratively since 2026-05-23. See `.claude/docs/v2/PRD-v2.md` for full v2 requirements and `.claude/docs/v2/dev-plan-v2.md` for the task board.
 
@@ -41,6 +41,10 @@ v1 shipped 2026-04-18. v2 has been shipping iteratively since 2026-05-23. See `.
 3. **Weekly training plan generation** — structured 7-day plan based on current fitness
 4. **Chat with Pak Har** — conversational AI coach (see Coach Persona below)
 5. **Garmin Connect watch sync** — push weekly plan to Garmin watch calendar as structured workouts with HR-zone targets (v2.2.0)
+6. **Plan archive** — browse, view, and delete historical training plans; accessible via dropdown on the Plan page (v2.2.2)
+7. **Push notifications** — ntfy.sh topic configuration in Settings; auto-plan and auto-review jobs send a notification on completion (v2.2.2)
+8. **Strava webhook** — real-time activity sync via POST /webhook with HMAC-SHA256 signature validation (v2.2.2)
+9. **Data export** — download all user data as a ZIP file from Settings (v2.2.2)
 
 ---
 
@@ -143,7 +147,8 @@ oldlegs/
 │   └── api/                   ← FastAPI backend (Backend agent)
 │       ├── main.py
 │       ├── routers/           ← Route handlers
-│       │   └── watch_sync.py  ← /watch endpoints (connect, mfa, disconnect, status, sync)
+│       │   ├── watch_sync.py  ← /watch endpoints (connect, mfa, disconnect, status, sync)
+│       │   └── webhook.py     ← /webhook (Strava real-time activity push, HMAC-SHA256 validation)
 │       ├── models/            ← SQLAlchemy models
 │       │   └── watch_integration.py ← WatchIntegration (Fernet-encrypted credentials)
 │       ├── schemas/           ← Pydantic schemas
@@ -152,6 +157,7 @@ oldlegs/
 │       │   ├── ollama.py
 │       │   ├── coach.py
 │       │   ├── hr_utils.py    ← HR param resolution (rhr + max_hr)
+│       │   ├── notifications.py ← ntfy.sh push notification sender (fire-and-forget)
 │       │   └── watch_sync/    ← Watch sync service
 │       │       ├── __init__.py       ← push_plan_to_watch()
 │       │       ├── base.py           ← WatchAdapter protocol, WorkoutSpec
